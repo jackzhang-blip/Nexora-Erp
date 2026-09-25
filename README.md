@@ -1,8 +1,8 @@
 # Nexora ERP（联光 ERP）
 
-面向财务、库存、销售、人力资源与客户关系管理的开源模块化 ERP 项目。
+面向财务、库存、销售、人力资源与客户关系管理的模块化 ERP 项目。
 
-*An open-source, modular ERP project for finance, inventory, sales, HR, and CRM.*
+*A modular ERP project for finance, inventory, sales, HR, and CRM.*
 
 [简体中文](#中文) · [English](#english)
 
@@ -87,10 +87,6 @@ flowchart LR
 
 欢迎通过 [Issues](https://github.com/zhangzzj2003/Nexora-Erp/issues) 讨论需求、架构和文档，也欢迎提交 [Pull Request](https://github.com/zhangzzj2003/Nexora-Erp/pulls)。在项目仍处规划阶段时，请将技术方案和实际实现状态明确区分。
 
-### 许可证
-
-本项目采用 [Apache License 2.0](LICENSE)。
-
 ---
 
 <a id="english"></a>
@@ -161,7 +157,3 @@ The desktop window, Vue starter page, restricted version-query bridge, and devel
 ### Contributing
 
 You are welcome to discuss requirements, architecture, and documentation in [Issues](https://github.com/zhangzzj2003/Nexora-Erp/issues), or submit a [Pull Request](https://github.com/zhangzzj2003/Nexora-Erp/pulls). While the project is in planning, please distinguish proposed designs from implemented behavior.
-
-### License
-
-This project is licensed under the [Apache License 2.0](LICENSE).
