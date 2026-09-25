@@ -48,6 +48,15 @@ h1 { margin: 16px 0 12px; font-size: clamp(52px, 7vw, 88px); letter-spacing: -0.
 .status-item strong { font-size: 18px; }
 .footnote { margin-top: 48px; color: #8ea3bf; font-size: 13px; }
 
+.backend { margin-top: 32px; max-width: 720px; }
+.backend h2 { font-size: 18px; line-height: 1.6; }
+.backend h2 span { color: #68d6ce; margin-left: 12px; overflow-wrap: anywhere; }
+.backend p { color: #a7b7d2; line-height: 1.7; }
+.backend button { font: inherit; padding: 10px 16px; color: #eaf1ff; background: #16233a; border: 1px solid #9fb2ce; border-radius: 6px; cursor: pointer; }
+.backend button:hover:not(:disabled) { background: #253b5b; }
+.backend button:focus-visible { outline: 2px solid #68d6ce; outline-offset: 4px; }
+.backend button:disabled { opacity: 0.6; cursor: wait; }
+
 @media (max-width: 640px) {
   .shell { padding: 28px 22px; }
   .hero { margin-top: 88px; }
