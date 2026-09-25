@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
+import { getBackendHealth } from './backend'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -44,6 +45,13 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+  ipcMain.handle('backend:get-health', (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents
+      || event.senderFrame !== mainWindow.webContents.mainFrame) {
+      throw new Error('不允许的窗口请求')
+    }
+    return getBackendHealth()
+  })
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

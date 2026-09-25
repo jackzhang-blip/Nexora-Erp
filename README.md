@@ -54,6 +54,7 @@ flowchart LR
 | 层次 | 技术 | 状态与预期用途 |
 | --- | --- | --- |
 | 桌面应用 | Electron、Vue 3、TypeScript | **已建立基础框架**；包含桌面窗口、Vue 页面和受限的进程间接口。 |
+| 后端服务 | FastAPI、Python | **已建立基础服务**；健康检查与接口文档，详见 [后端开发说明](backend/README.md)。 |
 | 本地存储 | SQLite | **候选**；为每台客户端保存业务数据。 |
 | 数据访问 | Drizzle ORM | **候选**；管理类型化查询与数据库迁移。 |
 | 局域网发现 | mDNS | **候选**；发现同一局域网内的对等节点。 |
@@ -73,6 +74,8 @@ flowchart LR
 5. `npm run preview`：使用构建结果启动桌面窗口。
 
 这些命令只用于开发和预览，目前不会生成可分发的安装包。
+
+后端已选用 FastAPI。按 [后端开发说明](backend/README.md) 启动独立服务后，桌面页会显示连接状态并支持重试；后端未启动不影响桌面窗口打开。
 
 已完成桌面窗口、Vue 启动页、受限的版本查询接口和开发构建脚本。计划中的后续工作方向（不代表完成顺序或发布日期）：
 
@@ -126,6 +129,7 @@ The [architecture diagram above](#架构设想) illustrates the client and the t
 | Layer | Technology | Status and intended use |
 | --- | --- | --- |
 | Desktop application | Electron, Vue 3, TypeScript | **Foundation implemented** with a desktop window, Vue UI, and a restricted process bridge. |
+| Backend | FastAPI, Python | **Foundation implemented**; health endpoint and API documentation. See [backend setup](backend/README.md). |
 | Local storage | SQLite | **Candidate** for storing business data on each client. |
 | Data access | Drizzle ORM | **Candidate** for typed queries and database migrations. |
 | LAN discovery | mDNS | **Candidate** for discovering peers on the same LAN. |
@@ -145,6 +149,8 @@ Development requires Node.js 22.12 or newer and npm. After cloning the repositor
 5. `npm run preview` to launch the desktop window from the build output.
 
 These are development and preview commands; they do not produce a distributable installer yet.
+
+The backend uses FastAPI. Follow the [backend setup](backend/README.md) to run it separately. The desktop page checks its health and supports retry; the desktop window can open while the backend is offline.
 
 The desktop window, Vue starter page, restricted version-query bridge, and development/build scripts are in place. Planned next work areas (without a committed order or release date):
 
