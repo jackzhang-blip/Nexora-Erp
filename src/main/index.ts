@@ -1,8 +1,19 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { getBackendHealth } from './backend'
+import { createBackendService } from './backend'
 
 let mainWindow: BrowserWindow | null = null
+const backend = createBackendService(join(app.getAppPath(), 'backend'))
+let exitReady = false
+
+app.on('before-quit', (event) => {
+  if (exitReady) return
+  event.preventDefault()
+  void backend.stop().finally(() => {
+    exitReady = true
+    app.quit()
+  })
+})
 
 function createWindow(): void {
   // 渲染进程保持隔离；桌面能力通过预加载脚本的受限接口提供。
@@ -36,6 +47,8 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // 启动期间先展示窗口；健康查询共享同一次启动，不重复创建进程。
+  void backend.check()
   // 只接受本应用窗口发来的版本查询，避免暴露通用 IPC 通道。
   ipcMain.handle('app:get-version', (event) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) {
@@ -50,7 +63,7 @@ app.whenReady().then(() => {
       || event.senderFrame !== mainWindow.webContents.mainFrame) {
       throw new Error('不允许的窗口请求')
     }
-    return getBackendHealth()
+    return backend.check()
   })
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

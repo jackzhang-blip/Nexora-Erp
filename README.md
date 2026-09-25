@@ -75,7 +75,7 @@ flowchart LR
 
 这些命令只用于开发和预览，目前不会生成可分发的安装包。
 
-后端已选用 FastAPI。按 [后端开发说明](backend/README.md) 启动独立服务后，桌面页会显示连接状态并支持重试；后端未启动不影响桌面窗口打开。
+后端已选用 FastAPI。按 [后端开发说明](backend/README.md) 完成一次性环境准备后，`npm run dev` 会随桌面应用自动启动后端，退出时自动停止；页面显示连接状态并支持失败重试。
 
 已完成桌面窗口、Vue 启动页、受限的版本查询接口和开发构建脚本。计划中的后续工作方向（不代表完成顺序或发布日期）：
 
@@ -150,7 +150,7 @@ Development requires Node.js 22.12 or newer and npm. After cloning the repositor
 
 These are development and preview commands; they do not produce a distributable installer yet.
 
-The backend uses FastAPI. Follow the [backend setup](backend/README.md) to run it separately. The desktop page checks its health and supports retry; the desktop window can open while the backend is offline.
+The backend uses FastAPI. After the one-time [backend setup](backend/README.md), `npm run dev` starts the backend with Electron and stops it when the app quits. The desktop page checks its health and supports retry.
 
 The desktop window, Vue starter page, restricted version-query bridge, and development/build scripts are in place. Planned next work areas (without a committed order or release date):
 
