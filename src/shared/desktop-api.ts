@@ -1,9 +1,61 @@
+import type { ErpOperations } from './erp-api'
+
 // 渲染进程只能调用这里列出的桌面能力，后续新增接口也应先定义清楚类型。
 export type BackendHealth =
   | { connected: true; version: string }
   | { connected: false; message: string }
 
+export interface ServerProfile {
+  id: string
+  name: string
+  host: string
+  port: number
+  fingerprint: string
+  version: string
+  isLocal: boolean
+}
+
+export interface ConnectionCandidate extends ServerProfile {
+  trusted: boolean
+  changed: boolean
+}
+
+export interface DiscoveryResult extends ServerProfile { online: boolean }
+
+export interface HostInput {
+  name: string
+  dataDir: string
+  port: number
+  username: string
+  password: string
+}
+
+export type StartupState =
+  | { status: 'welcome' }
+  | { status: 'connected'; server: ServerProfile }
+  | { status: 'needs_setup'; server: ServerProfile }
+  | { status: 'offline'; message: string; server?: ServerProfile }
+
+export interface HostStatus { configured: boolean; running: boolean; fingerprint: string | null }
+
 export interface DesktopApi {
   getVersion: () => Promise<string>
   getBackendHealth: () => Promise<BackendHealth>
+  callApi: <K extends keyof ErpOperations>(action: K, payload: ErpOperations[K]['input']) => Promise<ErpOperations[K]['output']>
+  startup: () => Promise<StartupState>
+  recentServers: () => Promise<ServerProfile[]>
+  prepareConnection: (address: string, port: number) => Promise<ConnectionCandidate>
+  approveConnection: (id: string, fingerprint: string) => Promise<ServerProfile>
+  activateSaved: (id: string) => Promise<ServerProfile>
+  disconnect: () => Promise<void>
+  createHost: (input: HostInput) => Promise<ServerProfile>
+  finishHostSetup: (username: string, password: string) => Promise<void>
+  defaultDataDir: () => Promise<string>
+  chooseDataDir: () => Promise<string | null>
+  restartHost: () => Promise<ServerProfile>
+  stopHost: () => Promise<void>
+  hostStatus: () => Promise<HostStatus>
+  startDiscovery: () => Promise<void>
+  stopDiscovery: () => Promise<void>
+  onDiscovery: (callback: (results: DiscoveryResult[]) => void) => () => void
 }

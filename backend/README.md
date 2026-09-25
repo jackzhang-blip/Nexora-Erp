@@ -1,53 +1,38 @@
-# FastAPI 基础服务
+# Nexora FastAPI 服务
 
-需要 Python 3.11+。从仓库根目录执行（PowerShell）：
+需要 Python 3.11+。开发环境从仓库根目录安装依赖：
 
-```powershell
-python -m venv backend/.venv
-backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-dev.txt
-backend/.venv/Scripts/python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
+```bash
+python3 -m pip install -r backend/requirements-dev.txt
 ```
 
-macOS / Linux 将 `backend/.venv/Scripts/python.exe` 替换为 `backend/.venv/bin/python`。
-仅运行服务时可以安装 `backend/requirements.txt`，无需开发依赖。
+桌面客户端在“新建服务端”时自动启动 `app.server`，并传入 SQLite 数据目录、实例名称和端口。单独调试服务时，可在仓库根目录运行：
 
-另开终端，在仓库根目录运行 `npm install`、`npm run dev`，桌面启动页会自动检查连接。
-停止后端后点击“重新检查连接”，页面会显示未连接；重新启动后再次检查即可恢复。
-桌面应用目前不负责启动或停止 Python 服务。
-
-- 健康接口：`GET http://127.0.0.1:8000/api/v1/health`
-- Swagger 文档：`http://127.0.0.1:8000/docs`
-- OpenAPI：`http://127.0.0.1:8000/openapi.json`
-- 响应：`{"status":"ok","service":"nexora-api","version":"0.1.0"}`
-
-健康接口仅表示进程存活；尚未接入数据库、鉴权、业务接口或同步功能。
-开发服务默认只监听本机。
-
-## 自定义连接地址
-
-在启动桌面应用的 PowerShell 中设置：
-
-```powershell
-$env:NEXORA_API_URL = 'http://127.0.0.1:8001'
-npm run dev
+```bash
+cd backend
+python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' --port 8000
 ```
 
-同时将 Uvicorn 的 `--port` 改为 `8001`。地址应为 HTTP(S) 源站，接口路径固定为
-`/api/v1/health`；无需在地址后追加路径。环境变量由 Electron 主进程读取，不自动加载 `.env`。
-主进程请求限制为 5 秒，拒绝重定向并校验响应结构；页面仅通过预加载接口查询健康状态，
-不能传入 URL。浏览器预览会提示使用桌面端；此流程不需要放开 CORS。
+正式数据请选持久化目录，不要使用临时目录。服务入口会迁移数据库、生成或复用实例证书，并通过 HTTPS 监听局域网。`GET /api/v1/health` 说明进程和数据库可用；`GET /api/v1/server/info` 提供公开的实例名称、身份、版本和初始化状态。
 
-## 验证
+## 初始化与权限
 
-在 `backend` 目录执行：
+只有来自本机环回地址的请求可调用 `POST /api/v1/setup/admin` 创建首位管理员。管理员密码至少 12 位。服务端已有用户时，该接口返回冲突；局域网设备不能抢注管理员。内置管理员、采购员、仓库员、查看员四种角色，权限在后端逐项校验。
 
-```powershell
-.venv/Scripts/python.exe -m pytest tests
+物料和供应商资料、入库单草稿、确认入库、库存流水及当前库存已实现。确认入库会在单个事务中生成流水；重复确认返回冲突。所有数据由服务端 SQLite 保存，远程客户端没有离线副本或自动同步。
+
+## 数据与证书
+
+数据库路径由桌面程序设置为所选数据目录下的 `nexora.db`。独立运行或测试时可以用 `NEXORA_DB_PATH` 指定完整路径。服务端身份随数据库保存；证书和私钥位于相同数据目录的 `server.crt`、`server.key`。如果证书与数据库实例不匹配，服务拒绝启动。备份和恢复时应把整个目录作为一组保留。
+
+服务端证书为每个实例独立生成的自签名证书。客户端首次连接时应通过服务端电脑或其他可信渠道核对 SHA-256 指纹；此后客户端固定该证书。当前设计只供单家公司内部局域网使用，不开放公网连接。
+
+## 测试
+
+从仓库根目录运行：
+
+```bash
+PYTHONPATH=backend python3 -m pytest backend/tests -q
 ```
 
-在仓库根目录执行（Node.js 22.12+）：
-
-```powershell
-node --experimental-strip-types --test tests/backend.test.mjs
-npm run build
-```
+测试覆盖身份持久化、远程首次管理员抢注拒绝、角色越权拒绝、入库只确认一次、库存流水和数据库重启后保留。

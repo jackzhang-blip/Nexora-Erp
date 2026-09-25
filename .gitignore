@@ -147,3 +147,7 @@ vite.config.ts.timestamp-*
 __pycache__/
 .pytest_cache/
 *.py[cod]
+
+# 内部安装包与 PyInstaller 构建目录
+build/
+release/

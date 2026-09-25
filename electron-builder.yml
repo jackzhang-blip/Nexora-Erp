@@ -1,0 +1,29 @@
+appId: com.nexora.erp
+productName: Nexora ERP
+directories:
+  output: release
+files:
+  - out/**/*
+  - resources/tray.png
+  - package.json
+extraResources:
+  - from: build/nexora-server
+    to: backend-service
+mac:
+  icon: resources/icon.icns
+  category: public.app-category.business
+  target:
+    - target: dmg
+      arch: [arm64]
+  extendInfo:
+    NSLocalNetworkUsageDescription: Nexora ERP 需要在局域网中发现并连接您选择的服务端。
+    NSBonjourServices:
+      - _nexora._tcp
+win:
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
