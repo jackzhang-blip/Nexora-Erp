@@ -78,6 +78,13 @@ function positiveId(payload: unknown, key: string): number {
   return value
 }
 
+function roleCode(payload: unknown): string {
+  // 自定义角色代码写入 URL 前先按服务端规则校验，避免路径注入。
+  const code = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).code : undefined
+  if (typeof code !== 'string' || !/^[a-z][a-z0-9_]{2,39}$/.test(code)) throw new Error('角色代码无效')
+  return code
+}
+
 function operation(action: keyof ErpOperations, payload: unknown): { method: string; path: string; body?: unknown } {
   // 明确列出可调用的接口，禁止页面拼接任意后端路径。
   switch (action) {
@@ -86,12 +93,27 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'login': return { method: 'POST', path: '/api/v1/auth/login', body: payload }
     case 'logout': return { method: 'POST', path: '/api/v1/auth/logout' }
     case 'me': return { method: 'GET', path: '/api/v1/auth/me' }
+    case 'changePassword': return { method: 'POST', path: '/api/v1/auth/change-password', body: payload }
+    case 'permissions': return { method: 'GET', path: '/api/v1/permissions' }
     case 'roles': return { method: 'GET', path: '/api/v1/roles' }
+    case 'createRole': return { method: 'POST', path: '/api/v1/roles', body: payload }
+    case 'updateRole': return {
+      method: 'PUT', path: `/api/v1/roles/${roleCode(payload)}`,
+      body: { label: (payload as { label: unknown }).label, permissions: (payload as { permissions: unknown }).permissions }
+    }
     case 'users': return { method: 'GET', path: '/api/v1/users' }
     case 'createUser': return { method: 'POST', path: '/api/v1/users', body: payload }
     case 'setUserRoles': return {
       method: 'PUT', path: `/api/v1/users/${positiveId(payload, 'userId')}/roles`,
       body: { roles: (payload as { roles: unknown }).roles }
+    }
+    case 'setUserStatus': return {
+      method: 'PUT', path: `/api/v1/users/${positiveId(payload, 'userId')}/status`,
+      body: { is_active: (payload as { is_active: unknown }).is_active }
+    }
+    case 'resetUserPassword': return {
+      method: 'POST', path: `/api/v1/users/${positiveId(payload, 'userId')}/reset-password`,
+      body: { password: (payload as { password: unknown }).password }
     }
     case 'suppliers': return { method: 'GET', path: '/api/v1/suppliers' }
     case 'createSupplier': return { method: 'POST', path: '/api/v1/suppliers', body: payload }
@@ -134,7 +156,7 @@ export async function callBackend(action: keyof ErpOperations, payload: unknown)
     sessionToken = data.token
     return data.user
   }
-  if (action === 'logout') sessionToken = null
+  if (action === 'logout' || action === 'changePassword') sessionToken = null
   return data
 }
 

@@ -35,14 +35,15 @@ def token_hash(token: str) -> str:
 
 
 def user_details(db, user_id: int) -> dict:
-    user = db.execute("SELECT id, username FROM users WHERE id = ?", (user_id,)).fetchone()
+    user = db.execute("SELECT id, username, is_active FROM users WHERE id = ?", (user_id,)).fetchone()
     roles = [row[0] for row in db.execute("SELECT role_code FROM user_roles WHERE user_id = ? ORDER BY role_code", (user_id,))]
     permissions = [row[0] for row in db.execute("""
         SELECT DISTINCT rp.permission_code FROM role_permissions rp
         JOIN user_roles ur ON ur.role_code = rp.role_code
         WHERE ur.user_id = ? ORDER BY rp.permission_code
     """, (user_id,))]
-    return {"id": user["id"], "username": user["username"], "roles": roles, "permissions": permissions}
+    return {"id": user["id"], "username": user["username"], "is_active": bool(user["is_active"]),
+            "roles": roles, "permissions": permissions}
 
 
 def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
@@ -54,7 +55,11 @@ def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bear
         """, (token_hash(credentials.credentials), int(time.time()))).fetchone()
         if not row:
             raise HTTPException(401, "登录已失效，请重新登录")
-        return user_details(db, row["user_id"])
+        user = user_details(db, row["user_id"])
+        # 禁用账号即使持有尚未到期的令牌，也不能继续调用业务接口。
+        if not user["is_active"]:
+            raise HTTPException(401, "账号已停用")
+        return user
 
 
 def require(permission: str):

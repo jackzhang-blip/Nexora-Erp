@@ -45,16 +45,19 @@ def test_server_identity_persists_and_remote_bootstrap_is_forbidden(monkeypatch,
 
 
 def test_existing_v1_database_keeps_users(monkeypatch, tmp_path):
-    # 升级只新增服务端身份，不能重建或清空上一阶段的业务库。
+    # 从旧版本升级时保留账号，并为角色和账号增加管理字段。
     database = tmp_path / "existing.db"
     monkeypatch.setenv("NEXORA_DB_PATH", str(database))
     with sqlite3.connect(database) as db:
         db.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT)")
+        db.execute("CREATE TABLE roles (code TEXT PRIMARY KEY, label TEXT NOT NULL)")
+        db.execute("INSERT INTO roles VALUES ('admin', '管理员')")
         db.execute("INSERT INTO users VALUES (7, 'existing', 'unchanged')")
         db.execute("PRAGMA user_version = 1")
     migrate()
     with sqlite3.connect(database) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
-        assert db.execute("SELECT username, password_hash FROM users WHERE id = 7").fetchone() == (
-            "existing", "unchanged")
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert db.execute("SELECT username, password_hash, is_active FROM users WHERE id = 7").fetchone() == (
+            "existing", "unchanged", 1)
         assert db.execute("SELECT COUNT(*) FROM server_identity").fetchone()[0] == 1
+        assert db.execute("SELECT is_builtin FROM roles WHERE code = 'admin'").fetchone()[0] == 1

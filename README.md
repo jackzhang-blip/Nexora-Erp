@@ -1,6 +1,6 @@
 # Nexora ERP（联光 ERP）
 
-面向企业内部的桌面 ERP。当前版本已具备账号角色、物料与供应商、采购入库单、库存流水，以及局域网服务端的创建、发现和连接。
+面向企业内部的桌面 ERP。当前版本已具备用户与角色权限管理、物料与供应商、采购入库单、库存流水，以及局域网服务端的创建、发现和连接。
 
 ## 当前工作方式
 
@@ -41,10 +41,11 @@ npm run build
 ## 安全与数据
 
 - 首位管理员只能从服务端电脑本机创建；后续用户和角色由管理员管理。业务接口在服务端校验权限。
+- 管理员可停用账号、重置密码并配置自定义角色的权限；修改密码后旧登录立即失效。系统始终保留至少一位启用的内置管理员。
 - 服务端为每个实例生成独立 HTTPS 证书，私钥保存在数据目录。请备份整个目录，尤其是 `nexora.db`、`server.crt` 和 `server.key`；丢失私钥会要求客户端重新核验身份。
 - 一张入库单只允许确认一次。确认状态与库存流水在同一个事务中写入，当前库存从流水汇总。
 - 切换服务端会退出当前账号；不同服务端的数据保持独立，不会自动合并。
 
 ## English summary
 
-Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, role-based access, purchase receipts, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Remote clients require a live connection; offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Windows device acceptance is pending access to a Windows machine.
+Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, user and role administration, purchase receipts, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Remote clients require a live connection; offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Windows device acceptance is pending access to a Windows machine.

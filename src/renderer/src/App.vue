@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import type { Material, Movement, Receipt, Role, Stock, Supplier, User } from '../../shared/erp-api'
+import type { Material, Movement, Permission, Receipt, Role, Stock, Supplier, User } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
@@ -21,12 +21,18 @@ const stock = ref<Stock[]>([])
 const movements = ref<Movement[]>([])
 const receipts = ref<Receipt[]>([])
 const roles = ref<Role[]>([])
+const permissions = ref<Permission[]>([])
 const users = ref<User[]>([])
 const roleDrafts = ref<Record<number, string[]>>({})
+const rolePermissionDrafts = ref<Record<string, string[]>>({})
+const roleLabelDrafts = ref<Record<string, string>>({})
+const resetPasswords = ref<Record<number, string>>({})
 const materialForm = ref({ sku: '', name: '', unit: '件' })
 const supplierForm = ref({ name: '' })
 const receiptForm = ref({ supplier_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const newUser = ref({ username: '', password: '', roles: ['viewer'] as string[] })
+const newRole = ref({ code: '', label: '', permissions: ['inventory.view'] as string[] })
+const passwordChange = ref({ current_password: '', new_password: '' })
 const server = ref<ServerProfile | null>(null)
 const candidate = ref<ConnectionCandidate | null>(null)
 const recentServers = ref<ServerProfile[]>([])
@@ -271,6 +277,9 @@ async function authenticate(): Promise<void> {
 
 async function refreshData(): Promise<void> {
   if (!window.nexora || !user.value) return
+  // 每次写操作后重新读取服务端权限；角色变化立即反映到当前页面。
+  user.value = await window.nexora.callApi('me', undefined)
+  if (!visibleTabs.value.some((item) => item.key === activeTab.value)) activeTab.value = visibleTabs.value[0]?.key ?? 'settings'
   // 页面只显示当前角色可访问的入口；数据访问仍以服务端授权为准。
   if (can('inventory.view')) {
     [materials.value, suppliers.value, stock.value, receipts.value, movements.value] = await Promise.all([
@@ -282,10 +291,17 @@ async function refreshData(): Promise<void> {
     ])
   }
   if (can('users.manage')) {
-    [roles.value, users.value] = await Promise.all([
-      window.nexora.callApi('roles', undefined), window.nexora.callApi('users', undefined)
+    [permissions.value, roles.value, users.value] = await Promise.all([
+      window.nexora.callApi('permissions', undefined), window.nexora.callApi('roles', undefined),
+      window.nexora.callApi('users', undefined)
     ])
     roleDrafts.value = Object.fromEntries(users.value.map((entry) => [entry.id, [...entry.roles]]))
+    rolePermissionDrafts.value = Object.fromEntries(roles.value.map((entry) => [entry.code, [...entry.permissions]]))
+    roleLabelDrafts.value = Object.fromEntries(roles.value.map((entry) => [entry.code, entry.label]))
+  } else {
+    permissions.value = []
+    roles.value = []
+    users.value = []
   }
 }
 
@@ -363,6 +379,49 @@ async function saveRoles(userId: number): Promise<void> {
     await window.nexora!.callApi('setUserRoles', { userId, roles: [...(roleDrafts.value[userId] ?? [])] })
     if (user.value?.id === userId) user.value = await window.nexora!.callApi('me', undefined)
   }, '角色已更新。')
+}
+
+async function createRole(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    await window.nexora!.callApi('createRole', { code: newRole.value.code, label: newRole.value.label,
+      permissions: [...newRole.value.permissions] })
+    newRole.value = { code: '', label: '', permissions: ['inventory.view'] }
+  }, '自定义角色已创建。')
+}
+
+async function saveRole(code: string): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('updateRole', { code, label: roleLabelDrafts.value[code],
+    permissions: [...(rolePermissionDrafts.value[code] ?? [])] }), '角色权限已更新。')
+}
+
+async function setUserStatus(entry: User): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('setUserStatus', { userId: entry.id,
+    is_active: !entry.is_active }), entry.is_active ? '账号已停用，原有登录已失效。' : '账号已启用。')
+}
+
+async function resetUserPassword(userId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    await window.nexora!.callApi('resetUserPassword', { userId, password: resetPasswords.value[userId] })
+    resetPasswords.value[userId] = ''
+  }, '密码已重置，用户需要重新登录。')
+}
+
+async function changeOwnPassword(): Promise<void> {
+  if (!window.nexora || busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    await window.nexora.callApi('changePassword', { ...passwordChange.value })
+    passwordChange.value = { current_password: '', new_password: '' }
+    user.value = null
+    screen.value = 'login'
+    notice.value = '密码已修改，请使用新密码重新登录。'
+  } catch (cause) { error.value = displayError(cause) }
+  finally { busy.value = false }
 }
 
 async function logout(): Promise<void> {
@@ -472,9 +531,36 @@ onUnmounted(() => { void stopScan() })
 
         <section v-if="activeTab === 'users' && can('users.manage')" class="stack">
           <div class="card"><div class="section-heading"><div><p class="eyebrow">ACCESS</p><h2>创建用户</h2></div></div><form class="inline-form" @submit.prevent="createUser"><label>用户名<input v-model.trim="newUser.username" required minlength="3" maxlength="40" placeholder="英文、数字或下划线" /></label><label>初始密码<input v-model="newUser.password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位" /></label><fieldset><legend>角色</legend><label v-for="role in roles" :key="role.code" class="check"><input v-model="newUser.roles" type="checkbox" :value="role.code" />{{ role.label }}</label></fieldset><button class="primary" type="submit" :disabled="busy || !newUser.roles.length">创建用户</button></form></div>
-          <div class="card"><div class="section-heading"><div><p class="eyebrow">TEAM</p><h2>用户与角色</h2></div></div><div v-for="entry in users" :key="entry.id" class="user-row"><div><strong>{{ entry.username }}</strong><small>#{{ entry.id }}</small></div><div class="role-picker"><label v-for="role in roles" :key="role.code" class="check"><input v-model="roleDrafts[entry.id]" type="checkbox" :value="role.code" />{{ role.label }}</label></div><button class="secondary small" type="button" :disabled="busy || !roleDrafts[entry.id]?.length" @click="saveRoles(entry.id)">保存角色</button></div></div>
+          <div class="card">
+            <div class="section-heading"><div><p class="eyebrow">TEAM</p><h2>用户与角色</h2></div></div>
+            <div v-for="entry in users" :key="entry.id" class="user-row">
+              <div><strong>{{ entry.username }}</strong><small>#{{ entry.id }} · {{ entry.is_active ? '已启用' : '已停用' }}</small></div>
+              <div class="user-access">
+                <div class="role-picker"><label v-for="role in roles" :key="role.code" class="check"><input v-model="roleDrafts[entry.id]" type="checkbox" :value="role.code" />{{ role.label }}</label></div>
+                <label class="reset-field">新密码<input v-model="resetPasswords[entry.id]" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="重置密码至少 12 位" /></label>
+              </div>
+              <div class="user-actions">
+                <button class="secondary small" type="button" :disabled="busy || !roleDrafts[entry.id]?.length" @click="saveRoles(entry.id)">保存角色</button>
+                <button class="secondary small" type="button" :disabled="busy || entry.id === user?.id || !resetPasswords[entry.id] || resetPasswords[entry.id].length < 12" @click="resetUserPassword(entry.id)">重置密码</button>
+                <button class="secondary small" type="button" :disabled="busy || entry.id === user?.id" @click="setUserStatus(entry)">{{ entry.is_active ? '停用账号' : '启用账号' }}</button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="section-heading"><div><p class="eyebrow">ROLE SETTINGS</p><h2>角色与权限</h2></div></div>
+            <form class="inline-form" @submit.prevent="createRole">
+              <div class="form-grid"><label>角色代码<input v-model.trim="newRole.code" required minlength="3" maxlength="40" pattern="[a-z][a-z0-9_]*" placeholder="例如 stock_clerk" /></label><label>角色名称<input v-model.trim="newRole.label" required maxlength="40" placeholder="例如 库存专员" /></label></div>
+              <fieldset><legend>授权范围</legend><label v-for="permission in permissions" :key="permission.code" class="check"><input v-model="newRole.permissions" type="checkbox" :value="permission.code" />{{ permission.label }}</label></fieldset>
+              <button class="primary" type="submit" :disabled="busy">创建自定义角色</button>
+            </form>
+            <div v-for="role in roles" :key="role.code" class="role-row">
+              <div><strong>{{ role.label }}</strong><small>{{ role.code }} · {{ role.is_builtin ? '内置角色' : '自定义角色' }}</small></div>
+              <div v-if="role.is_builtin" class="muted">{{ role.permissions.map(code => permissions.find(item => item.code === code)?.label ?? code).join(' · ') }}</div>
+              <div v-else class="role-editor"><label>名称<input v-model.trim="roleLabelDrafts[role.code]" maxlength="40" /></label><fieldset><legend>权限</legend><label v-for="permission in permissions" :key="permission.code" class="check"><input v-model="rolePermissionDrafts[role.code]" type="checkbox" :value="permission.code" />{{ permission.label }}</label></fieldset><button class="secondary small" type="button" :disabled="busy || !roleLabelDrafts[role.code]" @click="saveRole(role.code)">保存权限</button></div>
+            </div>
+          </div>
         </section>
-        <section v-if="activeTab === 'settings'" class="stack"><div class="card"><div class="section-heading"><div><p class="eyebrow">CONNECTION</p><h2>当前连接</h2></div></div><dl class="server-details"><div><dt>服务端</dt><dd>{{ server?.name }}</dd></div><div><dt>地址</dt><dd>{{ server?.host }}:{{ server?.port }}</dd></div><div><dt>证书指纹</dt><dd class="mono">{{ server?.fingerprint }}</dd></div></dl><button class="secondary" type="button" @click="switchServer">切换服务端</button></div><div v-if="host.configured" class="card"><div class="section-heading"><div><p class="eyebrow">LOCAL HOST</p><h2>本机服务</h2></div><span class="pill" :class="{ posted: host.running }">{{ host.running ? '运行中' : '已停止' }}</span></div><p class="muted">关闭窗口时本机服务继续运行；退出应用或登录会话后停止。</p><div class="onboard-actions"><button v-if="host.running" class="secondary" type="button" @click="stopLocalHost">停止本机服务</button><button v-else class="primary" type="button" @click="restartLocalHost">启动本机服务</button></div></div></section>
+        <section v-if="activeTab === 'settings'" class="stack"><div class="card"><div class="section-heading"><div><p class="eyebrow">CONNECTION</p><h2>当前连接</h2></div></div><dl class="server-details"><div><dt>服务端</dt><dd>{{ server?.name }}</dd></div><div><dt>地址</dt><dd>{{ server?.host }}:{{ server?.port }}</dd></div><div><dt>证书指纹</dt><dd class="mono">{{ server?.fingerprint }}</dd></div></dl><button class="secondary" type="button" @click="switchServer">切换服务端</button></div><div class="card"><div class="section-heading"><div><p class="eyebrow">ACCOUNT</p><h2>修改我的密码</h2></div></div><form class="inline-form" @submit.prevent="changeOwnPassword"><div class="form-grid"><label>当前密码<input v-model="passwordChange.current_password" type="password" required autocomplete="current-password" /></label><label>新密码<input v-model="passwordChange.new_password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位" /></label></div><p class="muted">修改后所有设备都需要重新登录。</p><button class="primary" type="submit" :disabled="busy">修改密码</button></form></div><div v-if="host.configured" class="card"><div class="section-heading"><div><p class="eyebrow">LOCAL HOST</p><h2>本机服务</h2></div><span class="pill" :class="{ posted: host.running }">{{ host.running ? '运行中' : '已停止' }}</span></div><p class="muted">关闭窗口时本机服务继续运行；退出应用或登录会话后停止。</p><div class="onboard-actions"><button v-if="host.running" class="secondary" type="button" @click="stopLocalHost">停止本机服务</button><button v-else class="primary" type="button" @click="restartLocalHost">启动本机服务</button></div></div></section>
       </template>
     </main>
   </div>

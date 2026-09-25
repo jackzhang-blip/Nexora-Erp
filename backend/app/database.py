@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 2:
+        if version > 3:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -132,3 +132,11 @@ def migrate() -> None:
             db.execute("INSERT INTO server_identity(id, name) VALUES (?, ?)",
                        (str(uuid.uuid4()), os.environ.get("NEXORA_INSTANCE_NAME", "Nexora ERP 服务端")))
             db.execute("PRAGMA user_version = 2")
+            db.commit()
+        if version < 3:
+            # 旧用户默认保持启用；内置角色标记为只读，避免误改造成全员权限漂移。
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))")
+            db.execute("ALTER TABLE roles ADD COLUMN is_builtin INTEGER NOT NULL DEFAULT 0 CHECK (is_builtin IN (0, 1))")
+            db.execute("UPDATE roles SET is_builtin = 1 WHERE code IN ('admin', 'buyer', 'warehouse', 'viewer')")
+            db.execute("PRAGMA user_version = 3")

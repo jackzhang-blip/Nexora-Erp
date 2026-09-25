@@ -49,6 +49,44 @@ class RolesInput(BaseModel):
     roles: list[str] = Field(min_length=1)
 
 
+class RoleInput(BaseModel):
+    code: str = Field(min_length=3, max_length=40, pattern=r"^[a-z][a-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=40)
+    permissions: list[str]
+
+    @field_validator("label")
+    @classmethod
+    def trim_label(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("角色名称不能为空")
+        return value.strip()
+
+
+class RoleUpdate(BaseModel):
+    label: str = Field(min_length=1, max_length=40)
+    permissions: list[str]
+
+    @field_validator("label")
+    @classmethod
+    def trim_label(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("角色名称不能为空")
+        return value.strip()
+
+
+class StatusInput(BaseModel):
+    is_active: bool
+
+
+class PasswordInput(BaseModel):
+    password: str = Field(min_length=12, max_length=128)
+
+
+class ChangePasswordInput(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=12, max_length=128)
+
+
 class SupplierInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 
@@ -98,6 +136,41 @@ def validate_roles(db: sqlite3.Connection, roles: list[str]) -> list[str]:
     if not unique or not set(unique) <= known:
         raise HTTPException(422, "角色无效")
     return unique
+
+
+def validate_permissions(db: sqlite3.Connection, permissions: list[str]) -> list[str]:
+    # 权限只能从服务端固定登记表选择，客户端不能创造任意权限代码。
+    unique = sorted(set(permissions))
+    known = {row[0] for row in db.execute("SELECT code FROM permissions")}
+    if not set(unique) <= known:
+        raise HTTPException(422, "权限代码无效")
+    return unique
+
+
+def role_details(db: sqlite3.Connection, code: str) -> dict:
+    role = db.execute("SELECT code, label, is_builtin FROM roles WHERE code = ?", (code,)).fetchone()
+    if not role:
+        raise HTTPException(404, "角色不存在")
+    permissions = [row[0] for row in db.execute(
+        "SELECT permission_code FROM role_permissions WHERE role_code = ? ORDER BY permission_code", (code,))]
+    return {"code": role["code"], "label": role["label"], "is_builtin": bool(role["is_builtin"]),
+            "permissions": permissions}
+
+
+def ensure_active_admin_remains(db: sqlite3.Connection, user_id: int) -> None:
+    # 所有账号管理操作共用同一条约束，保证至少一位启用的内置管理员。
+    target = db.execute("""
+        SELECT 1 FROM users u JOIN user_roles ur ON ur.user_id = u.id
+        WHERE u.id = ? AND u.is_active = 1 AND ur.role_code = 'admin'
+    """, (user_id,)).fetchone()
+    if not target:
+        return
+    count = db.execute("""
+        SELECT COUNT(*) FROM users u JOIN user_roles ur ON ur.user_id = u.id
+        WHERE u.is_active = 1 AND ur.role_code = 'admin'
+    """).fetchone()[0]
+    if count <= 1:
+        raise HTTPException(409, "至少需要保留一位启用的管理员")
 
 
 def receipt_data(db: sqlite3.Connection, receipt_id: int) -> dict:
@@ -160,9 +233,9 @@ def bootstrap_admin(payload: AccountInput, request: Request) -> dict:
 @app.post("/api/v1/auth/login")
 def login(payload: LoginInput) -> dict:
     with connection() as db:
-        row = db.execute("SELECT id, password_hash FROM users WHERE username = ?",
+        row = db.execute("SELECT id, password_hash, is_active FROM users WHERE username = ?",
                          (payload.username.lower(),)).fetchone()
-        if not row or not verify_password(payload.password, row["password_hash"]):
+        if not row or not row["is_active"] or not verify_password(payload.password, row["password_hash"]):
             raise HTTPException(401, "用户名或密码错误")
         token = secrets.token_urlsafe(32)
         # 会话十二小时后过期；重新登录会得到独立令牌。
@@ -183,10 +256,62 @@ def me(user: dict = Depends(current_user)) -> dict:
     return user
 
 
+@app.post("/api/v1/auth/change-password", status_code=204)
+def change_password(payload: ChangePasswordInput, user: dict = Depends(current_user)) -> None:
+    with connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
+        if not verify_password(payload.current_password, row["password_hash"]):
+            raise HTTPException(400, "当前密码不正确")
+        db.execute("UPDATE users SET password_hash = ? WHERE id = ?",
+                   (hash_password(payload.new_password), user["id"]))
+        # 改密后所有旧会话立即失效，当前桌面端也须重新登录。
+        db.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
+
+
+@app.get("/api/v1/permissions")
+def list_permissions(_: dict = Depends(require("users.manage"))) -> list[dict]:
+    labels = {"users.manage": "管理用户与角色", "catalog.manage": "管理基础资料",
+              "inventory.view": "查看库存与入库单", "receipt.create": "创建入库单",
+              "receipt.post": "确认入库"}
+    with connection() as db:
+        return [{"code": row[0], "label": labels.get(row[0], row[0])}
+                for row in db.execute("SELECT code FROM permissions ORDER BY code")]
+
+
 @app.get("/api/v1/roles")
 def list_roles(_: dict = Depends(require("users.manage"))) -> list[dict]:
     with connection() as db:
-        return [dict(row) for row in db.execute("SELECT code, label FROM roles ORDER BY code")]
+        return [role_details(db, row[0]) for row in db.execute("SELECT code FROM roles ORDER BY code").fetchall()]
+
+
+@app.post("/api/v1/roles", status_code=201)
+def create_role(payload: RoleInput, _: dict = Depends(require("users.manage"))) -> dict:
+    with connection() as db:
+        permissions = validate_permissions(db, payload.permissions)
+        try:
+            db.execute("INSERT INTO roles(code, label) VALUES (?, ?)", (payload.code, payload.label))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, "角色代码已存在") from None
+        db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                       [(payload.code, permission) for permission in permissions])
+        return role_details(db, payload.code)
+
+
+@app.put("/api/v1/roles/{role_code}")
+def update_role(role_code: str, payload: RoleUpdate, _: dict = Depends(require("users.manage"))) -> dict:
+    with connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        role = role_details(db, role_code)
+        if role["is_builtin"]:
+            raise HTTPException(409, "内置角色不可修改")
+        permissions = validate_permissions(db, payload.permissions)
+        db.execute("UPDATE roles SET label = ? WHERE code = ?", (payload.label, role_code))
+        db.execute("DELETE FROM role_permissions WHERE role_code = ?", (role_code,))
+        db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                       [(role_code, permission) for permission in permissions])
+        # 权限按请求实时查询，更新角色后现有用户会话立即按新权限执行。
+        return role_details(db, role_code)
 
 
 @app.get("/api/v1/users")
@@ -218,16 +343,40 @@ def set_user_roles(user_id: int, payload: RolesInput,
             raise HTTPException(404, "用户不存在")
         roles = validate_roles(db, payload.roles)
         if "admin" not in roles:
-            # 最后一位管理员不可撤销，避免系统失去账号管理入口。
-            admins = db.execute("SELECT COUNT(*) FROM user_roles WHERE role_code = 'admin'").fetchone()[0]
-            is_admin = db.execute("SELECT 1 FROM user_roles WHERE user_id = ? AND role_code = 'admin'",
-                                  (user_id,)).fetchone()
-            if is_admin and admins <= 1:
-                raise HTTPException(409, "至少需要保留一位管理员")
+            ensure_active_admin_remains(db, user_id)
         db.execute("DELETE FROM user_roles WHERE user_id = ?", (user_id,))
         db.executemany("INSERT INTO user_roles(user_id, role_code) VALUES (?, ?)",
                        [(user_id, role) for role in roles])
         return user_details(db, user_id)
+
+
+@app.put("/api/v1/users/{user_id}/status")
+def set_user_status(user_id: int, payload: StatusInput,
+                    _: dict = Depends(require("users.manage"))) -> dict:
+    with connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("SELECT is_active FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "用户不存在")
+        if row["is_active"] and not payload.is_active:
+            ensure_active_admin_remains(db, user_id)
+        db.execute("UPDATE users SET is_active = ? WHERE id = ?", (int(payload.is_active), user_id))
+        if not payload.is_active:
+            # 停用时撤销全部会话；重新启用后必须输入密码登录。
+            db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        return user_details(db, user_id)
+
+
+@app.post("/api/v1/users/{user_id}/reset-password", status_code=204)
+def reset_user_password(user_id: int, payload: PasswordInput,
+                        _: dict = Depends(require("users.manage"))) -> None:
+    with connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        if not db.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone():
+            raise HTTPException(404, "用户不存在")
+        db.execute("UPDATE users SET password_hash = ? WHERE id = ?",
+                   (hash_password(payload.password), user_id))
+        db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
 
 
 @app.get("/api/v1/suppliers")

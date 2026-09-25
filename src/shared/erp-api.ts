@@ -2,11 +2,13 @@
 export interface User {
   id: number
   username: string
+  is_active: boolean
   roles: string[]
   permissions: string[]
 }
 
-export interface Role { code: string; label: string }
+export interface Permission { code: string; label: string }
+export interface Role { code: string; label: string; is_builtin: boolean; permissions: string[] }
 export interface Supplier { id: number; name: string }
 export interface Material { id: number; sku: string; name: string; unit: string }
 export interface Stock extends Material { quantity: string }
@@ -48,10 +50,16 @@ export interface ErpOperations {
   login: { input: { username: string; password: string }; output: User }
   logout: { input: undefined; output: void }
   me: { input: undefined; output: User }
+  changePassword: { input: { current_password: string; new_password: string }; output: void }
+  permissions: { input: undefined; output: Permission[] }
   roles: { input: undefined; output: Role[] }
+  createRole: { input: { code: string; label: string; permissions: string[] }; output: Role }
+  updateRole: { input: { code: string; label: string; permissions: string[] }; output: Role }
   users: { input: undefined; output: User[] }
   createUser: { input: { username: string; password: string; roles: string[] }; output: User }
   setUserRoles: { input: { userId: number; roles: string[] }; output: User }
+  setUserStatus: { input: { userId: number; is_active: boolean }; output: User }
+  resetUserPassword: { input: { userId: number; password: string }; output: void }
   suppliers: { input: undefined; output: Supplier[] }
   createSupplier: { input: { name: string }; output: Supplier }
   materials: { input: undefined; output: Material[] }

@@ -94,11 +94,19 @@ fieldset { display: flex; flex-wrap: wrap; gap: 10px 15px; margin: 0; border: 0;
 legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; }
 .check { display: inline-flex; align-items: center; gap: 5px; font-weight: 400; white-space: nowrap; }
 .check input { width: 15px; min-height: 15px; height: 15px; margin: 0; accent-color: #1d7777; }
-.user-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr) auto; align-items: center; gap: 15px; border-top: 1px solid #edf0f3; padding: 16px 0; }
+.user-row { display: grid; grid-template-columns: minmax(120px, .6fr) minmax(0, 2fr) auto; align-items: center; gap: 15px; border-top: 1px solid #edf0f3; padding: 16px 0; }
 .user-row:first-of-type { border-top: 0; }
 .user-row strong { display: block; font-size: 13px; }
 .user-row small { color: #96a3b3; }
 .role-picker { display: flex; flex-wrap: wrap; gap: 8px 15px; }
+.user-access, .role-editor { display: grid; gap: 11px; }
+.reset-field { max-width: 260px; }
+.user-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.role-row { display: grid; grid-template-columns: minmax(150px, .6fr) minmax(0, 2fr); gap: 15px; border-top: 1px solid #edf0f3; padding: 17px 0; }
+.role-row strong { display: block; font-size: 13px; }
+.role-row small { color: #96a3b3; }
+.role-editor > label { max-width: 280px; }
+.role-editor button { justify-self: start; }
 
 /* 首次启动用浅蓝色的连接画布，与登录后的深色业务工作台形成清晰阶段感。 */
 .onboarding { min-height: 100vh; display: flex; flex-direction: column; color: #0b2347; background: radial-gradient(circle at 83% 24%, #dceeff 0, transparent 28%), linear-gradient(145deg, #f6fbff 0%, #e9f3ff 55%, #f7fbff 100%); }
@@ -198,6 +206,8 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
 @media (max-width: 1080px) {
   .two-columns { grid-template-columns: 1fr; }
   .user-row { grid-template-columns: 1fr; }
+  .user-actions { justify-content: flex-start; }
+  .role-row { grid-template-columns: 1fr; }
   .create-columns { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {

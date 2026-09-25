@@ -19,6 +19,8 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 只有来自本机环回地址的请求可调用 `POST /api/v1/setup/admin` 创建首位管理员。管理员密码至少 12 位。服务端已有用户时，该接口返回冲突；局域网设备不能抢注管理员。内置管理员、采购员、仓库员、查看员四种角色，权限在后端逐项校验。
 
+管理员可通过 `/api/v1/users` 创建用户、调整角色，通过 `/api/v1/users/{id}/status` 启用或停用账号，并通过 `/api/v1/users/{id}/reset-password` 重置密码。`/api/v1/permissions` 列出固定权限代码；`/api/v1/roles` 可创建自定义角色，`/api/v1/roles/{code}` 可修改其授权范围。内置角色只读，最后一位启用的内置管理员不可停用或撤权。账号停用、管理员重置密码以及用户自行调用 `/api/v1/auth/change-password` 后，相关旧会话立即失效。角色和权限变化对现有会话立即生效。
+
 物料和供应商资料、入库单草稿、确认入库、库存流水及当前库存已实现。确认入库会在单个事务中生成流水；重复确认返回冲突。所有数据由服务端 SQLite 保存，远程客户端没有离线副本或自动同步。
 
 ## 数据与证书
@@ -35,4 +37,4 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 PYTHONPATH=backend python3 -m pytest backend/tests -q
 ```
 
-测试覆盖身份持久化、远程首次管理员抢注拒绝、角色越权拒绝、入库只确认一次、库存流水和数据库重启后保留。
+测试覆盖身份持久化、远程首次管理员抢注拒绝、角色越权拒绝、账号停用与会话失效、自定义角色授权、最后管理员保护、入库只确认一次、库存流水和数据库重启后保留。
