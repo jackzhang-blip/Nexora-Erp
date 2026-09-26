@@ -1,0 +1,8 @@
+{
+  // 为编辑器提供标准项目入口，让 Vue 页面使用网页端的图片与虚拟图标类型声明。
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.web.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
