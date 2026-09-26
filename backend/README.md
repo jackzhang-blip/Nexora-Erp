@@ -1,68 +1,40 @@
-# FastAPI 基础服务
+# Nexora FastAPI 服务
 
-## 一次性开发环境准备
+需要 Python 3.11+。开发环境从仓库根目录安装依赖：
 
-需要 Python 3.11+ 和 Node.js 22.12+。从仓库根目录执行（PowerShell）：
-
-```powershell
-python -m venv backend/.venv
-backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-dev.txt
-npm install
+```bash
+python3 -m pip install -r backend/requirements-dev.txt
 ```
 
-macOS / Linux 将 `backend/.venv/Scripts/python.exe` 替换为 `backend/.venv/bin/python`。
-仅运行服务时可以安装 `backend/requirements.txt`，无需开发依赖。
+桌面客户端在“新建服务端”时自动启动 `app.server`，并传入 SQLite 数据目录、实例名称和端口。单独调试服务时，可在仓库根目录运行：
 
-## 启动整个项目
-
-```powershell
-npm run dev
+```bash
+cd backend
+python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' --port 8000
 ```
 
-Electron 自动启动 FastAPI，等待健康检查通过后显示已连接，不需要另开终端启动后端。
-`npm run build` 后的 `npm run preview` 也使用同一托管流程。
-应用退出时关闭 Python 服务；macOS 关闭最后一个窗口会保留应用，使用退出命令时才停止后端。
-后端异常退出后，点击“重新检查连接”会重新启动服务。
-缺少运行环境、依赖安装失败或启动超时会显示可重试提示。
+正式数据请选持久化目录，不要使用临时目录。服务入口会迁移数据库、生成或复用实例证书，并通过 HTTPS 监听局域网。`GET /api/v1/health` 说明进程和数据库可用；`GET /api/v1/server/info` 提供公开的实例名称、身份、版本和初始化状态。
 
-后端只监听 `127.0.0.1`，端口由操作系统自动分配，不依赖固定的 8000 端口。
-每次启动先绑定端口，再启动 Uvicorn，避免端口竞争，也不会误连到其他项目的服务。
-Electron 与 Python 通过标准输入管道关联生命周期：正常退出、开发重载或父进程终止后，
-管道关闭会通知 Python 退出；同时监测 Electron 父进程，避免 Windows 继承句柄导致 EOF 延迟。
-托管模式不启用 Uvicorn reload，修改 Python 后请重启桌面应用。
+## 初始化与权限
 
-默认使用 `backend/.venv` 中的 Python；如需指定现有环境，可在启动前设置
-`NEXORA_PYTHON` 为 Python 可执行文件的绝对路径。托管模式不使用 `NEXORA_API_URL`。
-目前仓库只有开发/预览流程；未来生成安装包时，需要同时打包 Python 运行环境及 backend，
-不能把开发机虚拟环境直接作为可分发运行时。
+只有来自本机环回地址的请求可调用 `POST /api/v1/setup/admin` 创建首位管理员。管理员密码至少 12 位。服务端已有用户时，该接口返回冲突；局域网设备不能抢注管理员。内置管理员、采购员、仓库员、查看员四种角色，权限在后端逐项校验。
 
-## 接口
+管理员可通过 `/api/v1/users` 创建用户、调整角色，通过 `/api/v1/users/{id}/status` 启用或停用账号，并通过 `/api/v1/users/{id}/reset-password` 重置密码。`/api/v1/permissions` 列出固定权限代码；`/api/v1/roles` 可创建自定义角色，`/api/v1/roles/{code}` 可修改其授权范围。内置角色只读，最后一位启用的内置管理员不可停用或撤权。账号停用、管理员重置密码以及用户自行调用 `/api/v1/auth/change-password` 后，相关旧会话立即失效。角色和权限变化对现有会话立即生效。
 
-- 健康接口：`GET /api/v1/health`
-- Swagger 文档：`/docs`
-- OpenAPI：`/openapi.json`
-- 响应：`{"status":"ok","service":"nexora-api","version":"0.1.0"}`
+物料和供应商资料、入库单草稿、确认入库、库存流水及当前库存已实现。确认入库会在单个事务中生成流水；重复确认返回冲突。所有数据由服务端 SQLite 保存，远程客户端没有离线副本或自动同步。
 
-健康检查仅表示进程存活；尚未接入数据库、鉴权、业务模块或同步功能。
-单独调试接口时可选用以下命令（常规项目启动不需要此步骤）：
+## 数据与证书
 
-```powershell
-backend/.venv/Scripts/python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
+数据库路径由桌面程序设置为所选数据目录下的 `nexora.db`。独立运行或测试时可以用 `NEXORA_DB_PATH` 指定完整路径。服务端身份随数据库保存；证书和私钥位于相同数据目录的 `server.crt`、`server.key`。如果证书与数据库实例不匹配，服务拒绝启动。备份和恢复时应把整个目录作为一组保留。
+
+服务端证书为每个实例独立生成的自签名证书。客户端首次连接时应通过服务端电脑或其他可信渠道核对 SHA-256 指纹；此后客户端固定该证书。当前设计只供单家公司内部局域网使用，不开放公网连接。
+
+## 测试
+
+从仓库根目录运行：
+
+```bash
+PYTHONPATH=backend python3 -m pytest backend/tests -q
 ```
 
-此时可以访问 `http://127.0.0.1:8000/docs`，桌面端仍使用自己的托管实例。
-
-## 验证
-
-在 `backend` 目录执行：
-
-```powershell
-.venv/Scripts/python.exe -m pytest tests
-```
-
-在仓库根目录执行（Node.js 22.12+）：
-
-```powershell
-node --experimental-strip-types --test tests/backend.test.mjs
-npm run build
-```
+测试覆盖身份持久化、远程首次管理员抢注拒绝、角色越权拒绝、账号停用与会话失效、自定义角色授权、最后管理员保护、入库只确认一次、库存流水和数据库重启后保留。

@@ -1,0 +1,37 @@
+name: Windows 内部安装包
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: 安装依赖
+        run: |
+          npm ci
+          python -m pip install -r backend/requirements-dev.txt "pyinstaller>=6,<7"
+      - name: 验证后端和桌面接口
+        run: |
+          $env:PYTHONPATH = 'backend'
+          python -m pytest backend/tests -q
+          node --experimental-strip-types --test tests/backend.test.mjs
+        shell: pwsh
+      - name: 生成 Windows 安装包
+        run: npm run dist:win
+      - name: 验证 Windows 安装包运行
+        run: ./scripts/smoke-windows.ps1
+        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexora-windows-x64-internal
+          path: release/*.exe
