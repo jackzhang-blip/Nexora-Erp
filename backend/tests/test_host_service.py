@@ -74,7 +74,8 @@ def test_windows_install_grants_system_access_to_selected_instance(monkeypatch, 
     # SCM 启动前必须能访问数据库和证书；用户原有 ACL 不应被整体替换。
     assert data_dir.is_dir()
     assert ("icacls.exe", str(data_dir), "/grant", "*S-1-5-18:(OI)(CI)F", "/T") in commands
-    assert commands[-1] == ("sc.exe", "start", host_service.SERVICE_NAME)
+    assert commands[-2] == ("sc.exe", "start", host_service.SERVICE_NAME)
+    assert commands[-1] == ("sc.exe", "config", host_service.SERVICE_NAME, "start=", "auto")
 
 
 def test_failed_mac_registration_removes_partial_install(monkeypatch, tmp_path):

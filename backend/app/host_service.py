@@ -172,19 +172,23 @@ def install_service(config: HostConfig, source_dir: Path) -> None:
             _run("icacls.exe", str(config.data_dir), "/grant",
                  "*S-1-5-18:(OI)(CI)F", "/T")
             _run("sc.exe", "create", SERVICE_NAME, "binPath=", f'"{binary}" service',
-                 "start=", "auto", "DisplayName=", "Nexora ERP Host")
+                 "start=", "demand", "DisplayName=", "Nexora ERP Host")
             _run("sc.exe", "description", SERVICE_NAME, "Nexora ERP 局域网服务端")
             _run("sc.exe", "failure", SERVICE_NAME, "reset=", "86400",
                  "actions=", "restart/60000/restart/60000/restart/60000")
             _run("sc.exe", "start", SERVICE_NAME)
+            # 只有首次启动通过后才设为开机自启，避免失败的程序反复开机重试。
+            _run("sc.exe", "config", SERVICE_NAME, "start=", "auto")
     except Exception:
         if sys.platform == "win32":
             # 清理注册信息前保留 SCM 配置与退出码，便于定位启动权限和路径错误。
             for diagnostic in (("sc.exe", "qc", SERVICE_NAME),
                                ("sc.exe", "queryex", SERVICE_NAME),
+                               ("sc.exe", "sdshow", SERVICE_NAME),
                                ("icacls.exe", str(service_binary(root)))):
                 result = subprocess.run(diagnostic, capture_output=True, text=True)
-                print((result.stdout or result.stderr).strip(), file=sys.stderr)
+                print(f"{diagnostic[0]} {diagnostic[1]}: {result.stdout!r} {result.stderr!r}",
+                      file=sys.stderr)
         # 安装失败不得留下看似可用、下次启动却无法工作的配置。
         if sys.platform == "win32":
             subprocess.run(["sc.exe", "delete", SERVICE_NAME], capture_output=True)
