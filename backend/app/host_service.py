@@ -178,6 +178,13 @@ def install_service(config: HostConfig, source_dir: Path) -> None:
                  "actions=", "restart/60000/restart/60000/restart/60000")
             _run("sc.exe", "start", SERVICE_NAME)
     except Exception:
+        if sys.platform == "win32":
+            # 清理注册信息前保留 SCM 配置与退出码，便于定位启动权限和路径错误。
+            for diagnostic in (("sc.exe", "qc", SERVICE_NAME),
+                               ("sc.exe", "queryex", SERVICE_NAME),
+                               ("icacls.exe", str(service_binary(root)))):
+                result = subprocess.run(diagnostic, capture_output=True, text=True)
+                print((result.stdout or result.stderr).strip(), file=sys.stderr)
         # 安装失败不得留下看似可用、下次启动却无法工作的配置。
         if sys.platform == "win32":
             subprocess.run(["sc.exe", "delete", SERVICE_NAME], capture_output=True)

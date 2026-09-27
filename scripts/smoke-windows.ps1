@@ -29,8 +29,19 @@ try {
 $request = Join-Path $env:RUNNER_TEMP 'nexora-service-request.json'
 $serviceData = Join-Path $env:RUNNER_TEMP 'nexora-system-service-data'
 @{ name = 'CI 固定主机'; data_dir = $serviceData; port = 18762 } | ConvertTo-Json | Set-Content -Path $request -Encoding utf8
+$serviceStartedAt = Get-Date
 & $service install --request $request --source (Split-Path $service -Parent)
-if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务安装失败。' }
+if ($LASTEXITCODE -ne 0) {
+  # 安装命令回滚服务注册后，保留系统事件记录以区分权限、程序路径和进程内部错误。
+  Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Service Control Manager'; StartTime = $serviceStartedAt } -ErrorAction SilentlyContinue |
+    Select-Object -First 8 TimeCreated, Id, Message | Format-List | Out-String | Write-Host
+  # 用系统自带程序验证当前运行器是否允许 SCM 启动新建服务，退出码仅作诊断。
+  & sc.exe create NexoraCIProbe 'binPath=' "$env:WINDIR\System32\cmd.exe /c exit 0" 'start=' 'demand'
+  & sc.exe start NexoraCIProbe
+  Write-Host "SCM probe start exit code: $LASTEXITCODE"
+  & sc.exe delete NexoraCIProbe
+  throw 'Windows 系统服务安装失败。'
+}
 try {
   $running = $false
   for ($attempt = 0; $attempt -lt 60; $attempt++) {
