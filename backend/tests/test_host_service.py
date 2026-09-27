@@ -57,6 +57,26 @@ def test_mac_install_starts_boot_service_without_changing_instance_data(monkeypa
     assert commands == [("launchctl", "bootstrap", "system", str(plist))]
 
 
+def test_windows_install_grants_system_access_to_selected_instance(monkeypatch, tmp_path):
+    root = tmp_path / "system"
+    source = tmp_path / "packaged"
+    source.mkdir()
+    (source / "nexora-server.exe").write_text("service-binary")
+    data_dir = tmp_path / "private-instance"
+    commands = []
+    monkeypatch.setattr(host_service.sys, "platform", "win32")
+    monkeypatch.setattr(host_service, "system_root", lambda: root)
+    monkeypatch.setattr(host_service, "_require_admin", lambda: None)
+    monkeypatch.setattr(host_service, "_run", lambda *args: commands.append(args))
+
+    host_service.install_service(host_service.HostConfig("主机", data_dir, 8123), source)
+
+    # SCM 启动前必须能访问数据库和证书；用户原有 ACL 不应被整体替换。
+    assert data_dir.is_dir()
+    assert ("icacls.exe", str(data_dir), "/grant", "*S-1-5-18:(OI)(CI)F", "/T") in commands
+    assert commands[-1] == ("sc.exe", "start", host_service.SERVICE_NAME)
+
+
 def test_failed_mac_registration_removes_partial_install(monkeypatch, tmp_path):
     root = tmp_path / "system"
     plist = tmp_path / "launch-daemon.plist"

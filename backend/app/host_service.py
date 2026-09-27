@@ -166,6 +166,11 @@ def install_service(config: HostConfig, source_dir: Path) -> None:
             _run("icacls.exe", str(root), "/inheritance:r", "/grant:r",
                  "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F",
                  "*S-1-5-32-545:(OI)(CI)R", "/T")
+            # 服务以 LocalSystem 运行；用户选择的目录可能位于个人资料或 CI 临时目录。
+            # 只补授 SYSTEM 对该实例目录及现有文件的权限，保留用户原有 ACL。
+            config.data_dir.mkdir(parents=True, exist_ok=True)
+            _run("icacls.exe", str(config.data_dir), "/grant",
+                 "*S-1-5-18:(OI)(CI)F", "/T")
             _run("sc.exe", "create", SERVICE_NAME, "binPath=", f'"{binary}" service',
                  "start=", "auto", "DisplayName=", "Nexora ERP Host")
             _run("sc.exe", "description", SERVICE_NAME, "Nexora ERP 局域网服务端")
