@@ -26,6 +26,19 @@ try {
 }
 
 # CI 运行器以管理员身份执行时，验证 SCM 接管、停止和重新启动打包后的服务。
+function Assert-ServiceHealthy {
+  for ($attempt = 0; $attempt -lt 60; $attempt++) {
+    try {
+      $response = Invoke-RestMethod 'https://127.0.0.1:18762/api/v1/health' -SkipCertificateCheck -TimeoutSec 1
+      if ($response.status -eq 'ok' -and $response.service -eq 'nexora-api') { return }
+    } catch {
+      # 服务控制器返回后，HTTPS 监听可能还需要短暂初始化。
+    }
+    Start-Sleep -Milliseconds 250
+  }
+  throw 'Windows 系统服务没有通过 HTTPS 健康检查。'
+}
+
 $request = Join-Path $env:RUNNER_TEMP 'nexora-service-request.json'
 $serviceData = Join-Path $env:RUNNER_TEMP 'nexora-system-service-data'
 @{ name = 'CI 固定主机'; data_dir = $serviceData; port = 18762 } | ConvertTo-Json | Set-Content -Path $request -Encoding utf8
@@ -55,10 +68,14 @@ try {
       Select-Object -First 8 TimeCreated, Id, ProviderName, Message | Format-List | Out-String | Write-Host
     throw 'SCM 没有保持固定主机运行。'
   }
+  # SCM 状态只能证明进程仍在；还要从打包后的系统服务实际读取 HTTPS 接口。
+  Assert-ServiceHealthy
   & $service stop
   if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务停止失败。' }
   & $service start
   if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务重新启动失败。' }
+  # 重新启动后再次确认数据库和 HTTPS 可用，而不是只相信 sc.exe 的退出码。
+  Assert-ServiceHealthy
 } finally {
   # 服务已自行退出时不再执行 stop，保留最初的失败信息。
   if ((Get-Service -Name NexoraERPHost -ErrorAction SilentlyContinue).Status -eq 'Running') { & $service stop }
