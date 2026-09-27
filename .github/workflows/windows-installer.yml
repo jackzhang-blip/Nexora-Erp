@@ -2,7 +2,8 @@ name: Windows 内部安装包
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    # 需求分支先完成 Windows 打包检查，避免只在合并后发现平台问题。
+    branches: [main, 'codex/**']
 
 jobs:
   build-windows:
