@@ -37,11 +37,6 @@ if ($LASTEXITCODE -ne 0) {
   if (Test-Path $serviceLog) { Get-Content $serviceLog -Tail 80 | Write-Host }
   Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Service Control Manager'; StartTime = $serviceStartedAt } -ErrorAction SilentlyContinue |
     Select-Object -First 8 TimeCreated, Id, Message | Format-List | Out-String | Write-Host
-  # 用系统自带程序验证当前运行器是否允许 SCM 启动新建服务，退出码仅作诊断。
-  & sc.exe create NexoraCIProbe 'binPath=' "$env:WINDIR\System32\cmd.exe /c exit 0" 'start=' 'demand'
-  & sc.exe start NexoraCIProbe
-  Write-Host "SCM probe start exit code: $LASTEXITCODE"
-  & sc.exe delete NexoraCIProbe
   throw 'Windows 系统服务安装失败。'
 }
 try {

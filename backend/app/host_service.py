@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import traceback
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
@@ -111,6 +112,18 @@ def record_service_failure() -> None:
     except OSError:
         # 日志写入不能掩盖原始启动错误，SCM 仍会记录进程退出。
         pass
+
+
+@contextmanager
+def service_output():
+    """为没有控制台的 Windows 服务提供持久日志流。"""
+    logs = system_root() / "logs"
+    # Uvicorn 初始化日志时会查询标准错误输出；SCM 进程中的该流可能为 None。
+    # 两个文件继承安装时限定的日志目录权限，并在服务退出时一同关闭。
+    with (logs / "host.out.log").open("a", encoding="utf-8", buffering=1) as stdout_log:
+        with (logs / "host.err.log").open("a", encoding="utf-8", buffering=1) as stderr_log:
+            with redirect_stdout(stdout_log), redirect_stderr(stderr_log):
+                yield
 
 
 def _wait_stopped() -> None:

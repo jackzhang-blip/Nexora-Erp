@@ -3,6 +3,7 @@
 import json
 import plistlib
 import subprocess
+import sys
 
 import pytest
 
@@ -28,6 +29,24 @@ def test_service_startup_failure_writes_restricted_host_log(monkeypatch, tmp_pat
         host_service.record_service_failure()
 
     assert "服务启动失败样例" in (logs / "host.err.log").read_text()
+
+
+def test_windows_service_output_works_without_console(monkeypatch, tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    monkeypatch.setattr(host_service, "system_root", lambda: tmp_path)
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+
+    with host_service.service_output():
+        # 模拟服务管理器无控制台的环境，验证日志初始化依赖的 isatty 接口可用。
+        assert sys.stdout.isatty() is False
+        assert sys.stderr.isatty() is False
+        print("服务运行日志")
+        print("服务错误日志", file=sys.stderr)
+
+    assert "服务运行日志" in (logs / "host.out.log").read_text()
+    assert "服务错误日志" in (logs / "host.err.log").read_text()
 
 
 def test_host_config_rejects_invalid_paths_and_ports(tmp_path):

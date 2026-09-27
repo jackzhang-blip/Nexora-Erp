@@ -4,7 +4,7 @@ import servicemanager
 import win32service
 import win32serviceutil
 
-from .host_service import SERVICE_NAME, read_config, record_service_failure
+from .host_service import SERVICE_NAME, read_config, record_service_failure, service_output
 from .server import create_server
 
 
@@ -27,12 +27,13 @@ class NexoraWindowsService(win32serviceutil.ServiceFramework):
 
     def SvcDoRun(self):
         try:
-            config = read_config()
-            self.server = create_server(config.data_dir, config.name, config.port)
-            if self.stop_requested:
-                self.server.should_exit = True
-            self.ReportServiceStatus(win32service.SERVICE_RUNNING)
-            self.server.run()
+            with service_output():
+                config = read_config()
+                self.server = create_server(config.data_dir, config.name, config.port)
+                if self.stop_requested:
+                    self.server.should_exit = True
+                self.ReportServiceStatus(win32service.SERVICE_RUNNING)
+                self.server.run()
         except Exception as error:
             # 服务运行在无人登录的会话中，失败堆栈写入仅管理员可读的系统日志目录。
             record_service_failure()
