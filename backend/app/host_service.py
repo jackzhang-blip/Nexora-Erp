@@ -163,7 +163,9 @@ def install_service(config: HostConfig, source_dir: Path) -> None:
         elif sys.platform == "win32":
             binary = service_binary(root)
             # ProgramData 下只允许 SYSTEM 和管理员修改程序与配置，普通用户只读。
-            _run("icacls.exe", str(root), "/inheritance:r", "/grant:r",
+            # 先移除继承权限，再单独补授显式权限；合并执行会让程序文件留下空 DACL。
+            _run("icacls.exe", str(root), "/inheritance:r", "/T")
+            _run("icacls.exe", str(root), "/grant:r",
                  "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F",
                  "*S-1-5-32-545:(OI)(CI)R", "/T")
             # 服务以 LocalSystem 运行；用户选择的目录可能位于个人资料或 CI 临时目录。

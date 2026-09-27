@@ -45,7 +45,7 @@ npm run build
 
 在 Apple Silicon Mac 上安装 PyInstaller 和后端依赖后运行 `npm run dist:mac`；在 Windows x64 上运行 `npm run dist:win`。两个平台都需先执行 `npm install`。仓库中的 GitHub Actions 工作流可在 Windows runner 上构建并上传内部测试安装包。PyInstaller 必须在目标操作系统上分别构建服务程序。产物位于忽略 Git 的 `release/`。
 
-内部包尚未签名或公证，macOS Gatekeeper 或 Windows SmartScreen 可能提示开发者身份未验证。macOS 首次扫描可能要求授予本地网络权限；Windows 应允许应用在专用网络通信。mDNS 受路由器或防火墙限制时，可改用手动地址连接。系统服务可从设置使用当前安装包升级；升级前会在系统服务目录生成数据库与证书的成组备份。具体恢复步骤见 [后端说明](backend/README.md)。跨 Windows 与 macOS 的真实设备组合、无人登录开机启动和恢复演练仍需实机验收。
+内部包尚未签名或公证，macOS Gatekeeper 或 Windows SmartScreen 可能提示开发者身份未验证。macOS 首次扫描可能要求授予本地网络权限；Windows 应允许应用在专用网络通信。mDNS 受路由器或防火墙限制时，可改用手动地址连接。系统服务可从设置使用当前安装包升级；升级前会在系统服务目录生成数据库与证书的成组备份。具体恢复步骤见 [后端说明](backend/README.md)。跨 Windows 与 macOS 的真实设备组合、无人登录开机启动和恢复演练仍需按 [实机验收清单](docs/lan-host-acceptance.md) 检查。
 
 ## 安全与数据
 

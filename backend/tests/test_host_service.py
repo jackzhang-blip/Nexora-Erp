@@ -73,6 +73,9 @@ def test_windows_install_grants_system_access_to_selected_instance(monkeypatch, 
 
     # SCM 启动前必须能访问数据库和证书；用户原有 ACL 不应被整体替换。
     assert data_dir.is_dir()
+    program_acl = [command for command in commands if command[:2] == ("icacls.exe", str(root))]
+    assert program_acl[0] == ("icacls.exe", str(root), "/inheritance:r", "/T")
+    assert program_acl[1][2] == "/grant:r"
     assert ("icacls.exe", str(data_dir), "/grant", "*S-1-5-18:(OI)(CI)F", "/T") in commands
     assert commands[-2] == ("sc.exe", "start", host_service.SERVICE_NAME)
     assert commands[-1] == ("sc.exe", "config", host_service.SERVICE_NAME, "start=", "auto")
