@@ -281,6 +281,10 @@ def upgrade_service(source_dir: Path) -> Path:
                         _run("launchctl", "bootstrap", "system", str(MAC_PLIST))
                     else:
                         _run("sc.exe", "start", SERVICE_NAME)
+                        # 升级也要检查新进程是否真正保持运行，否则回滚程序并重启旧版。
+                        time.sleep(1)
+                        if not service_running():
+                            raise RuntimeError("新版 Windows 服务启动后退出，已恢复旧版程序")
                 return backup
             except Exception:
                 if target.exists():

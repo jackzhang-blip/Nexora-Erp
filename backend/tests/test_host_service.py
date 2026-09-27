@@ -214,6 +214,35 @@ def test_windows_upgrade_limits_backup_directory_to_system_and_admin(monkeypatch
     assert backup_acl[1] == ("icacls.exe", str(root / "backups"), "/inheritance:r")
 
 
+def test_windows_upgrade_restores_old_program_when_new_service_exits(monkeypatch, tmp_path):
+    root = tmp_path / "system"
+    current = root / "service"
+    current.mkdir(parents=True)
+    (current / "nexora-server.exe").write_text("old")
+    source = tmp_path / "release"
+    source.mkdir()
+    (source / "nexora-server.exe").write_text("new")
+    data = tmp_path / "instance"
+    data.mkdir()
+    (root / "host.json").write_text(json.dumps({"name": "主机", "data_dir": str(data), "port": 8123}))
+    commands = []
+    states = iter((True, False, False))
+    monkeypatch.setattr(host_service.sys, "platform", "win32")
+    monkeypatch.setattr(host_service, "system_root", lambda: root)
+    monkeypatch.setattr(host_service, "service_running", lambda: next(states))
+    monkeypatch.setattr(host_service, "_require_admin", lambda: None)
+    monkeypatch.setattr(host_service, "_run", lambda *args: commands.append(args))
+    monkeypatch.setattr(host_service, "_wait_stopped", lambda: None)
+    monkeypatch.setattr(host_service.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(host_service, "create_backup", lambda _data, output: output.write_text("backup"))
+
+    # 新版进程已退出时，旧版程序和启动命令都必须恢复。
+    with pytest.raises(RuntimeError, match="已恢复旧版程序"):
+        host_service.upgrade_service(source)
+    assert (current / "nexora-server.exe").read_text() == "old"
+    assert commands.count(("sc.exe", "start", host_service.SERVICE_NAME)) == 2
+
+
 def test_upgrade_restores_old_program_when_restart_fails(monkeypatch, tmp_path):
     root = tmp_path / "system"
     current = root / "service"
