@@ -33,6 +33,8 @@ $serviceStartedAt = Get-Date
 & $service install --request $request --source (Split-Path $service -Parent)
 if ($LASTEXITCODE -ne 0) {
   # 安装命令回滚服务注册后，保留系统事件记录以区分权限、程序路径和进程内部错误。
+  $serviceLog = Join-Path $env:ProgramData 'Nexora ERP/logs/host.err.log'
+  if (Test-Path $serviceLog) { Get-Content $serviceLog -Tail 80 | Write-Host }
   Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Service Control Manager'; StartTime = $serviceStartedAt } -ErrorAction SilentlyContinue |
     Select-Object -First 8 TimeCreated, Id, Message | Format-List | Out-String | Write-Host
   # 用系统自带程序验证当前运行器是否允许 SCM 启动新建服务，退出码仅作诊断。
@@ -49,13 +51,22 @@ try {
     if ($status.running) { $running = $true; break }
     Start-Sleep -Milliseconds 250
   }
-  if (-not $running) { throw 'SCM 没有启动固定主机。' }
+  if (-not $running) {
+    # 进程可能已退出；先保留状态、服务自身日志和系统事件，再报告检查失败。
+    & sc.exe queryex NexoraERPHost
+    $serviceLog = Join-Path $env:ProgramData 'Nexora ERP/logs/host.err.log'
+    if (Test-Path $serviceLog) { Get-Content $serviceLog -Tail 80 | Write-Host }
+    Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $serviceStartedAt } -ErrorAction SilentlyContinue |
+      Select-Object -First 8 TimeCreated, Id, ProviderName, Message | Format-List | Out-String | Write-Host
+    throw 'SCM 没有保持固定主机运行。'
+  }
   & $service stop
   if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务停止失败。' }
   & $service start
   if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务重新启动失败。' }
 } finally {
-  & $service stop
+  # 服务已自行退出时不再执行 stop，保留最初的失败信息。
+  if ((Get-Service -Name NexoraERPHost -ErrorAction SilentlyContinue).Status -eq 'Running') { & $service stop }
 }
 
 # 桌面程序也必须实际渲染首次进入页，不能只检查可执行文件存在。

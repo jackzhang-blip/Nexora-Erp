@@ -4,7 +4,7 @@ import servicemanager
 import win32service
 import win32serviceutil
 
-from .host_service import SERVICE_NAME, read_config
+from .host_service import SERVICE_NAME, read_config, record_service_failure
 from .server import create_server
 
 
@@ -34,6 +34,8 @@ class NexoraWindowsService(win32serviceutil.ServiceFramework):
             self.ReportServiceStatus(win32service.SERVICE_RUNNING)
             self.server.run()
         except Exception as error:
+            # 服务运行在无人登录的会话中，失败堆栈写入仅管理员可读的系统日志目录。
+            record_service_failure()
             servicemanager.LogErrorMsg(f"Nexora ERP 服务启动失败：{error}")
             raise
 

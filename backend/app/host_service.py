@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
@@ -101,6 +102,17 @@ def _run(*args: str) -> None:
         raise RuntimeError(f"系统服务命令失败（{args[0]}，退出码 {result.returncode}）：{detail}")
 
 
+def record_service_failure() -> None:
+    """把无控制台服务的当前异常写入受限的系统日志。"""
+    try:
+        log_path = system_root() / "logs" / "host.err.log"
+        with log_path.open("a", encoding="utf-8") as log:
+            traceback.print_exc(file=log)
+    except OSError:
+        # 日志写入不能掩盖原始启动错误，SCM 仍会记录进程退出。
+        pass
+
+
 def _wait_stopped() -> None:
     if sys.platform != "win32":
         return
@@ -185,6 +197,10 @@ def install_service(config: HostConfig, source_dir: Path) -> None:
             _run("sc.exe", "failure", SERVICE_NAME, "reset=", "86400",
                  "actions=", "restart/60000/restart/60000/restart/60000")
             _run("sc.exe", "start", SERVICE_NAME)
+            # SCM 接受启动请求后服务仍可能立刻退出，短暂观察再启用开机自启。
+            time.sleep(1)
+            if not service_running():
+                raise RuntimeError("Windows 服务启动后退出，请检查 host.err.log")
             # 只有首次启动通过后才设为开机自启，避免失败的程序反复开机重试。
             _run("sc.exe", "config", SERVICE_NAME, "start=", "auto")
     except Exception:

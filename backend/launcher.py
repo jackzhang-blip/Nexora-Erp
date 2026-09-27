@@ -14,7 +14,13 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1 and sys.argv[1] in {"install", "upgrade", "serve-config", "status", "start", "stop"}:
         host_main(sys.argv[1:])
     elif len(sys.argv) > 1 and sys.argv[1] == "service" and sys.platform == "win32":
-        from app.windows_service import run_service
-        run_service()
+        try:
+            from app.windows_service import run_service
+            run_service()
+        except Exception:
+            # SCM 启动期间尚无控制台，导入或派发错误也必须落到受限的本机日志。
+            from app.host_service import record_service_failure
+            record_service_failure()
+            raise
     else:
         main()

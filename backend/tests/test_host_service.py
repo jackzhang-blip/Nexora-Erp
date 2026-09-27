@@ -17,6 +17,19 @@ def test_system_command_failure_keeps_service_diagnostic(monkeypatch):
         host_service._run("sc.exe", "start", host_service.SERVICE_NAME)
 
 
+def test_service_startup_failure_writes_restricted_host_log(monkeypatch, tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    monkeypatch.setattr(host_service, "system_root", lambda: tmp_path)
+
+    try:
+        raise RuntimeError("服务启动失败样例")
+    except RuntimeError:
+        host_service.record_service_failure()
+
+    assert "服务启动失败样例" in (logs / "host.err.log").read_text()
+
+
 def test_host_config_rejects_invalid_paths_and_ports(tmp_path):
     value = {"name": "  固定主机  ", "data_dir": str(tmp_path / "erp-data"), "port": 8123}
     parsed = host_service.HostConfig.parse(value)
@@ -68,6 +81,8 @@ def test_windows_install_grants_system_access_to_selected_instance(monkeypatch, 
     monkeypatch.setattr(host_service, "system_root", lambda: root)
     monkeypatch.setattr(host_service, "_require_admin", lambda: None)
     monkeypatch.setattr(host_service, "_run", lambda *args: commands.append(args))
+    monkeypatch.setattr(host_service, "service_running", lambda: True)
+    monkeypatch.setattr(host_service.time, "sleep", lambda _seconds: None)
 
     host_service.install_service(host_service.HostConfig("主机", data_dir, 8123), source)
 
@@ -80,6 +95,27 @@ def test_windows_install_grants_system_access_to_selected_instance(monkeypatch, 
     assert ("icacls.exe", str(data_dir), "/grant", "*S-1-5-18:(OI)(CI)F", "/T") in commands
     assert commands[-2] == ("sc.exe", "start", host_service.SERVICE_NAME)
     assert commands[-1] == ("sc.exe", "config", host_service.SERVICE_NAME, "start=", "auto")
+
+
+def test_windows_install_rolls_back_when_service_exits_immediately(monkeypatch, tmp_path):
+    root = tmp_path / "system"
+    source = tmp_path / "packaged"
+    source.mkdir()
+    (source / "nexora-server.exe").write_text("service-binary")
+    monkeypatch.setattr(host_service.sys, "platform", "win32")
+    monkeypatch.setattr(host_service, "system_root", lambda: root)
+    monkeypatch.setattr(host_service, "_require_admin", lambda: None)
+    monkeypatch.setattr(host_service, "_run", lambda *_args: None)
+    monkeypatch.setattr(host_service, "service_running", lambda: False)
+    monkeypatch.setattr(host_service.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(host_service.subprocess, "run", lambda *args, **_kwargs: subprocess.CompletedProcess(
+        args=args, returncode=0, stdout="diagnostic", stderr=""))
+
+    with pytest.raises(RuntimeError, match="启动后退出"):
+        host_service.install_service(host_service.HostConfig("主机", tmp_path / "instance", 8123), source)
+
+    assert not (root / "host.json").exists()
+    assert not (root / "service").exists()
 
 
 def test_failed_mac_registration_removes_partial_install(monkeypatch, tmp_path):

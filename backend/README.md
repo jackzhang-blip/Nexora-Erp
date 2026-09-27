@@ -33,7 +33,7 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 ## 固定主机管理与升级
 
-安装版的桌面设置提供系统服务状态、手动启停和使用当前安装包升级的入口。首次安装和手动启停需要操作系统管理员授权。服务配置位于 Windows `%PROGRAMDATA%\Nexora ERP\host.json` 或 macOS `/Library/Application Support/Nexora ERP/host.json`；其中不保存管理员账号密码。Windows 安装时会给 LocalSystem 授予所选实例数据目录及现有文件的访问权限，同时保留该目录原有的访问规则，以便服务在用户退出后继续使用数据库和证书。旧版由 Electron 持有的主机在下一次点击“启动本机服务”时迁移到系统服务，并沿用原数据目录及证书。
+安装版的桌面设置提供系统服务状态、手动启停和使用当前安装包升级的入口。首次安装和手动启停需要操作系统管理员授权。服务配置位于 Windows `%PROGRAMDATA%\Nexora ERP\host.json` 或 macOS `/Library/Application Support/Nexora ERP/host.json`；其中不保存管理员账号密码。Windows 安装时会给 LocalSystem 授予所选实例数据目录及现有文件的访问权限，同时保留该目录原有的访问规则，以便服务在用户退出后继续使用数据库和证书。服务启动异常会记录在同一系统目录的 `logs/host.err.log`，供管理员排查。旧版由 Electron 持有的主机在下一次点击“启动本机服务”时迁移到系统服务，并沿用原数据目录及证书。
 
 升级先停服务，在上述系统目录的 `backups/` 中生成数据库与证书的成组备份，然后替换程序；程序替换或重新启动失败会恢复上一份程序。若新版已经变更数据库结构，程序回退后可能还需使用升级前备份恢复数据库。恢复应先停止服务，再使用下面的 `restore` 命令恢复到新的目录，核验实例与证书后把 `host.json` 的 `data_dir` 指向新目录，再启动服务。请保留原目录作为额外回退点。Windows 和 macOS 的开机及升级流程仍需真实设备验收。
 
