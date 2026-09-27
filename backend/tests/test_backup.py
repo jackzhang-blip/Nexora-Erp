@@ -6,6 +6,7 @@ import zipfile
 
 import pytest
 
+from app import backup as backup_module
 from app.backup import create_backup, restore_backup
 from app.database import migrate
 from app.server import ensure_certificate
@@ -70,3 +71,34 @@ def test_backup_rejects_mismatched_key_and_tampered_archive(monkeypatch, tmp_pat
     with pytest.raises(ValueError, match="证书与私钥不匹配"):
         create_backup(data_dir, tmp_path / "broken.nexora-backup")
     assert not (tmp_path / "broken.nexora-backup").exists()
+
+
+def test_backup_closes_sqlite_handles_before_temporary_cleanup(monkeypatch, tmp_path):
+    data_dir = tmp_path / "source"
+    data_dir.mkdir()
+    monkeypatch.setenv("NEXORA_DB_PATH", str(data_dir / "nexora.db"))
+    migrate()
+    with sqlite3.connect(data_dir / "nexora.db") as db:
+        instance_id = db.execute("SELECT id FROM server_identity").fetchone()[0]
+    ensure_certificate(data_dir, instance_id)
+
+    opened = []
+    closed = []
+    original_connect = sqlite3.connect
+
+    class TrackedConnection(sqlite3.Connection):
+        def close(self):
+            closed.append(self)
+            super().close()
+
+    def tracked_connect(*args, **kwargs):
+        connection = original_connect(*args, **kwargs, factory=TrackedConnection)
+        opened.append(connection)
+        return connection
+
+    # Windows 不允许删除仍被数据库连接占用的临时文件；逐个核对显式关闭。
+    monkeypatch.setattr(backup_module.sqlite3, "connect", tracked_connect)
+    create_backup(data_dir, tmp_path / "instance.nexora-backup")
+    assert len(opened) == 3
+    assert len(closed) == len(opened)
+    assert all(connection in closed for connection in opened)

@@ -7,6 +7,7 @@ import os
 import sqlite3
 import tempfile
 import zipfile
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,7 +25,8 @@ def _instance_id(data_dir: Path) -> str:
     if not database.is_file():
         raise ValueError("实例数据库不存在")
     # 只读打开可防止路径写错时静默创建一个空数据库。
-    with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as db:
+    # sqlite3 的连接上下文只结束事务，不会关闭句柄；Windows 恢复临时目录前必须释放文件锁。
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as db:
         if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError("实例数据库完整性检查失败")
         row = db.execute("SELECT id FROM server_identity LIMIT 1").fetchone()
@@ -71,8 +73,8 @@ def create_backup(data_dir: Path, destination: Path) -> str:
         if not source_db.is_file():
             raise ValueError("实例数据库不存在")
         # SQLite 在线备份 API 会取得一致快照，不能直接复制可能正在写入的数据库文件。
-        with sqlite3.connect(source_db.as_uri() + "?mode=ro", uri=True) as source:
-            with sqlite3.connect(staging / "nexora.db") as snapshot:
+        with closing(sqlite3.connect(source_db.as_uri() + "?mode=ro", uri=True)) as source:
+            with closing(sqlite3.connect(staging / "nexora.db")) as snapshot:
                 source.backup(snapshot)
         for name in FILES[1:]:
             (staging / name).write_bytes((data_dir / name).read_bytes())
