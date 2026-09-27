@@ -1,6 +1,7 @@
 """系统服务安装配置的边界与失败回滚。"""
 
 import json
+import io
 import plistlib
 import subprocess
 import sys
@@ -8,6 +9,26 @@ import sys
 import pytest
 
 from app import host_service
+from launcher import configure_console_output
+
+
+def test_windows_console_output_accepts_chinese_diagnostics(monkeypatch):
+    output_bytes = io.BytesIO()
+    error_bytes = io.BytesIO()
+    output = io.TextIOWrapper(output_bytes, encoding="cp1252")
+    errors = io.TextIOWrapper(error_bytes, encoding="cp1252")
+    monkeypatch.setattr(host_service.sys, "platform", "win32")
+    monkeypatch.setattr(host_service.sys, "stdout", output)
+    monkeypatch.setattr(host_service.sys, "stderr", errors)
+
+    configure_console_output()
+    output.write("升级完成")
+    errors.write("服务错误")
+    output.flush()
+    errors.flush()
+
+    assert output_bytes.getvalue().decode("utf-8") == "升级完成"
+    assert error_bytes.getvalue().decode("utf-8") == "服务错误"
 
 
 def test_system_command_failure_keeps_service_diagnostic(monkeypatch):
