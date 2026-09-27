@@ -94,7 +94,11 @@ def _require_admin() -> None:
 
 
 def _run(*args: str) -> None:
-    subprocess.run(args, check=True, capture_output=True, text=True)
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode:
+        # 系统管理命令的退出码往往不足以定位权限或服务启动问题，保留其原始诊断。
+        detail = (result.stderr or result.stdout).strip()
+        raise RuntimeError(f"系统服务命令失败（{args[0]}，退出码 {result.returncode}）：{detail}")
 
 
 def _wait_stopped() -> None:

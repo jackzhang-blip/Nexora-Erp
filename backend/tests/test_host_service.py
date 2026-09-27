@@ -2,10 +2,19 @@
 
 import json
 import plistlib
+import subprocess
 
 import pytest
 
 from app import host_service
+
+
+def test_system_command_failure_keeps_service_diagnostic(monkeypatch):
+    # Windows 服务控制器的错误文本比退出码更能说明启动失败的原因。
+    monkeypatch.setattr(host_service.subprocess, "run", lambda *_args, **_kwargs: subprocess.CompletedProcess(
+        args=["sc.exe"], returncode=5, stdout="[SC] StartService FAILED 5: Access is denied.", stderr=""))
+    with pytest.raises(RuntimeError, match="Access is denied"):
+        host_service._run("sc.exe", "start", host_service.SERVICE_NAME)
 
 
 def test_host_config_rejects_invalid_paths_and_ports(tmp_path):
