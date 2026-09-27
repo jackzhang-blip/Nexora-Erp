@@ -1,0 +1,308 @@
+"""固定主机的系统服务配置与本机管理命令。"""
+
+import argparse
+import ctypes
+import json
+import os
+import plistlib
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from datetime import datetime, timezone
+from dataclasses import dataclass
+from pathlib import Path
+
+from .backup import create_backup
+from .discovery import lan_addresses
+from .server import create_server
+
+
+SERVICE_NAME = "NexoraERPHost"
+MAC_LABEL = "com.nexora.erp.host"
+MAC_PLIST = Path("/Library/LaunchDaemons") / f"{MAC_LABEL}.plist"
+
+
+@dataclass(frozen=True)
+class HostConfig:
+    name: str
+    data_dir: Path
+    port: int
+
+    @classmethod
+    def parse(cls, value: object) -> "HostConfig":
+        if not isinstance(value, dict):
+            raise ValueError("主机配置格式无效")
+        name = value.get("name")
+        raw_dir = value.get("data_dir")
+        port = value.get("port")
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80:
+            raise ValueError("实例名称须为 1 到 80 个字符")
+        if not isinstance(raw_dir, str) or not Path(raw_dir).is_absolute():
+            raise ValueError("数据目录必须是绝对路径")
+        data_dir = Path(raw_dir).resolve()
+        if data_dir == Path(data_dir.anchor):
+            raise ValueError("不能把磁盘根目录用作数据目录")
+        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+            raise ValueError("服务端口须在 1 到 65535 之间")
+        return cls(name.strip(), data_dir, port)
+
+    def as_dict(self) -> dict:
+        return {"name": self.name, "data_dir": str(self.data_dir), "port": self.port}
+
+
+def system_root() -> Path:
+    if sys.platform == "win32":
+        return Path(os.environ["PROGRAMDATA"]) / "Nexora ERP"
+    if sys.platform == "darwin":
+        return Path("/Library/Application Support/Nexora ERP")
+    raise RuntimeError("系统服务目前仅支持 Windows 和 macOS")
+
+
+def config_path(root: Path | None = None) -> Path:
+    return (root or system_root()) / "host.json"
+
+
+def read_config(path: Path | None = None) -> HostConfig:
+    return HostConfig.parse(json.loads((path or config_path()).read_text(encoding="utf-8")))
+
+
+def service_binary(root: Path | None = None) -> Path:
+    return (root or system_root()) / "service" / ("nexora-server.exe" if sys.platform == "win32" else "nexora-server")
+
+
+def mac_plist(binary: Path, config: Path, log_dir: Path) -> bytes:
+    """系统级 LaunchDaemon 不依赖用户登录或 Electron 窗口。"""
+    return plistlib.dumps({
+        "Label": MAC_LABEL,
+        "ProgramArguments": [str(binary), "serve-config", "--config", str(config)],
+        "RunAtLoad": True,
+        "KeepAlive": True,
+        "ThrottleInterval": 10,
+        "StandardOutPath": str(log_dir / "host.out.log"),
+        "StandardErrorPath": str(log_dir / "host.err.log"),
+    })
+
+
+def _require_admin() -> None:
+    if sys.platform == "win32":
+        if not ctypes.windll.shell32.IsUserAnAdmin():
+            raise PermissionError("安装或控制系统服务需要管理员权限")
+    elif os.geteuid() != 0:
+        raise PermissionError("安装或控制系统服务需要管理员权限")
+
+
+def _run(*args: str) -> None:
+    subprocess.run(args, check=True, capture_output=True, text=True)
+
+
+def _wait_stopped() -> None:
+    if sys.platform != "win32":
+        return
+    import win32service
+    import win32serviceutil
+    for _ in range(100):
+        if win32serviceutil.QueryServiceStatus(SERVICE_NAME)[1] == win32service.SERVICE_STOPPED:
+            return
+        time.sleep(0.1)
+    raise TimeoutError("等待 Windows 服务停止超时")
+
+
+def _write_config(config: HostConfig, path: Path) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(prefix="host-", suffix=".tmp", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        os.chmod(temporary, 0o644)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as target:
+            json.dump(config.as_dict(), target, ensure_ascii=False)
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, path)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def install_service(config: HostConfig, source_dir: Path) -> None:
+    """安装独立服务程序；原实例数据目录只被引用，不复制或覆盖。"""
+    _require_admin()
+    root = system_root()
+    if config_path(root).exists():
+        raise FileExistsError("本机已有系统服务配置，请使用升级流程")
+    source_dir = source_dir.resolve()
+    if not (source_dir / service_binary(root).name).is_file():
+        raise ValueError("找不到打包后的服务程序")
+    root.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "darwin":
+        os.chmod(root, 0o755)
+    logs = root / "logs"
+    logs.mkdir(exist_ok=True)
+    if sys.platform == "darwin":
+        os.chmod(logs, 0o700)
+    target = root / "service"
+    if target.exists():
+        raise FileExistsError("服务程序目录已存在，请检查上次安装状态")
+    with tempfile.TemporaryDirectory(prefix="nexora-install-", dir=root) as temporary:
+        staged = Path(temporary) / "service"
+        shutil.copytree(source_dir, staged)
+        os.replace(staged, target)
+    try:
+        _write_config(config, config_path(root))
+        if sys.platform == "darwin":
+            descriptor, plist_name = tempfile.mkstemp(prefix="nexora-host-", dir=MAC_PLIST.parent)
+            with os.fdopen(descriptor, "wb") as target_plist:
+                target_plist.write(mac_plist(service_binary(root), config_path(root), logs))
+            os.chmod(plist_name, 0o644)
+            os.replace(plist_name, MAC_PLIST)
+            _run("launchctl", "bootstrap", "system", str(MAC_PLIST))
+        elif sys.platform == "win32":
+            binary = service_binary(root)
+            # ProgramData 下只允许 SYSTEM 和管理员修改程序与配置，普通用户只读。
+            _run("icacls.exe", str(root), "/inheritance:r", "/grant:r",
+                 "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F",
+                 "*S-1-5-32-545:(OI)(CI)R", "/T")
+            _run("sc.exe", "create", SERVICE_NAME, "binPath=", f'"{binary}" service',
+                 "start=", "auto", "DisplayName=", "Nexora ERP Host")
+            _run("sc.exe", "description", SERVICE_NAME, "Nexora ERP 局域网服务端")
+            _run("sc.exe", "failure", SERVICE_NAME, "reset=", "86400",
+                 "actions=", "restart/60000/restart/60000/restart/60000")
+            _run("sc.exe", "start", SERVICE_NAME)
+    except Exception:
+        # 安装失败不得留下看似可用、下次启动却无法工作的配置。
+        if sys.platform == "win32":
+            subprocess.run(["sc.exe", "delete", SERVICE_NAME], capture_output=True)
+        config_path(root).unlink(missing_ok=True)
+        if sys.platform == "darwin":
+            MAC_PLIST.unlink(missing_ok=True)
+        shutil.rmtree(target, ignore_errors=True)
+        raise
+
+
+def upgrade_service(source_dir: Path) -> Path:
+    """先保全实例，再替换独立服务程序；失败时恢复上一份程序。"""
+    _require_admin()
+    root = system_root()
+    config = read_config()
+    source_dir = source_dir.resolve()
+    binary_name = service_binary(root).name
+    if not (source_dir / binary_name).is_file():
+        raise ValueError("找不到打包后的服务程序")
+    target = root / "service"
+    if not (target / binary_name).is_file():
+        raise FileNotFoundError("已安装服务程序缺失")
+    was_running = service_running()
+    with tempfile.TemporaryDirectory(prefix="nexora-upgrade-", dir=root) as temporary:
+        staged = Path(temporary) / "service"
+        old = Path(temporary) / "previous-service"
+        shutil.copytree(source_dir, staged)
+        if was_running:
+            if sys.platform == "darwin":
+                _run("launchctl", "bootout", f"system/{MAC_LABEL}")
+            else:
+                _run("sc.exe", "stop", SERVICE_NAME)
+                _wait_stopped()
+        try:
+            # 停止后再备份，保证升级前的数据库与证书属于同一时点。
+            backups = root / "backups"
+            backups.mkdir(exist_ok=True)
+            if sys.platform == "darwin":
+                os.chmod(backups, 0o700)
+            else:
+                _run("icacls.exe", str(backups), "/inheritance:r", "/grant:r",
+                     "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F", "/T")
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+            backup = backups / f"upgrade-{stamp}.nexora-backup"
+            create_backup(config.data_dir, backup)
+            os.replace(target, old)
+            try:
+                os.replace(staged, target)
+                if was_running:
+                    if sys.platform == "darwin":
+                        _run("launchctl", "bootstrap", "system", str(MAC_PLIST))
+                    else:
+                        _run("sc.exe", "start", SERVICE_NAME)
+                return backup
+            except Exception:
+                if target.exists():
+                    shutil.rmtree(target)
+                os.replace(old, target)
+                raise
+        except Exception:
+            if was_running and not service_running():
+                if sys.platform == "darwin":
+                    _run("launchctl", "bootstrap", "system", str(MAC_PLIST))
+                else:
+                    _run("sc.exe", "start", SERVICE_NAME)
+            raise
+
+
+def service_running() -> bool:
+    if sys.platform == "darwin":
+        result = subprocess.run(["launchctl", "print", f"system/{MAC_LABEL}"],
+                                capture_output=True, text=True)
+        return result.returncode == 0 and "state = running" in result.stdout
+    if sys.platform == "win32":
+        import win32service
+        import win32serviceutil
+        try:
+            return win32serviceutil.QueryServiceStatus(SERVICE_NAME)[1] == win32service.SERVICE_RUNNING
+        except Exception:
+            return False
+    return False
+
+
+def start_service() -> None:
+    _require_admin()
+    read_config()
+    if sys.platform == "darwin":
+        _run("launchctl", "enable", f"system/{MAC_LABEL}")
+        _run("launchctl", "bootstrap", "system", str(MAC_PLIST))
+    else:
+        _run("sc.exe", "start", SERVICE_NAME)
+
+
+def stop_service() -> None:
+    _require_admin()
+    if sys.platform == "darwin":
+        _run("launchctl", "disable", f"system/{MAC_LABEL}")
+        _run("launchctl", "bootout", f"system/{MAC_LABEL}")
+    else:
+        _run("sc.exe", "stop", SERVICE_NAME)
+        _wait_stopped()
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Nexora ERP 固定主机管理")
+    commands = parser.add_subparsers(dest="command", required=True)
+    install = commands.add_parser("install")
+    install.add_argument("--request", required=True, type=Path)
+    install.add_argument("--source", required=True, type=Path)
+    upgrade = commands.add_parser("upgrade")
+    upgrade.add_argument("--source", required=True, type=Path)
+    serve = commands.add_parser("serve-config")
+    serve.add_argument("--config", required=True, type=Path)
+    commands.add_parser("status")
+    commands.add_parser("start")
+    commands.add_parser("stop")
+    args = parser.parse_args(argv)
+    if args.command == "install":
+        install_service(read_config(args.request), args.source)
+    elif args.command == "upgrade":
+        print(f"升级完成；升级前备份：{upgrade_service(args.source)}")
+    elif args.command == "serve-config":
+        config = read_config(args.config)
+        create_server(config.data_dir, config.name, config.port).run()
+    elif args.command == "status":
+        configured = config_path().is_file()
+        value = read_config().as_dict() if configured else {}
+        print(json.dumps({"configured": configured, "running": service_running(),
+                          "lan_addresses": lan_addresses(), **value}))
+    elif args.command == "start":
+        start_service()
+    else:
+        stop_service()
+
+
+if __name__ == "__main__":
+    main()

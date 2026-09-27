@@ -1,4 +1,4 @@
-"""桌面应用启动的 HTTPS 服务入口。"""
+"""可由桌面程序或操作系统服务托管的 HTTPS 入口。"""
 
 import argparse
 import ipaddress
@@ -58,24 +58,35 @@ def ensure_certificate(data_dir: Path, instance_id: str) -> tuple[Path, Path]:
     return cert, key
 
 
+def create_server(data_dir: Path, name: str, port: int) -> uvicorn.Server:
+    """完成身份与证书检查后返回可由系统服务控制退出的服务器。"""
+    if not 1 <= port <= 65535:
+        raise ValueError("端口必须在 1 到 65535 之间")
+    data_dir = data_dir.expanduser().resolve()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["NEXORA_DB_PATH"] = str(data_dir / "nexora.db")
+    os.environ["NEXORA_INSTANCE_NAME"] = name
+    os.environ["NEXORA_DISCOVERY_PORT"] = str(port)
+    migrate()
+    with connection() as db:
+        instance_id = db.execute("SELECT id FROM server_identity LIMIT 1").fetchone()[0]
+    cert, key = ensure_certificate(data_dir, instance_id)
+    config = uvicorn.Config(app, host="0.0.0.0", port=port,
+                            ssl_certfile=str(cert), ssl_keyfile=str(key), log_level="info")
+    return uvicorn.Server(config)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Nexora ERP 本机服务")
     parser.add_argument("--data-dir", required=True)
     parser.add_argument("--name", required=True)
     parser.add_argument("--port", type=int, required=True)
     args = parser.parse_args()
-    if not 1 <= args.port <= 65535:
-        parser.error("端口必须在 1 到 65535 之间")
-    data_dir = Path(args.data_dir).expanduser().resolve()
-    data_dir.mkdir(parents=True, exist_ok=True)
-    os.environ["NEXORA_DB_PATH"] = str(data_dir / "nexora.db")
-    os.environ["NEXORA_INSTANCE_NAME"] = args.name
-    migrate()
-    with connection() as db:
-        instance_id = db.execute("SELECT id FROM server_identity LIMIT 1").fetchone()[0]
-    cert, key = ensure_certificate(data_dir, instance_id)
-    uvicorn.run(app, host="0.0.0.0", port=args.port,
-                ssl_certfile=str(cert), ssl_keyfile=str(key), log_level="info")
+    try:
+        server = create_server(Path(args.data_dir), args.name, args.port)
+    except ValueError as error:
+        parser.error(str(error))
+    server.run()
 
 
 if __name__ == "__main__":

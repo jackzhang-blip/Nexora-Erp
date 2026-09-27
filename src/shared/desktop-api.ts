@@ -36,7 +36,7 @@ export type StartupState =
   | { status: 'needs_setup'; server: ServerProfile }
   | { status: 'offline'; message: string; server?: ServerProfile }
 
-export interface HostStatus { configured: boolean; running: boolean; fingerprint: string | null }
+export interface HostStatus { configured: boolean; running: boolean; systemManaged: boolean; migrationNeeded: boolean; fingerprint: string | null }
 
 export interface DesktopApi {
   getVersion: () => Promise<string>
@@ -54,6 +54,7 @@ export interface DesktopApi {
   chooseDataDir: () => Promise<string | null>
   restartHost: () => Promise<ServerProfile>
   stopHost: () => Promise<void>
+  upgradeHost: () => Promise<ServerProfile>
   hostStatus: () => Promise<HostStatus>
   startDiscovery: () => Promise<void>
   stopDiscovery: () => Promise<void>

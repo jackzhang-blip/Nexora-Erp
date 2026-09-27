@@ -6,7 +6,7 @@ import type { ErpOperations } from '../shared/erp-api'
 import type { HostInput } from '../shared/desktop-api'
 import { activateSaved, approveConnection, createHost, disconnect, finishHostSetup, hostFingerprint, hostStatus,
   loadConnections, prepareConnection, recentProfiles, restartHost, resume, shutdownConnections,
-  startDiscovery, stopDiscovery, stopHost } from './connections'
+  startDiscovery, stopDiscovery, stopHost, upgradeHost } from './connections'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -25,21 +25,26 @@ function assertMainWindow(event: Electron.IpcMainInvokeEvent): void {
 
 function ensureTray(): void {
   if (tray) return
-  // 托盘使用随应用打包的 PNG；关闭窗口时本机服务仍由主进程持有。
+  // 托盘仅提供入口；打包版固定主机的生命周期由操作系统管理。
   tray = new Tray(nativeImage.createFromPath(join(__dirname, '../../resources/tray.png')))
   tray.setToolTip('Nexora ERP')
   tray.on('double-click', () => {
     if (!mainWindow) createWindow()
     else mainWindow.show()
   })
-  updateTray()
+  void updateTray()
 }
 
-function updateTray(): void {
+async function updateTray(): Promise<void> {
   if (!tray) return
+  const status = await hostStatus().catch(() => ({ configured: false, running: false }))
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开 Nexora ERP', click: () => { if (!mainWindow) createWindow(); else mainWindow.show() } },
-    { label: '停止本机服务', enabled: hostStatus().running, click: () => { void stopHost().then(updateTray) } },
+    { label: '停止本机服务', enabled: status.running, click: () => {
+      void stopHost().then(updateTray).catch((error: unknown) => {
+        dialog.showErrorBox('停止本机服务失败', error instanceof Error ? error.message : '请检查系统服务状态')
+      })
+    } },
     { type: 'separator' },
     { label: '退出', click: () => app.quit() }
   ]))
@@ -142,9 +147,15 @@ app.whenReady().then(() => {
     return result
   })
   ipcMain.handle('host:stop', async (event) => { assertMainWindow(event); await stopHost(); updateTray() })
-  ipcMain.handle('host:status', (event) => {
+  ipcMain.handle('host:upgrade', async (event) => {
     assertMainWindow(event)
-    return { ...hostStatus(), fingerprint: hostFingerprint() }
+    const profile = await upgradeHost()
+    void updateTray()
+    return profile
+  })
+  ipcMain.handle('host:status', async (event) => {
+    assertMainWindow(event)
+    return { ...await hostStatus(), fingerprint: hostFingerprint() }
   })
   ipcMain.handle('discovery:start', (event) => {
     assertMainWindow(event)
@@ -157,8 +168,10 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  // 正在托管本机服务时，各平台都由托盘维持进程；普通客户端遵循系统关闭习惯。
-  if (process.platform !== 'darwin' && !hostStatus().running) app.quit()
+  // 打包版即使退出桌面进程，固定主机仍继续运行；开发版保留旧托盘行为。
+  if (process.platform === 'darwin') return
+  if (app.isPackaged) { app.quit(); return }
+  void hostStatus().then((status) => { if (!status.running) app.quit() })
 })
 
 app.on('before-quit', () => shutdownConnections())

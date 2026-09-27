@@ -4,6 +4,9 @@ import secrets
 import sqlite3
 import time
 import ipaddress
+import asyncio
+import logging
+import os
 from contextlib import asynccontextmanager
 from decimal import Decimal
 
@@ -12,6 +15,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, field_validator
 
 from .database import connection, migrate
+from .discovery import DiscoveryPublisher
 from .security import bearer, current_user, hash_password, require, token_hash, user_details, verify_password
 
 
@@ -19,7 +23,35 @@ from .security import bearer, current_user, hash_password, require, token_hash, 
 async def lifespan(_: FastAPI):
     # 启动时检查并升级本地数据库；不依赖桌面页面是否已经打开。
     migrate()
-    yield
+    publisher = None
+    task = None
+    port = os.environ.get("NEXORA_DISCOVERY_PORT")
+    if port is not None:
+        with connection() as db:
+            instance_id = db.execute("SELECT id FROM server_identity LIMIT 1").fetchone()[0]
+        publisher = DiscoveryPublisher(instance_id, "0.1.0", int(port))
+
+        async def publish_periodically():
+            # 系统服务可能早于网卡启动；重复检查也能处理 IP 地址变化。
+            while True:
+                try:
+                    await asyncio.to_thread(publisher.sync)
+                except Exception:
+                    logging.getLogger(__name__).exception("局域网发现状态更新失败")
+                await asyncio.sleep(15)
+
+        task = asyncio.create_task(publish_periodically())
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        if publisher is not None:
+            await asyncio.to_thread(publisher.close)
 
 
 app = FastAPI(title="Nexora ERP API", version="0.1.0", lifespan=lifespan)

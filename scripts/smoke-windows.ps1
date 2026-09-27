@@ -25,6 +25,28 @@ try {
   if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
 }
 
+# CI 运行器以管理员身份执行时，验证 SCM 接管、停止和重新启动打包后的服务。
+$request = Join-Path $env:RUNNER_TEMP 'nexora-service-request.json'
+$serviceData = Join-Path $env:RUNNER_TEMP 'nexora-system-service-data'
+@{ name = 'CI 固定主机'; data_dir = $serviceData; port = 18762 } | ConvertTo-Json | Set-Content -Path $request -Encoding utf8
+& $service install --request $request --source (Split-Path $service -Parent)
+if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务安装失败。' }
+try {
+  $running = $false
+  for ($attempt = 0; $attempt -lt 60; $attempt++) {
+    $status = (& $service status | ConvertFrom-Json)
+    if ($status.running) { $running = $true; break }
+    Start-Sleep -Milliseconds 250
+  }
+  if (-not $running) { throw 'SCM 没有启动固定主机。' }
+  & $service stop
+  if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务停止失败。' }
+  & $service start
+  if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务重新启动失败。' }
+} finally {
+  & $service stop
+}
+
 # 桌面程序也必须实际渲染首次进入页，不能只检查可执行文件存在。
 $env:NEXORA_USER_DATA_DIR = Join-Path $env:RUNNER_TEMP 'nexora-desktop-smoke'
 $desktopProcess = Start-Process -FilePath $desktop -ArgumentList '--remote-debugging-port=18752' -PassThru
