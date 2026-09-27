@@ -140,13 +140,25 @@ def install_service(config: HostConfig, source_dir: Path) -> None:
     root.mkdir(parents=True, exist_ok=True)
     if sys.platform == "darwin":
         os.chmod(root, 0o755)
+    target = root / "service"
+    if target.exists():
+        raise FileExistsError("服务程序目录已存在，请检查上次安装状态")
+    if sys.platform == "win32":
+        # 先给系统目录显式授权，再只关闭根目录的继承；随后创建的文件会继承这些授权。
+        # 对文件递归执行 /inheritance:r 会清空其 DACL，使 SCM 无法读取服务程序。
+        _run("icacls.exe", str(root), "/grant:r",
+             "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F",
+             "*S-1-5-32-545:(OI)(CI)R")
+        _run("icacls.exe", str(root), "/inheritance:r")
     logs = root / "logs"
     logs.mkdir(exist_ok=True)
     if sys.platform == "darwin":
         os.chmod(logs, 0o700)
-    target = root / "service"
-    if target.exists():
-        raise FileExistsError("服务程序目录已存在，请检查上次安装状态")
+    elif sys.platform == "win32":
+        # 运行日志仅系统账户和管理员可读，避免把请求与错误记录开放给其他本机用户。
+        _run("icacls.exe", str(logs), "/grant:r",
+             "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F")
+        _run("icacls.exe", str(logs), "/inheritance:r")
     with tempfile.TemporaryDirectory(prefix="nexora-install-", dir=root) as temporary:
         staged = Path(temporary) / "service"
         shutil.copytree(source_dir, staged)
@@ -162,12 +174,6 @@ def install_service(config: HostConfig, source_dir: Path) -> None:
             _run("launchctl", "bootstrap", "system", str(MAC_PLIST))
         elif sys.platform == "win32":
             binary = service_binary(root)
-            # ProgramData 下只允许 SYSTEM 和管理员修改程序与配置，普通用户只读。
-            # 先移除继承权限，再单独补授显式权限；合并执行会让程序文件留下空 DACL。
-            _run("icacls.exe", str(root), "/inheritance:r", "/T")
-            _run("icacls.exe", str(root), "/grant:r",
-                 "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F",
-                 "*S-1-5-32-545:(OI)(CI)R", "/T")
             # 服务以 LocalSystem 运行；用户选择的目录可能位于个人资料或 CI 临时目录。
             # 只补授 SYSTEM 对该实例目录及现有文件的权限，保留用户原有 ACL。
             config.data_dir.mkdir(parents=True, exist_ok=True)
@@ -231,8 +237,10 @@ def upgrade_service(source_dir: Path) -> Path:
             if sys.platform == "darwin":
                 os.chmod(backups, 0o700)
             else:
-                _run("icacls.exe", str(backups), "/inheritance:r", "/grant:r",
-                     "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F", "/T")
+                # 备份含私钥；先保留管理员可操作权限，再移除普通用户继承访问。
+                _run("icacls.exe", str(backups), "/grant:r",
+                     "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F")
+                _run("icacls.exe", str(backups), "/inheritance:r")
             stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
             backup = backups / f"upgrade-{stamp}.nexora-backup"
             create_backup(config.data_dir, backup)

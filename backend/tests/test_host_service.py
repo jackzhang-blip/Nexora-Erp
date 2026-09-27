@@ -74,8 +74,9 @@ def test_windows_install_grants_system_access_to_selected_instance(monkeypatch, 
     # SCM 启动前必须能访问数据库和证书；用户原有 ACL 不应被整体替换。
     assert data_dir.is_dir()
     program_acl = [command for command in commands if command[:2] == ("icacls.exe", str(root))]
-    assert program_acl[0] == ("icacls.exe", str(root), "/inheritance:r", "/T")
-    assert program_acl[1][2] == "/grant:r"
+    assert program_acl[0][2] == "/grant:r"
+    assert program_acl[1] == ("icacls.exe", str(root), "/inheritance:r")
+    assert not any("/T" in command for command in program_acl)
     assert ("icacls.exe", str(data_dir), "/grant", "*S-1-5-18:(OI)(CI)F", "/T") in commands
     assert commands[-2] == ("sc.exe", "start", host_service.SERVICE_NAME)
     assert commands[-1] == ("sc.exe", "config", host_service.SERVICE_NAME, "start=", "auto")
@@ -128,6 +129,34 @@ def test_upgrade_backs_up_and_replaces_service_without_touching_instance(monkeyp
     assert (data / "nexora.db").read_text() == "unchanged"
     assert commands[0] == ("launchctl", "bootout", f"system/{host_service.MAC_LABEL}")
     assert commands[-1][0:2] == ("launchctl", "bootstrap")
+
+
+def test_windows_upgrade_limits_backup_directory_to_system_and_admin(monkeypatch, tmp_path):
+    root = tmp_path / "system"
+    current = root / "service"
+    current.mkdir(parents=True)
+    (current / "nexora-server.exe").write_text("old")
+    source = tmp_path / "release"
+    source.mkdir()
+    (source / "nexora-server.exe").write_text("new")
+    data = tmp_path / "instance"
+    data.mkdir()
+    (root / "host.json").write_text(json.dumps({"name": "主机", "data_dir": str(data), "port": 8123}))
+    commands = []
+    monkeypatch.setattr(host_service.sys, "platform", "win32")
+    monkeypatch.setattr(host_service, "system_root", lambda: root)
+    monkeypatch.setattr(host_service, "service_running", lambda: False)
+    monkeypatch.setattr(host_service, "_require_admin", lambda: None)
+    monkeypatch.setattr(host_service, "_run", lambda *args: commands.append(args))
+    monkeypatch.setattr(host_service, "create_backup", lambda _data, output: output.write_text("backup"))
+
+    backup = host_service.upgrade_service(source)
+
+    assert backup.read_text() == "backup"
+    assert (current / "nexora-server.exe").read_text() == "new"
+    backup_acl = [command for command in commands if command[:2] == ("icacls.exe", str(root / "backups"))]
+    assert backup_acl[0][2] == "/grant:r"
+    assert backup_acl[1] == ("icacls.exe", str(root / "backups"), "/inheritance:r")
 
 
 def test_upgrade_restores_old_program_when_restart_fails(monkeypatch, tmp_path):
