@@ -25,6 +25,7 @@ jobs:
           $env:PYTHONPATH = 'backend'
           python -m pytest backend/tests -q
           node --experimental-strip-types --test tests/backend.test.mjs
+          node --test tests/branding.test.mjs
         shell: pwsh
       - name: 生成 Windows 安装包
         run: npm run dist:win

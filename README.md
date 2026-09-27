@@ -37,6 +37,7 @@ Windows 可把 `python3` 改为 `python`。如果 Python 不在默认路径，�
 ```bash
 PYTHONPATH=backend python3 -m pytest backend/tests -q
 node --experimental-strip-types --test tests/backend.test.mjs
+node --test tests/branding.test.mjs
 npm run build
 ```
 
