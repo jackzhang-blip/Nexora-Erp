@@ -7,8 +7,9 @@ import { isIP } from 'node:net'
 import { isAbsolute, join, parse, resolve } from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
 import Bonjour from 'bonjour-service'
-import type { Browser, Service } from 'bonjour-service'
+import type { Browser } from 'bonjour-service'
 import { callBackend, getBackendHealth, getServerInfo, selectBackend, type BackendTarget } from './backend'
+import { installManagedHost, managedHostStatus, startManagedHost, stopManagedHost, upgradeManagedHost } from './host-service'
 import type { ConnectionCandidate, DiscoveryResult, HostInput, ServerProfile, StartupState } from '../shared/desktop-api'
 
 interface StoredProfile extends ServerProfile { certificate: string }
@@ -20,7 +21,6 @@ let service: ChildProcess | null = null
 let stoppingService: Promise<void> | null = null
 let bonjour: Bonjour | null = null
 let browser: Browser | null = null
-let advertisement: Service | null = null
 let discovered: DiscoveryResult[] = []
 let pending: StoredProfile | null = null
 
@@ -53,8 +53,13 @@ function publicProfile(profile: StoredProfile): ServerProfile {
 }
 
 export function recentProfiles(): ServerProfile[] { return config.recent.map(publicProfile) }
-export function hostStatus(): { configured: boolean; running: boolean } {
-  return { configured: !!config.host, running: !!service && service.exitCode === null }
+export async function hostStatus(): Promise<{ configured: boolean; running: boolean; systemManaged: boolean; migrationNeeded: boolean }> {
+  if (app.isPackaged) {
+    const managed = await managedHostStatus()
+    if (managed.configured) return { configured: true, running: managed.running, systemManaged: true, migrationNeeded: false }
+  }
+  return { configured: !!config.host, running: !!service && service.exitCode === null,
+    systemManaged: false, migrationNeeded: app.isPackaged && !!config.host }
 }
 
 function localAddress(address: string): boolean {
@@ -177,6 +182,47 @@ function backendCommand(host: HostConfig): { command: string; args: string[]; cw
     cwd: join(app.getAppPath(), 'backend') }
 }
 
+async function waitForLocalHost(host: HostConfig, child?: ChildProcess): Promise<ServerProfile> {
+  let failure = ''
+  if (child) {
+    child.stderr?.on('data', (data: Buffer) => { failure = (failure + data.toString()).slice(-3000) })
+    child.on('error', (error) => { failure = error.message })
+    child.on('exit', () => { if (service === child) service = null })
+  }
+  // 先比对数据目录内的证书，再建立本机信任，避免误连占用同一端口的其他程序。
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    if (child && (child.exitCode !== null || failure.includes('Error') || failure.includes('error'))) {
+      throw new Error(`本机服务启动失败：${failure || '进程已退出'}`)
+    }
+    try {
+      const certificate = await inspectCertificate('127.0.0.1', host.port)
+      const certificateFile = join(host.dataDir, 'server.crt')
+      if (!existsSync(certificateFile) || readFileSync(certificateFile, 'utf8') !== certificate.certificate) {
+        throw new Error('监听端口已被其他程序占用')
+      }
+      const known = config.recent.find((entry) => entry.id === certificate.id)
+      if (known && known.fingerprint !== certificate.fingerprint) {
+        throw new Error('本机服务证书已变化，请先核对并恢复原实例数据')
+      }
+      const target: BackendTarget = { host: '127.0.0.1', port: host.port,
+        instanceId: certificate.id, certificate: certificate.certificate }
+      const info = await getServerInfo(target)
+      if (!compatibleVersion(info.version)) throw new Error('服务端与客户端版本不兼容')
+      const profile: StoredProfile = { id: info.id, name: info.name, host: '127.0.0.1',
+        port: host.port, fingerprint: certificate.fingerprint, version: info.version,
+        isLocal: true, certificate: certificate.certificate }
+      config.recent = [profile, ...config.recent.filter((entry) => entry.id !== profile.id)].slice(0, 8)
+      save()
+      return publicProfile(profile)
+    } catch (error) {
+      if (error instanceof Error && (error.message.includes('已被其他程序占用')
+        || error.message.includes('证书已变化') || error.message.includes('版本不兼容'))) throw error
+      await new Promise((done) => setTimeout(done, 250))
+    }
+  }
+  throw new Error(`本机服务启动超时。${failure}`)
+}
+
 async function startHost(): Promise<ServerProfile> {
   if (!config.host) throw new Error('本机尚未配置服务端')
   // 停止后立即重新启动时，先等待旧进程释放监听端口。
@@ -186,51 +232,11 @@ async function startHost(): Promise<ServerProfile> {
     const child = spawn(launch.command, launch.args, { cwd: launch.cwd, stdio: ['ignore', 'ignore', 'pipe'],
       windowsHide: true })
     service = child
-    let failure = ''
-    child.stderr?.on('data', (data: Buffer) => { failure = (failure + data.toString()).slice(-3000) })
-    child.on('error', (error) => { failure = error.message })
-    child.on('exit', () => {
-      if (service === child) { advertisement?.stop(); advertisement = null }
-    })
-    // 服务端需要先生成证书和迁移数据库，再由健康接口证实已经监听端口。
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-      if (child.exitCode !== null || failure.includes('Error') || failure.includes('error')) {
-        throw new Error(`本机服务启动失败：${failure || '进程已退出'}`)
-      }
-      try {
-        const certificate = await inspectCertificate('127.0.0.1', config.host.port)
-        const certificateFile = join(config.host.dataDir, 'server.crt')
-        if (!existsSync(certificateFile) || readFileSync(certificateFile, 'utf8') !== certificate.certificate) {
-          throw new Error('监听端口已被其他程序占用')
-        }
-        const target: BackendTarget = { host: '127.0.0.1', port: config.host.port,
-          instanceId: certificate.id, certificate: certificate.certificate }
-        const info = await getServerInfo(target)
-        const profile: StoredProfile = { id: info.id, name: info.name, host: '127.0.0.1',
-          port: config.host.port, fingerprint: certificate.fingerprint, version: info.version,
-          isLocal: true, certificate: certificate.certificate }
-        config.recent = [profile, ...config.recent.filter((entry) => entry.id !== profile.id)].slice(0, 8)
-        save()
-        if (info.ready) advertise(profile)
-        return publicProfile(profile)
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('已被其他程序占用')) throw error
-        await new Promise((done) => setTimeout(done, 250))
-      }
-    }
-    throw new Error(`本机服务启动超时。${failure}`)
+    return waitForLocalHost(config.host, child)
   }
   const profile = config.recent.find((entry) => entry.isLocal)
   if (!profile) throw new Error('本机服务连接档案缺失')
   return publicProfile(profile)
-}
-
-function advertise(profile: ServerProfile): void {
-  if (advertisement) return
-  bonjour ??= new Bonjour()
-  // 只广播公开的实例标识，不在 mDNS 中放账号、证书或业务资料。
-  advertisement = bonjour.publish({ name: profile.name, type: 'nexora', protocol: 'tcp',
-    port: profile.port, txt: { id: profile.id, version: profile.version } })
 }
 
 export async function createHost(input: HostInput): Promise<ServerProfile> {
@@ -243,7 +249,14 @@ export async function createHost(input: HostInput): Promise<ServerProfile> {
   if (!/^[A-Za-z0-9_]{3,40}$/.test(input.username) || input.password.length < 12 || input.password.length > 128) {
     throw new Error('管理员账号须为 3 到 40 位英文、数字或下划线，密码至少 12 位')
   }
-  if (config.host) throw new Error('此电脑已配置服务端，请到设置中启动或管理')
+  if ((await hostStatus()).configured) throw new Error('此电脑已配置服务端，请到设置中启动或管理')
+  if (app.isPackaged) {
+    await installManagedHost({ name, dataDir: resolve(input.dataDir), port: input.port })
+    const profile = await waitForLocalHost({ name, dataDir: resolve(input.dataDir), port: input.port })
+    await activateSaved(profile.id)
+    if (!(await getServerInfo()).ready) await finishHostSetup(input.username, input.password)
+    return profile
+  }
   config.host = { name, port: input.port, dataDir: resolve(input.dataDir), enabled: true }
   save()
   const profile = await startHost()
@@ -256,16 +269,20 @@ export async function createHost(input: HostInput): Promise<ServerProfile> {
 }
 
 export async function finishHostSetup(username: string, password: string): Promise<void> {
-  if (!config.host || !service || service.exitCode !== null) throw new Error('本机服务尚未运行')
+  if (!(await hostStatus()).running) throw new Error('本机服务尚未运行')
   const profile = config.recent.find((entry) => entry.isLocal)
   if (!profile || config.activeId !== profile.id) throw new Error('请先连接本机服务')
   await callBackend('bootstrap', { username, password })
-  advertise(profile)
 }
 
 export async function resume(): Promise<StartupState> {
   try {
-    if (config.host && config.host.enabled !== false) await startHost()
+    const managed = app.isPackaged ? await managedHostStatus() : null
+    if (managed?.configured) {
+      if (managed.running && managed.name && managed.dataDir && managed.port) {
+        await waitForLocalHost({ name: managed.name, dataDir: managed.dataDir, port: managed.port })
+      }
+    } else if (config.host && config.host.enabled !== false && !app.isPackaged) await startHost()
     if (!config.activeId) return { status: 'welcome' }
     const profile = await activateSaved(config.activeId)
     const health = await getBackendHealth()
@@ -280,7 +297,27 @@ export async function resume(): Promise<StartupState> {
 }
 
 export async function restartHost(): Promise<ServerProfile> {
+  const managed = app.isPackaged ? await managedHostStatus() : null
+  if (managed?.configured) {
+    if (!managed.name || !managed.dataDir || !managed.port) throw new Error('系统服务配置不完整')
+    if (!managed.running) await startManagedHost()
+    const profile = await waitForLocalHost({ name: managed.name, dataDir: managed.dataDir, port: managed.port })
+    await activateSaved(profile.id)
+    return profile
+  }
   if (!config.host) throw new Error('本机尚未配置服务端')
+  if (app.isPackaged) {
+    // 旧版由 Electron 持有的进程先退出，再把同一数据目录交给系统服务。
+    const previous = config.host
+    await stopHost(false)
+    // 迁移失败时旧配置与数据仍在，安装版不会退回窗口托管模式。
+    await installManagedHost(previous)
+    const profile = await waitForLocalHost(previous)
+    config.host = undefined
+    save()
+    await activateSaved(profile.id)
+    return profile
+  }
   config.host.enabled = true
   save()
   const profile = await startHost()
@@ -288,14 +325,31 @@ export async function restartHost(): Promise<ServerProfile> {
   return profile
 }
 
+export async function upgradeHost(): Promise<ServerProfile> {
+  if (!app.isPackaged) throw new Error('开发模式没有已安装的系统服务')
+  const managed = await managedHostStatus()
+  if (!managed.configured || !managed.name || !managed.dataDir || !managed.port) {
+    throw new Error('本机尚未安装系统服务')
+  }
+  await upgradeManagedHost()
+  // 用户在设置里执行升级后进入可连接状态；此前手动停止的服务需明确重新启动。
+  if (!managed.running) await startManagedHost()
+  const profile = await waitForLocalHost({ name: managed.name, dataDir: managed.dataDir, port: managed.port })
+  await activateSaved(profile.id)
+  return profile
+}
+
 export async function stopHost(persistStopped = true): Promise<void> {
+  if (persistStopped && app.isPackaged && (await managedHostStatus()).configured) {
+    await stopManagedHost()
+    if (config.activeId && config.recent.find((entry) => entry.id === config.activeId)?.isLocal) selectBackend(null)
+    return
+  }
   if (persistStopped && config.host) {
     // 用户主动停止会持续生效；应用退出时仅结束进程，不改下次启动的选择。
     config.host.enabled = false
     save()
   }
-  advertisement?.stop()
-  advertisement = null
   const child = service
   service = null
   if (config.activeId && config.recent.find((entry) => entry.id === config.activeId)?.isLocal) selectBackend(null)

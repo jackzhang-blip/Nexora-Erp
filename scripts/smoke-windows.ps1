@@ -25,6 +25,78 @@ try {
   if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
 }
 
+# CI 运行器以管理员身份执行时，验证 SCM 接管、停止和重新启动打包后的服务。
+function Assert-ServiceHealthy {
+  for ($attempt = 0; $attempt -lt 60; $attempt++) {
+    try {
+      $response = Invoke-RestMethod 'https://127.0.0.1:18762/api/v1/health' -SkipCertificateCheck -TimeoutSec 1
+      if ($response.status -eq 'ok' -and $response.service -eq 'nexora-api') { return }
+    } catch {
+      # 服务控制器返回后，HTTPS 监听可能还需要短暂初始化。
+    }
+    Start-Sleep -Milliseconds 250
+  }
+  throw 'Windows 系统服务没有通过 HTTPS 健康检查。'
+}
+
+$request = Join-Path $env:RUNNER_TEMP 'nexora-service-request.json'
+$serviceData = Join-Path $env:RUNNER_TEMP 'nexora-system-service-data'
+@{ name = 'CI 固定主机'; data_dir = $serviceData; port = 18762 } | ConvertTo-Json | Set-Content -Path $request -Encoding utf8
+$serviceStartedAt = Get-Date
+& $service install --request $request --source (Split-Path $service -Parent)
+if ($LASTEXITCODE -ne 0) {
+  # 安装命令回滚服务注册后，保留系统事件记录以区分权限、程序路径和进程内部错误。
+  $serviceLog = Join-Path $env:ProgramData 'Nexora ERP/logs/host.err.log'
+  if (Test-Path $serviceLog) { Get-Content $serviceLog -Tail 80 | Write-Host }
+  Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Service Control Manager'; StartTime = $serviceStartedAt } -ErrorAction SilentlyContinue |
+    Select-Object -First 8 TimeCreated, Id, Message | Format-List | Out-String | Write-Host
+  throw 'Windows 系统服务安装失败。'
+}
+try {
+  $running = $false
+  for ($attempt = 0; $attempt -lt 60; $attempt++) {
+    $status = (& $service status | ConvertFrom-Json)
+    if ($status.running) { $running = $true; break }
+    Start-Sleep -Milliseconds 250
+  }
+  if (-not $running) {
+    # 进程可能已退出；先保留状态、服务自身日志和系统事件，再报告检查失败。
+    & sc.exe queryex NexoraERPHost
+    $serviceLog = Join-Path $env:ProgramData 'Nexora ERP/logs/host.err.log'
+    if (Test-Path $serviceLog) { Get-Content $serviceLog -Tail 80 | Write-Host }
+    Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $serviceStartedAt } -ErrorAction SilentlyContinue |
+      Select-Object -First 8 TimeCreated, Id, ProviderName, Message | Format-List | Out-String | Write-Host
+    throw 'SCM 没有保持固定主机运行。'
+  }
+  # SCM 状态只能证明进程仍在；还要从打包后的系统服务实际读取 HTTPS 接口。
+  Assert-ServiceHealthy
+  & $service stop
+  if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务停止失败。' }
+  & $service start
+  if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务重新启动失败。' }
+  # 重新启动后再次确认数据库和 HTTPS 可用，而不是只相信 sc.exe 的退出码。
+  Assert-ServiceHealthy
+  # 用同一安装包演练升级和恢复，确认备份含原证书且新版程序能重新接管服务。
+  $certificate = Join-Path $serviceData 'server.crt'
+  $originalCertificate = (Get-FileHash $certificate -Algorithm SHA256).Hash
+  & $service upgrade --source (Split-Path $service -Parent)
+  if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务升级失败。' }
+  Assert-ServiceHealthy
+  $backupDir = Join-Path $env:ProgramData 'Nexora ERP/backups'
+  $archive = Get-ChildItem $backupDir -Filter 'upgrade-*.nexora-backup' |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $archive) { throw 'Windows 系统服务升级没有生成成组备份。' }
+  $restoredDir = Join-Path $env:RUNNER_TEMP 'nexora-service-restored'
+  & $service restore --archive $archive.FullName --data-dir $restoredDir
+  if ($LASTEXITCODE -ne 0) { throw 'Windows 成组备份恢复失败。' }
+  if ((Get-FileHash (Join-Path $restoredDir 'server.crt') -Algorithm SHA256).Hash -ne $originalCertificate) {
+    throw 'Windows 恢复后的服务端证书发生变化。'
+  }
+} finally {
+  # 服务已自行退出时不再执行 stop，保留最初的失败信息。
+  if ((Get-Service -Name NexoraERPHost -ErrorAction SilentlyContinue).Status -eq 'Running') { & $service stop }
+}
+
 # 桌面程序也必须实际渲染首次进入页，不能只检查可执行文件存在。
 $env:NEXORA_USER_DATA_DIR = Join-Path $env:RUNNER_TEMP 'nexora-desktop-smoke'
 $desktopProcess = Start-Process -FilePath $desktop -ArgumentList '--remote-debugging-port=18752' -PassThru

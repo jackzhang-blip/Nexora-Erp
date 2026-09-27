@@ -66,8 +66,12 @@ const manualForm = ref({ address: '', port: 8000 })
 const hostForm = ref({ name: '我的 Nexora ERP', dataDir: '', port: 8000,
   username: 'admin', password: '', confirm: '' })
 const trustChecked = ref(false)
-const host = ref<HostStatus>({ configured: false, running: false, fingerprint: null })
+const host = ref<HostStatus>({ configured: false, running: false, systemManaged: false,
+  migrationNeeded: false, fingerprint: null })
+const connectionLost = ref(false)
 let scanTimer: ReturnType<typeof setInterval> | null = null
+let healthTimer: ReturnType<typeof setInterval> | null = null
+let checkingHealth = false
 let unsubscribeDiscovery: (() => void) | null = null
 
 const can = (permission: string): boolean => user.value?.permissions.includes(permission) ?? false
@@ -99,6 +103,7 @@ async function checkConnection(): Promise<void> {
   error.value = ''
   try {
     const state = await window.nexora.startup()
+    connectionLost.value = false
     if (state.status === 'connected') {
       server.value = state.server
       screen.value = 'login'
@@ -136,6 +141,7 @@ async function switchServer(): Promise<void> {
     try { await window.nexora.callApi('logout', undefined) } catch { /* 网络中断时仍清理本地连接。 */ }
   }
   user.value = null
+  connectionLost.value = false
   server.value = null
   await window.nexora.disconnect()
   recentServers.value = await window.nexora.recentServers()
@@ -252,14 +258,20 @@ async function createLocalHost(): Promise<void> {
 
 async function stopLocalHost(): Promise<void> {
   if (!window.nexora || busy.value) return
-  await window.nexora.stopHost()
-  host.value = await window.nexora.hostStatus()
-  notice.value = '本机服务已停止。'
-  if (server.value?.isLocal) {
-    // 服务已退出，主进程也已清除令牌，此时无需再向停掉的服务发送登出请求。
-    user.value = null
-    await switchServer()
-  }
+  busy.value = true
+  clearMessage()
+  try {
+    await window.nexora.stopHost()
+    host.value = await window.nexora.hostStatus()
+    notice.value = '本机服务已停止。'
+    if (server.value?.isLocal) {
+      // 服务已退出，主进程也已清除令牌，此时无需再向停掉的服务发送登出请求。
+      user.value = null
+      await switchServer()
+      notice.value = '本机服务已停止。'
+    }
+  } catch (cause) { error.value = displayError(cause) }
+  finally { busy.value = false }
 }
 
 async function restartLocalHost(): Promise<void> {
@@ -271,6 +283,19 @@ async function restartLocalHost(): Promise<void> {
     host.value = await window.nexora.hostStatus()
     if (screen.value === 'offline' || screen.value === 'create') await go('ready')
     notice.value = '本机服务已启动。'
+  } catch (cause) { error.value = displayError(cause) }
+  finally { busy.value = false }
+}
+
+async function upgradeLocalHost(): Promise<void> {
+  if (!window.nexora || busy.value) return
+  busy.value = true
+  clearMessage()
+  try {
+    // 升级命令会在停止服务后创建成组备份，并保留原实例的数据目录与证书。
+    server.value = await window.nexora.upgradeHost()
+    host.value = await window.nexora.hostStatus()
+    notice.value = '系统服务已升级，升级前备份保存在主机系统数据目录。'
   } catch (cause) { error.value = displayError(cause) }
   finally { busy.value = false }
 }
@@ -331,6 +356,10 @@ async function refreshData(): Promise<void> {
 
 async function perform(action: () => Promise<unknown>, success: string): Promise<void> {
   if (busy.value) return
+  if (connectionLost.value) {
+    error.value = '服务端连接已中断，恢复连接后才能保存更改。'
+    return
+  }
   busy.value = true
   error.value = ''
   notice.value = ''
@@ -436,6 +465,7 @@ async function resetUserPassword(userId: number): Promise<void> {
 
 async function changeOwnPassword(): Promise<void> {
   if (!window.nexora || busy.value) return
+  if (connectionLost.value) { error.value = '服务端连接已中断，恢复后再修改密码。'; return }
   busy.value = true
   error.value = ''
   try {
@@ -457,13 +487,40 @@ async function logout(): Promise<void> {
   error.value = ''
 }
 
+async function monitorConnection(): Promise<void> {
+  if (!window.nexora || checkingHealth || !['app', 'login', 'setup', 'ready'].includes(screen.value)) return
+  checkingHealth = true
+  try {
+    const health = await window.nexora.getBackendHealth()
+    if (!health.connected) {
+      connectionLost.value = true
+      return
+    }
+    if (!connectionLost.value) return
+    // TLS 请求仍使用固定证书；恢复后从服务端重读，避免展示断线期间的旧库存。
+    connectionLost.value = false
+    if (screen.value === 'app') {
+      try { await refreshData() }
+      catch {
+        user.value = null
+        screen.value = 'login'
+        notice.value = '连接已恢复，请重新登录后查看最新数据。'
+        return
+      }
+    }
+    notice.value = '服务端连接已恢复，数据已更新。'
+  } catch { connectionLost.value = true }
+  finally { checkingHealth = false }
+}
+
 onMounted(async () => {
   if (window.nexora) version.value = await window.nexora.getVersion().catch(() => '')
   if (window.nexora) hostForm.value.dataDir = await window.nexora.defaultDataDir().catch(() => '')
   await checkConnection()
+  healthTimer = setInterval(() => { void monitorConnection() }, 5000)
 })
 
-onUnmounted(() => { void stopScan() })
+onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer) })
 </script>
 
 <template>
@@ -475,7 +532,7 @@ onUnmounted(() => { void stopScan() })
       <div class="onboard-hero">
         <p class="onboard-kicker">NEXORA · CONNECT</p>
         <h1>{{ screen === 'welcome' ? '选择你的工作方式' : screen === 'manual' ? '连接现有服务端' : screen === 'scan' ? '正在查找局域网服务端' : screen === 'results' ? '选择服务端' : screen === 'create' ? '创建本机服务端' : screen === 'trust' ? '核对服务端身份' : screen === 'ready' ? '服务端已就绪' : screen === 'offline' ? '连接暂时中断' : '正在准备工作台' }}</h1>
-        <p>{{ screen === 'welcome' ? '连接团队已有的服务端，或者在这台电脑上创建一个。' : screen === 'manual' ? '输入局域网地址，连接团队的 Nexora ERP。' : screen === 'scan' ? '正在发现同一局域网中可用的 Nexora 服务端。' : screen === 'results' ? '以下服务端由当前网络实际发现；选择后仍需核对身份。' : screen === 'create' ? '数据保存在所选目录；服务会在登录期间持续运行。' : screen === 'trust' ? '请与服务端电脑上的指纹逐字核对，再使用账号密码登录。' : screen === 'ready' ? '连接和服务状态已确认，可以进入工作台。' : screen === 'offline' ? '检查网络或本机服务，再试一次。' : '请稍候。' }}</p>
+        <p>{{ screen === 'welcome' ? '连接团队已有的服务端，或者在这台电脑上创建一个。' : screen === 'manual' ? '输入局域网地址，连接团队的 Nexora ERP。' : screen === 'scan' ? '正在发现同一局域网中可用的 Nexora 服务端。' : screen === 'results' ? '以下服务端由当前网络实际发现；选择后仍需核对身份。' : screen === 'create' ? '数据保存在所选目录；安装版由系统服务持续运行。' : screen === 'trust' ? '请与服务端电脑上的指纹逐字核对，再使用账号密码登录。' : screen === 'ready' ? '连接和服务状态已确认，可以进入工作台。' : screen === 'offline' ? '检查网络或本机服务，再试一次。' : '请稍候。' }}</p>
       </div>
       <div v-if="error" class="onboard-alert" role="alert">{{ error }}</div>
       <div v-if="notice" class="onboard-alert success" role="status">{{ notice }}</div>
@@ -498,7 +555,7 @@ onUnmounted(() => { void stopScan() })
 
       <section v-else-if="screen === 'results'" class="onboard-panel"><div class="panel-heading"><span class="panel-icon"><IconRadarLine aria-hidden="true" /></span><div><h2>发现 {{ discoveries.length }} 个服务端</h2><p>选择在线服务端，下一步核对证书指纹。</p></div></div><div v-if="!discoveries.length" class="onboard-empty">当前没有发现可用服务端。请确认两台电脑在同一局域网，或手动填写地址。</div><button v-for="entry in discoveries" :key="entry.id" class="server-row" type="button" :disabled="!entry.online || busy" @click="pickDiscovered(entry)"><span><strong>{{ entry.name }}</strong><small>{{ entry.host }}:{{ entry.port }} · v{{ entry.version }}</small></span><span :class="entry.online ? 'online' : 'offline'">{{ entry.online ? '在线 · 连接 →' : '离线' }}</span></button><div class="onboard-actions"><button class="secondary" type="button" @click="go('manual')">手动填写</button><button class="primary" type="button" @click="startScan">重新扫描</button></div></section>
 
-      <section v-else-if="screen === 'create'" class="onboard-columns create-columns"><div v-if="host.configured" class="onboard-panel"><div class="panel-heading"><span class="panel-icon"><IconServerLine aria-hidden="true" /></span><div><h2>此电脑已有服务端</h2><p>一个电脑只创建一个本机实例。你可以继续使用已有服务端。</p></div></div><div class="onboard-actions"><button class="secondary" type="button" @click="go('welcome')">返回首页</button><button class="primary" type="button" :disabled="busy" @click="restartLocalHost">{{ host.running ? '连接本机服务' : '启动本机服务' }}</button></div></div><form v-else class="onboard-panel onboard-form" @submit.prevent="createLocalHost"><div class="panel-heading"><span class="panel-icon"><IconAddLine aria-hidden="true" /></span><div><h2>本机服务配置</h2><p>第一版使用 SQLite，每台电脑只创建一个本机实例。</p></div></div><div class="form-grid"><label>实例名称<input v-model.trim="hostForm.name" required maxlength="80" placeholder="例如 总公司 ERP" /></label><label>服务端口<input v-model.number="hostForm.port" type="number" min="1" max="65535" required /></label></div><label>数据目录<div class="path-picker"><input v-model.trim="hostForm.dataDir" required placeholder="选择 SQLite 数据保存位置" /><button class="secondary" type="button" @click="chooseDataDir">选择</button></div></label><div class="form-grid"><label>首位管理员账号<input v-model.trim="hostForm.username" required minlength="3" maxlength="40" autocomplete="username" /></label><span class="form-hint">已有数据库会原样保留；已有管理员请使用原账号登录。</span></div><div class="form-grid"><label>管理员密码<input v-model="hostForm.password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位" /></label><label>确认密码<input v-model="hostForm.confirm" type="password" required minlength="12" autocomplete="new-password" /></label></div><div class="onboard-actions"><button class="secondary" type="button" @click="go('welcome')">返回首页</button><button class="primary" type="submit" :disabled="busy">{{ busy ? '正在创建服务端…' : '创建并启动' }}</button></div></form><aside class="onboard-panel setup-summary"><p class="onboard-kicker">DEPLOYMENT SUMMARY</p><h2>这台电脑将成为服务端</h2><dl><div><dt>业务数据库</dt><dd>SQLite</dd></div><div><dt>访问方式</dt><dd>局域网 HTTPS</dd></div><div><dt>后台运行</dt><dd>登录期间由托盘保持</dd></div><div><dt>外部客户端</dt><dd>需核对证书指纹并登录</dd></div></dl><p class="summary-note">服务端数据集中保存在此电脑。客户端断网后不能继续编辑或自动同步。</p></aside></section>
+      <section v-else-if="screen === 'create'" class="onboard-columns create-columns"><div v-if="host.configured" class="onboard-panel"><div class="panel-heading"><span class="panel-icon"><IconServerLine aria-hidden="true" /></span><div><h2>此电脑已有服务端</h2><p>一个电脑只创建一个本机实例。你可以继续使用已有服务端。</p></div></div><div class="onboard-actions"><button class="secondary" type="button" @click="go('welcome')">返回首页</button><button class="primary" type="button" :disabled="busy" @click="restartLocalHost">{{ host.running ? '连接本机服务' : '启动本机服务' }}</button></div></div><form v-else class="onboard-panel onboard-form" @submit.prevent="createLocalHost"><div class="panel-heading"><span class="panel-icon"><IconAddLine aria-hidden="true" /></span><div><h2>本机服务配置</h2><p>第一版使用 SQLite，每台电脑只创建一个本机实例。</p></div></div><div class="form-grid"><label>实例名称<input v-model.trim="hostForm.name" required maxlength="80" placeholder="例如 总公司 ERP" /></label><label>服务端口<input v-model.number="hostForm.port" type="number" min="1" max="65535" required /></label></div><label>数据目录<div class="path-picker"><input v-model.trim="hostForm.dataDir" required placeholder="选择 SQLite 数据保存位置" /><button class="secondary" type="button" @click="chooseDataDir">选择</button></div></label><div class="form-grid"><label>首位管理员账号<input v-model.trim="hostForm.username" required minlength="3" maxlength="40" autocomplete="username" /></label><span class="form-hint">已有数据库会原样保留；已有管理员请使用原账号登录。</span></div><div class="form-grid"><label>管理员密码<input v-model="hostForm.password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位" /></label><label>确认密码<input v-model="hostForm.confirm" type="password" required minlength="12" autocomplete="new-password" /></label></div><div class="onboard-actions"><button class="secondary" type="button" @click="go('welcome')">返回首页</button><button class="primary" type="submit" :disabled="busy">{{ busy ? '正在创建服务端…' : '创建并启动' }}</button></div></form><aside class="onboard-panel setup-summary"><p class="onboard-kicker">DEPLOYMENT SUMMARY</p><h2>这台电脑将成为服务端</h2><dl><div><dt>业务数据库</dt><dd>SQLite</dd></div><div><dt>访问方式</dt><dd>局域网 HTTPS</dd></div><div><dt>后台运行</dt><dd>安装版由系统服务管理</dd></div><div><dt>外部客户端</dt><dd>需核对证书指纹并登录</dd></div></dl><p class="summary-note">服务端数据集中保存在此电脑。客户端断网后不能继续编辑或自动同步。</p></aside></section>
 
       <section v-else-if="screen === 'trust' && candidate" class="onboard-panel trust-panel"><span class="trust-icon">◇</span><h2>{{ candidate.changed ? '服务端证书已变化' : '首次连接，需要确认身份' }}</h2><p>请到服务端电脑的“服务端已就绪”页面，核对以下完整 SHA-256 指纹。不要只凭本页面显示的名称判断身份。</p><div class="fingerprint">{{ candidate.fingerprint }}</div><p class="muted">{{ candidate.name }} · {{ candidate.host }}:{{ candidate.port }}</p><label class="check trust-check"><input v-model="trustChecked" type="checkbox" />我已通过服务端电脑或可信渠道核对完整指纹</label><div class="onboard-actions"><button class="secondary" type="button" @click="go('manual')">取消</button><button class="primary" type="button" :disabled="!trustChecked || busy" @click="approveTrust">确认身份并连接</button></div></section>
 
@@ -526,6 +583,7 @@ onUnmounted(() => { void stopScan() })
       </header>
 
       <div v-if="error" class="message error" role="alert">{{ error }}</div>
+      <div v-if="connectionLost" class="message error" role="alert">服务端连接已中断，正在重试。恢复连接前无法保存更改。</div>
       <div v-if="notice" class="message success" role="status">{{ notice }}</div>
 
       <section v-if="screen === 'setup' || screen === 'login'" class="card auth-card">
@@ -535,7 +593,7 @@ onUnmounted(() => { void stopScan() })
         <form @submit.prevent="authenticate">
           <label>用户名<input v-model.trim="username" autocomplete="username" minlength="3" maxlength="40" required placeholder="例如 admin" /></label>
           <label>密码<input v-model="password" type="password" :autocomplete="screen === 'setup' ? 'new-password' : 'current-password'" :minlength="screen === 'setup' ? 12 : undefined" required placeholder="输入密码" /></label>
-          <button class="primary" type="submit" :disabled="busy">{{ busy ? '请稍候…' : screen === 'setup' ? '创建管理员' : '登录' }}</button>
+          <button class="primary" type="submit" :disabled="busy || connectionLost">{{ busy ? '请稍候…' : screen === 'setup' ? '创建管理员' : '登录' }}</button>
         </form>
         <button class="text-button auth-switch" type="button" @click="switchServer">切换服务端</button>
       </section>
@@ -595,7 +653,7 @@ onUnmounted(() => { void stopScan() })
             </div>
           </div>
         </section>
-        <section v-if="activeTab === 'settings'" class="stack"><div class="card"><div class="section-heading"><div><p class="eyebrow">CONNECTION</p><h2>当前连接</h2></div></div><dl class="server-details"><div><dt>服务端</dt><dd>{{ server?.name }}</dd></div><div><dt>地址</dt><dd>{{ server?.host }}:{{ server?.port }}</dd></div><div><dt>证书指纹</dt><dd class="mono">{{ server?.fingerprint }}</dd></div></dl><button class="secondary" type="button" @click="switchServer">切换服务端</button></div><div class="card"><div class="section-heading"><div><p class="eyebrow">ACCOUNT</p><h2>修改我的密码</h2></div></div><form class="inline-form" @submit.prevent="changeOwnPassword"><div class="form-grid"><label>当前密码<input v-model="passwordChange.current_password" type="password" required autocomplete="current-password" /></label><label>新密码<input v-model="passwordChange.new_password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位" /></label></div><p class="muted">修改后所有设备都需要重新登录。</p><button class="primary" type="submit" :disabled="busy">修改密码</button></form></div><div v-if="host.configured" class="card"><div class="section-heading"><div><p class="eyebrow">LOCAL HOST</p><h2>本机服务</h2></div><span class="pill" :class="{ posted: host.running }">{{ host.running ? '运行中' : '已停止' }}</span></div><p class="muted">关闭窗口时本机服务继续运行；退出应用或登录会话后停止。</p><div class="onboard-actions"><button v-if="host.running" class="secondary" type="button" @click="stopLocalHost">停止本机服务</button><button v-else class="primary" type="button" @click="restartLocalHost">启动本机服务</button></div></div></section>
+        <section v-if="activeTab === 'settings'" class="stack"><div class="card"><div class="section-heading"><div><p class="eyebrow">CONNECTION</p><h2>当前连接</h2></div></div><dl class="server-details"><div><dt>服务端</dt><dd>{{ server?.name }}</dd></div><div><dt>地址</dt><dd>{{ server?.host }}:{{ server?.port }}</dd></div><div><dt>证书指纹</dt><dd class="mono">{{ server?.fingerprint }}</dd></div></dl><button class="secondary" type="button" @click="switchServer">切换服务端</button></div><div class="card"><div class="section-heading"><div><p class="eyebrow">ACCOUNT</p><h2>修改我的密码</h2></div></div><form class="inline-form" @submit.prevent="changeOwnPassword"><div class="form-grid"><label>当前密码<input v-model="passwordChange.current_password" type="password" required autocomplete="current-password" /></label><label>新密码<input v-model="passwordChange.new_password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位" /></label></div><p class="muted">修改后所有设备都需要重新登录。</p><button class="primary" type="submit" :disabled="busy">修改密码</button></form></div><div v-if="host.configured" class="card"><div class="section-heading"><div><p class="eyebrow">LOCAL HOST</p><h2>本机服务</h2></div><span class="pill" :class="{ posted: host.running }">{{ host.running ? '运行中' : '已停止' }}</span></div><p class="muted">{{ host.systemManaged ? '系统服务在关闭窗口、退出应用或无人登录时继续运行。' : host.migrationNeeded ? '旧版主机需点击启动，以迁移到系统服务。' : '开发模式下由桌面进程持有，退出应用后停止。' }}</p><div class="onboard-actions"><button v-if="host.running" class="secondary" type="button" :disabled="busy" @click="stopLocalHost">停止本机服务</button><button v-else class="primary" type="button" :disabled="busy" @click="restartLocalHost">{{ host.migrationNeeded ? '迁移并启动系统服务' : '启动本机服务' }}</button><button v-if="host.systemManaged" class="secondary" type="button" :disabled="busy" @click="upgradeLocalHost">用当前安装包升级服务</button></div></div></section>
       </template>
     </main>
   </div>

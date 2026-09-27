@@ -19,6 +19,7 @@ const desktopApi: DesktopApi = {
   chooseDataDir: () => ipcRenderer.invoke('host:choose-dir'),
   restartHost: () => ipcRenderer.invoke('host:restart'),
   stopHost: () => ipcRenderer.invoke('host:stop'),
+  upgradeHost: () => ipcRenderer.invoke('host:upgrade'),
   hostStatus: () => ipcRenderer.invoke('host:status'),
   startDiscovery: () => ipcRenderer.invoke('discovery:start'),
   stopDiscovery: () => ipcRenderer.invoke('discovery:stop'),
