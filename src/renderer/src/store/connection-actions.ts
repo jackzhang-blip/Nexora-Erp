@@ -1,0 +1,410 @@
+import type { AppState } from './state'
+import type {
+  ConnectionCandidate,
+  DiscoveryResult,
+  ServerProfile
+} from '../../../shared/desktop-api'
+import { displayError } from '../utils/formatters'
+import type { Screen } from './types'
+
+// 连接、发现、主机控制与身份状态在同一生命周期内管理，退出时会释放扫描订阅。
+export function createConnectionActions(
+  state: AppState,
+  refreshData: () => Promise<void>
+) {
+  const {
+    screen,
+    notice,
+    error,
+    busy,
+    user,
+    username,
+    password,
+    selectedWarehouseId,
+    passwordChange,
+    server,
+    candidate,
+    recentServers,
+    discoveries,
+    scanSeconds,
+    scanning,
+    manualForm,
+    hostForm,
+    trustChecked,
+    host,
+    connectionLost
+  } = state
+  let scanTimer: ReturnType<typeof setInterval> | null = null
+  let checkingHealth = false
+  let unsubscribeDiscovery: (() => void) | null = null
+
+  async function checkConnection(): Promise<void> {
+    if (!window.nexora) {
+      screen.value = 'offline'
+      error.value = '请在 Electron 桌面应用中打开此页面。'
+      return
+    }
+    busy.value = true
+    error.value = ''
+    try {
+      const state = await window.nexora.startup()
+      connectionLost.value = false
+      if (state.status === 'connected') {
+        server.value = state.server
+        screen.value = 'login'
+      } else if (state.status === 'needs_setup') {
+        server.value = state.server
+        screen.value = 'setup'
+      } else if (state.status === 'offline') {
+        server.value = state.server ?? null
+        screen.value = 'offline'
+        error.value = state.message
+      } else {
+        screen.value = 'welcome'
+      }
+      recentServers.value = await window.nexora.recentServers()
+      host.value = await window.nexora.hostStatus()
+    } catch (cause) {
+      screen.value = 'offline'
+      error.value = displayError(cause)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  function clearMessage(): void {
+    error.value = ''
+    notice.value = ''
+  }
+
+  async function go(screenName: Screen): Promise<void> {
+    clearMessage()
+    if (screen.value === 'scan') await stopScan()
+    screen.value = screenName
+  }
+
+  async function switchServer(): Promise<void> {
+    if (!window.nexora) return
+    if (user.value) {
+      try {
+        await window.nexora.callApi('logout', undefined)
+      } catch {
+        /* 网络中断时仍清理本地连接。 */
+      }
+    }
+    user.value = null
+    connectionLost.value = false
+    server.value = null
+    // 仓库编号只在当前服务端有效，切换实例时重置筛选，避免请求另一实例不存在的仓库。
+    selectedWarehouseId.value = 0
+    await window.nexora.disconnect()
+    recentServers.value = await window.nexora.recentServers()
+    await go('welcome')
+  }
+
+  async function connectManual(): Promise<void> {
+    if (!window.nexora || busy.value) return
+    busy.value = true
+    clearMessage()
+    try {
+      candidate.value = await window.nexora.prepareConnection(
+        manualForm.value.address,
+        Number(manualForm.value.port)
+      )
+      trustChecked.value = false
+      if (candidate.value.trusted) {
+        server.value = await window.nexora.approveConnection(
+          candidate.value.id,
+          candidate.value.fingerprint
+        )
+        await go('ready')
+      } else await go('trust')
+    } catch (cause) {
+      error.value = displayError(cause)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function connectSaved(profile: ServerProfile): Promise<void> {
+    if (!window.nexora || busy.value) return
+    busy.value = true
+    clearMessage()
+    try {
+      server.value = await window.nexora.activateSaved(profile.id)
+      await go('ready')
+    } catch (cause) {
+      error.value = displayError(cause)
+      manualForm.value = { address: profile.host, port: profile.port }
+      screen.value = 'manual'
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function approveTrust(): Promise<void> {
+    if (!window.nexora || !candidate.value || !trustChecked.value) return
+    busy.value = true
+    try {
+      server.value = await window.nexora.approveConnection(
+        candidate.value.id,
+        candidate.value.fingerprint
+      )
+      recentServers.value = await window.nexora.recentServers()
+      await go('ready')
+    } catch (cause) {
+      error.value = displayError(cause)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function startScan(): Promise<void> {
+    if (!window.nexora) return
+    await go('scan')
+    scanSeconds.value = 0
+    discoveries.value = []
+    scanning.value = true
+    unsubscribeDiscovery?.()
+    unsubscribeDiscovery = window.nexora.onDiscovery((results) => {
+      discoveries.value = results
+    })
+    try {
+      await window.nexora.startDiscovery()
+      scanTimer = setInterval(() => {
+        scanSeconds.value += 1
+      }, 1000)
+    } catch (cause) {
+      scanning.value = false
+      error.value = displayError(cause)
+    }
+  }
+
+  async function stopScan(): Promise<void> {
+    if (scanTimer) clearInterval(scanTimer)
+    scanTimer = null
+    if (scanning.value) await window.nexora?.stopDiscovery()
+    scanning.value = false
+    unsubscribeDiscovery?.()
+    unsubscribeDiscovery = null
+  }
+
+  async function showResults(): Promise<void> {
+    await stopScan()
+    screen.value = 'results'
+  }
+
+  async function pickDiscovered(item: DiscoveryResult): Promise<void> {
+    manualForm.value = { address: item.host, port: item.port }
+    await connectManual()
+  }
+
+  async function chooseDataDir(): Promise<void> {
+    if (!window.nexora) return
+    const path = await window.nexora.chooseDataDir()
+    if (path) hostForm.value.dataDir = path
+  }
+
+  async function createLocalHost(): Promise<void> {
+    if (!window.nexora || busy.value) return
+    if (hostForm.value.password !== hostForm.value.confirm) {
+      error.value = '两次输入的管理员密码不一致'
+      return
+    }
+    busy.value = true
+    clearMessage()
+    try {
+      server.value = await window.nexora.createHost({
+        name: hostForm.value.name,
+        dataDir: hostForm.value.dataDir,
+        port: Number(hostForm.value.port),
+        username: hostForm.value.username,
+        password: hostForm.value.password
+      })
+      hostForm.value.password = ''
+      hostForm.value.confirm = ''
+      recentServers.value = await window.nexora.recentServers()
+      host.value = await window.nexora.hostStatus()
+      await go('ready')
+    } catch (cause) {
+      const failure = displayError(cause)
+      await checkConnection()
+      error.value = failure
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function stopLocalHost(): Promise<void> {
+    if (!window.nexora || busy.value) return
+    busy.value = true
+    clearMessage()
+    try {
+      await window.nexora.stopHost()
+      host.value = await window.nexora.hostStatus()
+      notice.value = '本机服务已停止。'
+      if (server.value?.isLocal) {
+        // 服务已退出，主进程也已清除令牌，此时无需再向停掉的服务发送登出请求。
+        user.value = null
+        await switchServer()
+        notice.value = '本机服务已停止。'
+      }
+    } catch (cause) {
+      error.value = displayError(cause)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function restartLocalHost(): Promise<void> {
+    if (!window.nexora || busy.value) return
+    busy.value = true
+    clearMessage()
+    try {
+      server.value = await window.nexora.restartHost()
+      host.value = await window.nexora.hostStatus()
+      if (screen.value === 'offline' || screen.value === 'create')
+        await go('ready')
+      notice.value = '本机服务已启动。'
+    } catch (cause) {
+      error.value = displayError(cause)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function upgradeLocalHost(): Promise<void> {
+    if (!window.nexora || busy.value) return
+    busy.value = true
+    clearMessage()
+    try {
+      // 升级命令会在停止服务后创建成组备份，并保留原实例的数据目录与证书。
+      server.value = await window.nexora.upgradeHost()
+      host.value = await window.nexora.hostStatus()
+      notice.value = '系统服务已升级，升级前备份保存在主机系统数据目录。'
+    } catch (cause) {
+      error.value = displayError(cause)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function authenticate(): Promise<void> {
+    if (!window.nexora || busy.value) return
+    busy.value = true
+    error.value = ''
+    try {
+      if (screen.value === 'setup') {
+        await window.nexora.finishHostSetup(username.value, password.value)
+        screen.value = 'login'
+        notice.value = '管理员已创建，请登录。'
+        password.value = ''
+        return
+      }
+      user.value = await window.nexora.callApi('login', {
+        username: username.value,
+        password: password.value
+      })
+      password.value = ''
+      screen.value = 'app'
+      await refreshData()
+    } catch (cause) {
+      error.value = displayError(cause)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function changeOwnPassword(): Promise<void> {
+    if (!window.nexora || busy.value) return
+    if (connectionLost.value) {
+      error.value = '服务端连接已中断，恢复后再修改密码。'
+      return
+    }
+    busy.value = true
+    error.value = ''
+    try {
+      await window.nexora.callApi('changePassword', {
+        ...passwordChange.value
+      })
+      passwordChange.value = { current_password: '', new_password: '' }
+      user.value = null
+      screen.value = 'login'
+      notice.value = '密码已修改，请使用新密码重新登录。'
+    } catch (cause) {
+      error.value = displayError(cause)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function logout(): Promise<void> {
+    if (!window.nexora) return
+    try {
+      await window.nexora.callApi('logout', undefined)
+    } catch {
+      /* 本地界面仍退出，重连后需要再次登录。 */
+    }
+    user.value = null
+    screen.value = 'login'
+    notice.value = ''
+    error.value = ''
+  }
+
+  async function monitorConnection(): Promise<void> {
+    if (
+      !window.nexora ||
+      checkingHealth ||
+      !['app', 'login', 'setup', 'ready'].includes(screen.value)
+    )
+      return
+    checkingHealth = true
+    try {
+      const health = await window.nexora.getBackendHealth()
+      if (!health.connected) {
+        connectionLost.value = true
+        return
+      }
+      if (!connectionLost.value) return
+      // TLS 请求仍使用固定证书；恢复后从服务端重读，避免展示断线期间的旧库存。
+      connectionLost.value = false
+      if (screen.value === 'app') {
+        try {
+          await refreshData()
+        } catch {
+          user.value = null
+          screen.value = 'login'
+          notice.value = '连接已恢复，请重新登录后查看最新数据。'
+          return
+        }
+      }
+      notice.value = '服务端连接已恢复，数据已更新。'
+    } catch {
+      connectionLost.value = true
+    } finally {
+      checkingHealth = false
+    }
+  }
+  return {
+    checkConnection,
+    clearMessage,
+    go,
+    switchServer,
+    connectManual,
+    connectSaved,
+    approveTrust,
+    startScan,
+    stopScan,
+    showResults,
+    pickDiscovered,
+    chooseDataDir,
+    createLocalHost,
+    stopLocalHost,
+    restartLocalHost,
+    upgradeLocalHost,
+    authenticate,
+    changeOwnPassword,
+    logout,
+    monitorConnection
+  }
+}

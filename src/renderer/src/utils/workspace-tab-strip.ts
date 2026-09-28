@@ -18,6 +18,12 @@ export function scrollActiveTabIntoView(strip: HTMLElement): void {
   const tabRect = current.getBoundingClientRect()
   const tabLeft = tabRect.left - stripRect.left + strip.scrollLeft
   const tabRight = tabRect.right - stripRect.left + strip.scrollLeft
-  const target = visibleTabScrollLeft(strip.scrollLeft, strip.clientWidth, tabLeft, tabRight)
-  if (target !== strip.scrollLeft) strip.scrollTo({ left: target, behavior: 'auto' })
+  const target = visibleTabScrollLeft(
+    strip.scrollLeft,
+    strip.clientWidth,
+    tabLeft,
+    tabRight
+  )
+  if (target !== strip.scrollLeft)
+    strip.scrollTo({ left: target, behavior: 'auto' })
 }

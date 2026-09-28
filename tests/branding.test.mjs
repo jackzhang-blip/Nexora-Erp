@@ -12,7 +12,7 @@ test('桌面与安装包使用可读取的同一组品牌图标', () => {
   const ico = readAsset('icon.ico')
   const icns = readAsset('icon.icns')
   const builder = readFileSync(new URL('../electron-builder.yml', import.meta.url), 'utf8')
-  const app = readFileSync(new URL('../src/renderer/src/App.vue', import.meta.url), 'utf8')
+  const brand = readFileSync(new URL('../src/renderer/src/assets/brand.ts', import.meta.url), 'utf8')
 
   // 检查真实文件头和尺寸，避免安装包配置指向损坏或过小的占位图片。
   for (const [image, width, height] of [[png, 1024, 1024], [tray, 64, 64]]) {
@@ -25,5 +25,5 @@ test('桌面与安装包使用可读取的同一组品牌图标', () => {
   assert.match(builder, /icon: resources\/icon\.icns/)
   assert.match(builder, /icon: resources\/icon\.ico/)
   assert.match(builder, /resources\/tray\.png/)
-  assert.match(app, /resources\/icon\.png/)
+  assert.match(brand, /resources\/icon\.png/)
 })

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { closeRoute, openRoute, permittedOpenedRoutes } from '../src/renderer/src/workspace-routes.ts'
+import { closeRoute, openRoute, permittedOpenedRoutes } from '../src/renderer/src/router/workspace-routes.ts'
 
 test('按首次打开顺序记录页面，重复打开不新增标签', () => {
   const opened = openRoute(openRoute(openRoute([], 'stock'), 'boms'), 'stock')

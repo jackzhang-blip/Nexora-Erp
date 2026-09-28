@@ -1,0 +1,14 @@
+// 启动、登录与工作台的可见阶段共用同一组状态值。
+export type Screen =
+  | 'loading'
+  | 'welcome'
+  | 'manual'
+  | 'scan'
+  | 'results'
+  | 'create'
+  | 'trust'
+  | 'ready'
+  | 'offline'
+  | 'setup'
+  | 'login'
+  | 'app'
