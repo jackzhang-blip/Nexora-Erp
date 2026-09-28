@@ -103,6 +103,12 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   await callBackend('reversePaymentRecord', { paymentId: 11, reason: '误录' })
   assert.equal(calls[19].path, '/api/v1/finance/payment-records/11/reverse')
   await assert.rejects(callBackend('reversePaymentRecord', { paymentId: '../users', reason: '误录' }), /记录编号无效/)
+  // 生产 BOM 的启停用也只能使用受限的路径和编号。
+  await callBackend('boms', undefined)
+  assert.equal(calls[20].path, '/api/v1/boms')
+  await callBackend('activateBom', { bomId: 12 })
+  assert.equal(calls[21].path, '/api/v1/boms/12/activate')
+  await assert.rejects(callBackend('retireBom', { bomId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('confirmSalesOrder', { orderId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('updateRole', { code: '../users', label: '错误', permissions: [] }), /角色代码无效/)
   await assert.rejects(callBackend('postReceipt', { receiptId: '../users' }), /记录编号无效/)

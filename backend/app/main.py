@@ -21,6 +21,7 @@ from .inventory import require_warehouse, router as inventory_router
 from .purchase import (linked_order_for_receipt, order_receipt_lines,
                        router as purchase_router, update_order_receipt_status, validate_receipt_post)
 from .purchase_returns import returned_quantity as purchase_returned_quantity, router as purchase_returns_router
+from .production import router as production_router
 from .sales import router as sales_router
 from .sales_returns import router as sales_returns_router
 from .stocktake import router as stocktake_router
@@ -67,6 +68,7 @@ app.include_router(inventory_router)
 app.include_router(purchase_router)
 app.include_router(purchase_returns_router)
 app.include_router(finance_router)
+app.include_router(production_router)
 app.include_router(stocktake_router)
 app.include_router(sales_router)
 app.include_router(sales_returns_router)
