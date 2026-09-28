@@ -71,6 +71,10 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   await callBackend('confirmPurchaseOrder', { orderId: 9 })
   assert.equal(calls[8].path, '/api/v1/purchase-orders/9/confirm')
   await assert.rejects(callBackend('cancelPurchaseOrder', { orderId: '../users' }), /记录编号无效/)
+  // 盘点确认与取消均使用受限的单据编号，不允许页面提供任意接口路径。
+  await callBackend('postStocktake', { stocktakeId: 4 })
+  assert.equal(calls[9].path, '/api/v1/stocktakes/4/post')
+  await assert.rejects(callBackend('cancelStocktake', { stocktakeId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('updateRole', { code: '../users', label: '错误', permissions: [] }), /角色代码无效/)
   await assert.rejects(callBackend('postReceipt', { receiptId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('unknown-operation', undefined), /不允许的业务操作/)

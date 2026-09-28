@@ -131,6 +131,10 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'transfers': return { method: 'GET', path: '/api/v1/transfers' }
     case 'createTransfer': return { method: 'POST', path: '/api/v1/transfers', body: payload }
     case 'postTransfer': return { method: 'POST', path: `/api/v1/transfers/${positiveId(payload, 'transferId')}/post` }
+    case 'stocktakes': return { method: 'GET', path: '/api/v1/stocktakes' }
+    case 'createStocktake': return { method: 'POST', path: '/api/v1/stocktakes', body: payload }
+    case 'postStocktake': return { method: 'POST', path: `/api/v1/stocktakes/${positiveId(payload, 'stocktakeId')}/post` }
+    case 'cancelStocktake': return { method: 'POST', path: `/api/v1/stocktakes/${positiveId(payload, 'stocktakeId')}/cancel` }
     case 'stock': return { method: 'GET', path: payload && typeof payload === 'object' && 'warehouseId' in payload && payload.warehouseId !== undefined
       ? `/api/v1/stock?warehouse_id=${positiveId(payload, 'warehouseId')}` : '/api/v1/stock' }
     case 'movements': return { method: 'GET', path: '/api/v1/movements' }

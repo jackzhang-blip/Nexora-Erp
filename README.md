@@ -1,6 +1,6 @@
 # Nexora ERP（联光 ERP）
 
-面向企业内部的桌面 ERP。当前版本已具备用户与角色权限管理、物料与供应商、采购订单及分批入库、多仓库库存与调拨流水，以及局域网服务端的创建、发现和连接。
+面向企业内部的桌面 ERP。当前版本已具备用户与角色权限管理、物料与供应商、采购订单及分批入库、多仓库库存、调拨与盘点流水，以及局域网服务端的创建、发现和连接。
 
 ## 当前工作方式
 
@@ -53,9 +53,9 @@ npm run build
 - 管理员可停用账号、重置密码并配置自定义角色的权限；修改密码后旧登录立即失效。系统始终保留至少一位启用的内置管理员。
 - 服务端为每个实例生成独立 HTTPS 证书，私钥保存在数据目录。使用成组备份命令保存 `nexora.db`、`server.crt` 和 `server.key`；丢失私钥会要求客户端重新核验身份。
 - 采购订单确认后可关联多张入库单，服务端按已确认入库量计算剩余数量并阻止超量；没有关联订单的旧入库流程继续可用。
-- 一张入库单或调拨单只允许确认一次。确认状态与库存流水在同一个事务中写入，当前库存可按仓库或全部仓库从流水汇总；调拨前检查来源仓库可用量。
+- 一张入库单、调拨单或盘点单只允许确认一次。确认状态与库存流水在同一个事务中写入，当前库存可按仓库或全部仓库从流水汇总；调拨前检查来源仓库可用量。盘点在建单时保存账面量，确认前如有库存变化须重新盘点。
 - 切换服务端会退出当前账号；不同服务端的数据保持独立，不会自动合并。
 
 ## English summary
 
-Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, user and role administration, purchase orders and partial receipts, multi-warehouse stock, transfers, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Packaged hosts use an OS service; remote clients require a live connection. Offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Cross-platform device acceptance remains pending.
+Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, user and role administration, purchase orders and partial receipts, multi-warehouse stock, transfers, stocktakes, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Packaged hosts use an OS service; remote clients require a live connection. Offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Cross-platform device acceptance remains pending.
