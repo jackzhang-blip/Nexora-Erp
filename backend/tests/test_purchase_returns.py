@@ -39,6 +39,7 @@ def test_purchase_returns_source_and_inventory(monkeypatch, tmp_path):
         payload = {"receipt_id": receipt_id, "reason": "质量问题",
                    "lines": [{"receipt_line_id": line_id, "quantity": "1.125"}]}
         assert client.post(f"{base}/purchase-returns", headers=buyer, json=payload).status_code == 409
+
         client.post(f"{base}/receipts/{receipt_id}/post", headers=warehouse)
         assert client.post(f"{base}/purchase-returns", headers=viewer, json=payload).status_code == 403
         assert client.post(f"{base}/purchase-returns", headers=buyer, json={
@@ -59,6 +60,10 @@ def test_purchase_returns_source_and_inventory(monkeypatch, tmp_path):
         assert first.status_code == 201
         first_id = first.json()["id"]
         assert first.json()["total_amount"] == "11.25"
+        assert client.post(f"{base}/purchase-returns/{first_id}/reverse", headers=admin,
+                           json={"reason": "草稿不可冲销"}).status_code == 409
+        assert client.post(f"{base}/purchase-returns/99999/reverse", headers=admin,
+                           json={"reason": "不存在"}).status_code == 404
         # 两张草稿都可先保存，确认时仍须在写锁下重新核对可退数量。
         stale = client.post(f"{base}/purchase-returns", headers=buyer, json={
             **payload, "lines": [{"receipt_line_id": line_id, "quantity": "2.125"}]}).json()["id"]
@@ -99,6 +104,32 @@ def test_purchase_returns_source_and_inventory(monkeypatch, tmp_path):
         assert client.get(f"{base}/receipts", headers=viewer).json()[1]["lines"][0]["returnable_quantity"] == "0.000"
         assert client.post(f"{base}/purchase-returns", headers=buyer, json=payload).status_code == 409
 
+        # 冲销原退货后恢复原仓库存、采购净入库量和应付；原退货来源仍可追溯。
+        reverse_url = f"{base}/purchase-returns/{first_id}/reverse"
+        assert client.post(reverse_url, headers=buyer, json={"reason": "误退"}).status_code == 403
+        assert client.post(reverse_url, headers=admin, json={"reason": "   "}).status_code == 422
+        result = client.post(reverse_url, headers=admin, json={"reason": "供应商未收货"})
+        assert result.status_code == 201
+        assert result.json()["reversal_reason"] == "供应商未收货"
+        assert result.json()["reversed_by_name"] == "admin"
+        assert client.post(reverse_url, headers=admin, json={"reason": "重复"}).status_code == 409
+        assert client.get(f"{base}/stock?warehouse_id=1", headers=viewer).json()[0]["quantity"] == "1.125"
+        assert client.get(f"{base}/receipts", headers=viewer).json()[1]["lines"][0]["returnable_quantity"] == "1.125"
+        order_data = client.get(f"{base}/purchase-orders", headers=viewer).json()[0]
+        assert order_data["lines"][0]["returned_quantity"] == "1.000"
+        assert order_data["lines"][0]["net_received_quantity"] == "1.125"
+        ledger = client.get(f"{base}/finance/receivables-payables", headers=admin).json()
+        assert ledger["payable_amount"] == "11.25"
+        assert {item["source_type"] for item in ledger["entries"]} == {
+            "receipt", "purchase_return", "purchase_return_reversal"}
+        movement = client.get(f"{base}/movements", headers=viewer).json()[0]
+        assert movement["source_type"] == "purchase_return_reversal"
+        assert movement["purchase_return_reversal_id"] == result.json()["reversal_id"]
+        corrected = client.post(f"{base}/purchase-returns", headers=buyer, json=payload)
+        assert corrected.status_code == 201
+        assert client.post(f"{base}/purchase-returns/{corrected.json()['id']}/post",
+                           headers=warehouse).status_code == 200
+
         # 不关联采购订单的旧式入库不应被错误地当作零价退货。
         legacy_receipt_id = client.get(f"{base}/receipts", headers=viewer).json()[0]["id"]
         assert client.post(f"{base}/receipts/{legacy_receipt_id}/post", headers=warehouse).status_code == 200
@@ -108,3 +139,10 @@ def test_purchase_returns_source_and_inventory(monkeypatch, tmp_path):
             "lines": [{"receipt_line_id": legacy["lines"][0]["id"], "quantity": "1"}]})
         assert unpriced.status_code == 201
         assert unpriced.json()["total_amount"] is None
+        assert client.post(f"{base}/purchase-returns/{unpriced.json()['id']}/post",
+                           headers=warehouse).status_code == 200
+        assert client.post(f"{base}/purchase-returns/{unpriced.json()['id']}/reverse",
+                           headers=admin, json={"reason": "无需退货"}).status_code == 201
+        unpriced_entries = client.get(f"{base}/finance/receivables-payables", headers=admin).json()["entries"]
+        assert {item["source_type"] for item in unpriced_entries if item["amount"] is None} == {
+            "receipt", "purchase_return", "purchase_return_reversal"}

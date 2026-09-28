@@ -358,6 +358,7 @@ def list_permissions(_: dict = Depends(require("users.manage"))) -> list[dict]:
               "shipment.cancel": "取消出库草稿", "sales_return.create": "创建销售退货单",
               "sales_return.post": "确认销售退货", "sales_return.cancel": "取消销售退货草稿",
               "sales_return.reverse": "冲销已确认销售退货"}
+    labels["purchase_return.reverse"] = "冲销已确认采购退货"
     with connection() as db:
         return [{"code": row[0], "label": labels.get(row[0], row[0])}
                 for row in db.execute("SELECT code FROM permissions ORDER BY code")]
@@ -589,6 +590,7 @@ def list_movements(_: dict = Depends(require("inventory.view"))) -> list[dict]:
                    CASE WHEN sm.source_type = 'sales_return' THEN sm.source_id END AS sales_return_id,
                    CASE WHEN sm.source_type = 'sales_return_reversal' THEN sm.source_id END AS sales_return_reversal_id,
                    CASE WHEN sm.source_type = 'purchase_return' THEN sm.source_id END AS purchase_return_id,
+                   CASE WHEN sm.source_type = 'purchase_return_reversal' THEN sm.source_id END AS purchase_return_reversal_id,
                    CASE WHEN sm.source_type = 'material_issue' THEN sm.source_id END AS material_issue_id,
                    CASE WHEN sm.source_type = 'material_return' THEN sm.source_id END AS material_return_id,
                    CASE WHEN sm.source_type = 'production_completion' THEN sm.source_id END AS production_completion_id,
