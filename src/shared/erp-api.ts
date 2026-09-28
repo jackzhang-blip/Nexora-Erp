@@ -40,6 +40,11 @@ export interface Receipt {
   posted_by: number | null
   created_at: string
   posted_at: string | null
+  reversal_id: number | null
+  reversal_reason: string | null
+  reversed_by: number | null
+  reversed_by_name: string | null
+  reversed_at: string | null
   lines: ReceivedLine[]
 }
 // 已入库数量由服务端按确认单据汇总，前端只展示而不自行累计。
@@ -103,7 +108,7 @@ export interface FinancialEntry {
   kind: 'receivable' | 'payable'
   party_id: number
   party_name: string
-  source_type: 'shipment' | 'sales_return' | 'sales_return_reversal' | 'receipt' | 'purchase_return' | 'purchase_return_reversal'
+  source_type: 'shipment' | 'sales_return' | 'sales_return_reversal' | 'receipt' | 'receipt_reversal' | 'purchase_return' | 'purchase_return_reversal'
   source_id: number
   source_line_id: number
   order_id: number | null
@@ -485,10 +490,11 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'sales_return' | 'sales_return_reversal' | 'purchase_return' | 'purchase_return_reversal' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
+  source_type: 'receipt' | 'receipt_reversal' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'sales_return' | 'sales_return_reversal' | 'purchase_return' | 'purchase_return_reversal' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
   source_id: number
   source_line_id: number
   receipt_id: number | null
+  receipt_reversal_id: number | null
   transfer_id: number | null
   transfer_reversal_id: number | null
   stocktake_id: number | null
@@ -536,6 +542,7 @@ export interface ErpOperations {
     output: Receipt
   }
   postReceipt: { input: { receiptId: number }; output: Receipt }
+  reverseReceipt: { input: { receiptId: number; reason: string }; output: Receipt }
   purchaseReturns: { input: undefined; output: PurchaseReturn[] }
   receivablesPayables: { input: undefined; output: ReceivablesPayables }
   financeOverview: { input: undefined; output: FinanceOverview }
