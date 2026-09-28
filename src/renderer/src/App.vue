@@ -96,6 +96,7 @@ const costReversalReasons = ref<Record<number, string>>({})
 const warehouseForm = ref({ code: '', name: '' })
 const transferForm = ref({ from_warehouse_id: 1, to_warehouse_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const stocktakeForm = ref({ warehouse_id: 1, reference: '', lines: [{ material_id: 0, counted_quantity: '0' }] })
+const stocktakeReversalReasons = ref<Record<number, string>>({})
 const customerForm = ref({ name: '' })
 const salesForm = ref({ customer_id: 0, reference: '',
   lines: [{ material_id: 0, quantity: '1', unit_price: '0' }] })
@@ -162,6 +163,7 @@ function movementSource(item: Movement): string {
   if (item.receipt_id !== null) return `入库单 #${item.receipt_id}`
   if (item.transfer_id !== null) return `调拨单 #${item.transfer_id}`
   if (item.stocktake_id !== null) return `盘点单 #${item.stocktake_id}`
+  if (item.stocktake_reversal_id !== null) return `盘点冲销单 #${item.stocktake_reversal_id}`
   if (item.shipment_id !== null) return `出库单 #${item.shipment_id}`
   if (item.sales_return_id !== null) return `销售退货单 #${item.sales_return_id}`
   if (item.purchase_return_id !== null) return `采购退货单 #${item.purchase_return_id}`
@@ -670,6 +672,15 @@ async function cancelStocktake(stocktakeId: number): Promise<void> {
   if (!window.nexora) return
   await perform(() => window.nexora!.callApi('cancelStocktake', { stocktakeId }),
     `盘点单 #${stocktakeId} 已取消。`)
+}
+
+async function reverseStocktake(stocktakeId: number): Promise<void> {
+  if (!window.nexora) return
+  const reason = stocktakeReversalReasons.value[stocktakeId] ?? ''
+  await perform(async () => {
+    await window.nexora!.callApi('reverseStocktake', { stocktakeId, reason })
+    delete stocktakeReversalReasons.value[stocktakeId]
+  }, `盘点单 #${stocktakeId} 已冲销，反向差异已记入库存流水。`)
 }
 
 async function createCustomer(): Promise<void> {
@@ -1411,7 +1422,7 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
             </form>
           </div>
           <div class="card"><div class="section-heading"><div><p class="eyebrow">COUNT RECORDS</p><h2>盘点记录</h2></div></div><div v-if="!stocktakes.length" class="muted">暂无盘点单。</div>
-            <article v-for="item in stocktakes" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已确认' : item.status === 'cancelled' ? '已取消' : '待确认' }}</span><button v-if="item.status === 'draft' && can('stocktake.post')" class="primary small" type="button" :disabled="busy" @click="postStocktake(item.id)">确认差异</button><button v-if="item.status === 'draft' && can('stocktake.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelStocktake(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} · 账面 {{ line.book_quantity }} → 实盘 {{ line.counted_quantity }} {{ line.unit }} · 差异 {{ line.difference }}</span></div></article>
+            <article v-for="item in stocktakes" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.reversal_id ? '已冲销' : item.status === 'posted' ? '已确认' : item.status === 'cancelled' ? '已取消' : '待确认' }}</span><button v-if="item.status === 'draft' && can('stocktake.post')" class="primary small" type="button" :disabled="busy" @click="postStocktake(item.id)">确认差异</button><button v-if="item.status === 'draft' && can('stocktake.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelStocktake(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} · 账面 {{ line.book_quantity }} → 实盘 {{ line.counted_quantity }} {{ line.unit }} · 差异 {{ line.difference }}</span><span v-if="item.reversal_id">冲销 #{{ item.reversal_id }} · {{ item.reversal_reason }} · {{ item.reversed_by_name }} · {{ localTime(item.reversed_at!) }}</span></div><form v-if="item.status === 'posted' && !item.reversal_id && can('stocktake.reverse')" class="inline-form" @submit.prevent="reverseStocktake(item.id)"><label>冲销原因<input v-model.trim="stocktakeReversalReasons[item.id]" required maxlength="200" placeholder="说明原盘点差异为何需要冲销" /></label><button class="secondary small" type="submit" :disabled="busy">冲销已确认盘点</button></form></article>
           </div>
         </section>
 

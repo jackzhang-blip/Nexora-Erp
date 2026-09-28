@@ -209,6 +209,12 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'createStocktake': return { method: 'POST', path: '/api/v1/stocktakes', body: payload }
     case 'postStocktake': return { method: 'POST', path: `/api/v1/stocktakes/${positiveId(payload, 'stocktakeId')}/post` }
     case 'cancelStocktake': return { method: 'POST', path: `/api/v1/stocktakes/${positiveId(payload, 'stocktakeId')}/cancel` }
+    case 'reverseStocktake': {
+      const stocktakeId = positiveId(payload, 'stocktakeId')
+      const fields = payload as ErpOperations['reverseStocktake']['input']
+      // 冲销只允许发送原因，单据编号由主进程校验后拼接到固定路径。
+      return { method: 'POST', path: `/api/v1/stocktakes/${stocktakeId}/reverse`, body: { reason: fields.reason } }
+    }
     case 'stock': return { method: 'GET', path: payload && typeof payload === 'object' && 'warehouseId' in payload && payload.warehouseId !== undefined
       ? `/api/v1/stock?warehouse_id=${positiveId(payload, 'warehouseId')}` : '/api/v1/stock' }
     case 'movements': return { method: 'GET', path: '/api/v1/movements' }

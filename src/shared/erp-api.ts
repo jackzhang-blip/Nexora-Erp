@@ -454,6 +454,11 @@ export interface Stocktake {
   created_at: string
   posted_at: string | null
   cancelled_at: string | null
+  reversal_id: number | null
+  reversal_reason: string | null
+  reversed_by: number | null
+  reversed_by_name: string | null
+  reversed_at: string | null
   lines: StocktakeLine[]
 }
 export interface Movement {
@@ -465,12 +470,13 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'shipment' | 'sales_return' | 'purchase_return' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
+  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'sales_return' | 'purchase_return' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
   source_id: number
   source_line_id: number
   receipt_id: number | null
   transfer_id: number | null
   stocktake_id: number | null
+  stocktake_reversal_id: number | null
   shipment_id: number | null
   sales_return_id: number | null
   purchase_return_id: number | null
@@ -572,6 +578,7 @@ export interface ErpOperations {
   createStocktake: { input: { warehouse_id: number; reference: string; lines: { material_id: number; counted_quantity: string }[] }; output: Stocktake }
   postStocktake: { input: { stocktakeId: number }; output: Stocktake }
   cancelStocktake: { input: { stocktakeId: number }; output: Stocktake }
+  reverseStocktake: { input: { stocktakeId: number; reason: string }; output: Stocktake }
   stock: { input: { warehouseId?: number } | undefined; output: Stock[] }
   movements: { input: undefined; output: Movement[] }
 }
