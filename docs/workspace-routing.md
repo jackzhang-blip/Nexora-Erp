@@ -1,6 +1,6 @@
 # 工作台路由表
 
-工作台页面统一登记在 `src/renderer/src/workspace-routes.ts`。侧栏分类、页面地址和进入页面所需的**查看权限**均从该表读取。地址使用 `#` 前缀，便于 Electron 桌面页面在刷新后恢复当前模块。
+工作台页面统一登记在 `src/renderer/src/router/workspace-routes.ts`。侧栏分类、页面地址和进入页面所需的**查看权限**均从该表读取；`views/WorkspaceShell.vue` 把路由键映射到 `views/workspace/` 下按业务分组的页面组件，具体页面用途见 [工作台页面目录](../src/renderer/src/views/workspace/README.md)。地址使用 `#` 前缀，便于 Electron 桌面页面在刷新后恢复当前模块。
 
 | 分类 | 页面 | 地址 | 查看权限 |
 | --- | --- | --- | --- |

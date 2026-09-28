@@ -1,17 +1,28 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import {
-  canVisitRoute, nextExpandedGroup, resolveWorkspaceRoute, routeByKey, visibleRouteGroups, workspaceRoutes
-} from '../src/renderer/src/workspace-routes.ts'
+  canVisitRoute, nextExpandedGroup, resolveWorkspaceRoute, routeByKey, visibleRouteGroups, workspaceRouteGroups, workspaceRoutes
+} from '../src/renderer/src/router/workspace-routes.ts'
 
 test('每个工作台页面只有一个路由，且都对应实际页面', () => {
-  const app = readFileSync(new URL('../src/renderer/src/App.vue', import.meta.url), 'utf8')
-  const pageKeys = [...app.matchAll(/<section v-if="activeTab === '([^']+)'/g)].map(match => match[1])
+  const shell = readFileSync(new URL('../src/renderer/src/views/WorkspaceShell.vue', import.meta.url), 'utf8')
+  const viewImports = new Map([...shell.matchAll(/^import (\w+) from '\.\/workspace\/([^']+\.vue)'$/gm)]
+    .map(([, name, path]) => [name, path]))
+  const pageEntries = [...shell.matchAll(/^  (\w+): (\w+View),?$/gm)]
+  const pageKeys = pageEntries.map(([, key]) => key)
 
-  // 路由登记与页面必须同步，避免出现可以点击却无法打开的入口。
+  // 路由、组件映射和实际文件必须同步，避免侧栏出现空白页面。
   assert.equal(workspaceRoutes.length, 20)
   assert.deepEqual(new Set(workspaceRoutes.map(route => route.key)), new Set(pageKeys))
+  assert.match(shell, /<component :is="workspaceViews\[activeTab\]" \/>/)
+  assert.equal(viewImports.size, workspaceRoutes.length)
+  for (const [, key, component] of pageEntries) {
+    const path = viewImports.get(component)
+    const group = workspaceRouteGroups.find(entry => entry.routes.some(route => route.key === key))
+    assert.ok(path?.startsWith(`${group?.key}/`), `${key} 应放在 ${group?.key} 页面目录`)
+    assert.ok(existsSync(new URL(`../src/renderer/src/views/workspace/${path}`, import.meta.url)))
+  }
   assert.equal(new Set(workspaceRoutes.map(route => route.path)).size, workspaceRoutes.length)
   assert.ok(workspaceRoutes.every(route => route.path.startsWith('/workspace/')))
 })
@@ -41,16 +52,16 @@ test('用户管理与权限管理有独立入口，且都要求用户管理权�
     ['用户管理', '权限管理'])
   assert.equal(resolveWorkspaceRoute('#/workspace/roles', ['users.manage']).key, 'roles')
 
-  const app = readFileSync(new URL('../src/renderer/src/App.vue', import.meta.url), 'utf8')
-  const userPage = app.match(/<section v-if="activeTab === 'users'[^>]*>([\s\S]*?)<\/section>/)?.[1]
-  const rolePage = app.match(/<section v-if="activeTab === 'roles'[^>]*>([\s\S]*?)<\/section>/)?.[1]
+  const userPage = readFileSync(new URL('../src/renderer/src/views/workspace/system/UserManagementView.vue', import.meta.url), 'utf8')
+  const rolePage = readFileSync(new URL('../src/renderer/src/views/workspace/system/RolePermissionsView.vue', import.meta.url), 'utf8')
   // 表单分属两页，防止后续修改又把角色授权塞回用户列表。
   assert.match(userPage ?? '', /@submit\.prevent="createUser"/)
   assert.doesNotMatch(userPage ?? '', /@submit\.prevent="createRole"/)
   assert.match(rolePage ?? '', /@submit\.prevent="createRole"/)
   assert.doesNotMatch(rolePage ?? '', /@submit\.prevent="createUser"/)
   // 新建角色不能在管理员勾选前就带有默认业务权限。
-  assert.match(app, /const newRole = ref\(\{ label: '', permissions: \[\] as string\[\] \}\)/)
+  const state = readFileSync(new URL('../src/renderer/src/store/state.ts', import.meta.url), 'utf8')
+  assert.match(state, /const newRole = ref\(\{ label: '', permissions: \[\] as string\[\] \}\)/)
 })
 
 test('权限被撤销后，当前地址也必须重新核对', () => {
@@ -71,11 +82,11 @@ test('分类默认收起，同一时间只能展开一个分类', () => {
 })
 
 test('收起的页面入口不可聚焦，动效遵循减少动态效果设置', () => {
-  const app = readFileSync(new URL('../src/renderer/src/App.vue', import.meta.url), 'utf8')
+  const sidebar = readFileSync(new URL('../src/renderer/src/components/WorkspaceSidebar.vue', import.meta.url), 'utf8')
   const style = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
 
   // 内容保留在 DOM 中完成收起动画时，必须同步关闭交互与辅助技术访问。
-  assert.match(app, /class="nav-panel"[^>]*:aria-hidden="expandedGroupKey !== group\.key"[^>]*:inert="expandedGroupKey !== group\.key \? true : undefined"/)
+  assert.match(sidebar, /class="nav-panel"[\s\S]*?:aria-hidden="expandedGroupKey !== group\.key"[\s\S]*?:inert="expandedGroupKey !== group\.key \? true : undefined"/)
   assert.match(style, /\.nav-panel \{[^}]*grid-template-rows: 0fr;[^}]*transition: grid-template-rows/)
   assert.match(style, /\.nav-panel\.expanded \{ grid-template-rows: 1fr;/)
   assert.match(style, /@media \(prefers-reduced-motion: reduce\) \{[^}]*\}[^}]*\.nav-panel[^}]*transition: none;/)

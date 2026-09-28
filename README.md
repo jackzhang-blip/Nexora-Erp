@@ -26,6 +26,8 @@ Windows 可把 `python3` 改为 `python`。如果 Python 不在默认路径，�
 
 渲染页面已接入 Naive UI 和 Tailwind CSS 4。Vue 组件可从 `naive-ui` 按需导入；`App.vue` 的 `NConfigProvider` 统一提供中文语言与主题色。Tailwind 工具类可直接写在 Vue 模板中，入口为 `src/renderer/src/style.css`。项目保留原有基础样式，因此未启用 Tailwind Preflight 全局重置。
 
+前端目录按职责组织：`views/` 放启动、登录及按业务分组的工作台页面，`components/` 放共享侧栏与标签栏，`store/` 放会话状态、数据刷新和各业务操作，`router/` 放地址与权限规则，`utils/` 放纯工具函数，`assets/` 引用窗口品牌资源，`i18n/` 保存启动引导的中文文案。当前界面只提供中文；增加其他语言时需补齐所有页面文案，不能仅凭目录存在宣称已支持多语言。各页面的文件位置和用途见 [启动引导页面目录](src/renderer/src/views/onboarding/README.md)与[工作台页面目录](src/renderer/src/views/workspace/README.md)。
+
 界面图标使用 [Remix Icon](https://icones.js.org/collection/ri)。在 Vue 组件中按需导入，例如 `import IconRefreshLine from '~icons/ri/refresh-line'`；构建时将 SVG 编入页面，运行时无需请求在线图标服务。
 
 品牌标志使用 `resources/nexora-nexus-aurora-logo.png`。需要重新生成 macOS、Windows 和托盘图标时，安装 Pillow 后运行 `python3 scripts/create-icons.py`；页面页眉与侧栏使用生成的 `resources/icon.png`。

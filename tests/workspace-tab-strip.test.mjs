@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { scrollActiveTabIntoView, visibleTabScrollLeft } from '../src/renderer/src/workspace-tab-strip.ts'
+import { scrollActiveTabIntoView, visibleTabScrollLeft } from '../src/renderer/src/utils/workspace-tab-strip.ts'
 
 // 同时覆盖新增标签向右跟随和切回旧标签向左跟随，防止页面栏停在原位置。
 test('新标签超出右边界时滚到可见位置', () => {

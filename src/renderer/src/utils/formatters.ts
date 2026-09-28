@@ -1,0 +1,73 @@
+import type {
+  FinancialEntry,
+  Movement,
+  PaymentRecord
+} from '../../../shared/erp-api'
+
+// 格式化只依赖输入数据，页面和测试可直接复用。
+export function displayError(cause: unknown): string {
+  const message = cause instanceof Error ? cause.message : '操作失败'
+  return message.replace(/^Error invoking remote method '[^']+': Error: /, '')
+}
+
+export function localTime(value: string): string {
+  // SQLite 的 CURRENT_TIMESTAMP 是 UTC，展示时换算成用户设备的本地时区。
+  const date = new Date(value.replace(' ', 'T') + 'Z')
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString('zh-CN', { hour12: false })
+}
+
+export function movementSource(item: Movement): string {
+  // 所有库存变动都显示原始业务单据，便于从数量追溯到责任操作。
+  if (item.receipt_id !== null) return `入库单 #${item.receipt_id}`
+  if (item.receipt_reversal_id !== null)
+    return `入库冲销单 #${item.receipt_reversal_id}`
+  if (item.transfer_id !== null) return `调拨单 #${item.transfer_id}`
+  if (item.transfer_reversal_id !== null)
+    return `调拨冲销单 #${item.transfer_reversal_id}`
+  if (item.stocktake_id !== null) return `盘点单 #${item.stocktake_id}`
+  if (item.stocktake_reversal_id !== null)
+    return `盘点冲销单 #${item.stocktake_reversal_id}`
+  if (item.shipment_id !== null) return `出库单 #${item.shipment_id}`
+  if (item.shipment_reversal_id !== null)
+    return `出库冲销单 #${item.shipment_reversal_id}`
+  if (item.sales_return_id !== null)
+    return `销售退货单 #${item.sales_return_id}`
+  if (item.sales_return_reversal_id !== null)
+    return `销售退货冲销单 #${item.sales_return_reversal_id}`
+  if (item.purchase_return_id !== null)
+    return `采购退货单 #${item.purchase_return_id}`
+  if (item.purchase_return_reversal_id !== null)
+    return `采购退货冲销单 #${item.purchase_return_reversal_id}`
+  if (item.material_issue_id !== null)
+    return `生产领料单 #${item.material_issue_id}`
+  if (item.material_return_id !== null)
+    return `生产退料单 #${item.material_return_id}`
+  if (item.production_completion_id !== null)
+    return `生产完工单 #${item.production_completion_id}`
+  if (item.production_completion_reversal_id !== null)
+    return `生产完工冲销单 #${item.production_completion_reversal_id}`
+  return `流水 #${item.id}`
+}
+
+export function financialSource(item: FinancialEntry): string {
+  const names = {
+    shipment: '销售出库',
+    shipment_reversal: '销售出库冲销',
+    sales_return: '销售退货',
+    sales_return_reversal: '销售退货冲销',
+    receipt: '采购入库',
+    receipt_reversal: '采购入库冲销',
+    purchase_return: '采购退货',
+    purchase_return_reversal: '采购退货冲销'
+  }
+  return `${names[item.source_type]} #${item.source_id}`
+}
+
+export function paymentActionLabel(item: PaymentRecord): string {
+  if (item.action === 'reversal') return '冲销'
+  if (item.kind === 'receivable')
+    return item.action === 'settlement' ? '客户收款' : '客户退款'
+  return item.action === 'settlement' ? '供应商付款' : '供应商退款'
+}
