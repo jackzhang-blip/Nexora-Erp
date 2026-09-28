@@ -32,6 +32,8 @@ Windows 可把 `python3` 改为 `python`。如果 Python 不在默认路径，�
 
 新增或修改前端界面时，请遵循 [前端 UI 开发规范](docs/frontend-ui-guidelines.md)。
 
+工作台页面按仓库、基础资料、采购、销售、财务、生产及系统分类；各页面地址与查看权限见 [工作台路由表](docs/workspace-routing.md)。
+
 完整财务、质量、售后、CRM 等后续模块的现状、候选顺序和进入条件见 [ERP 后续模块评估](docs/erp-expansion-assessment.md)；该文档不代表相应功能已实现。
 
 常用检查：
@@ -40,6 +42,7 @@ Windows 可把 `python3` 改为 `python`。如果 Python 不在默认路径，�
 PYTHONPATH=backend python3 -m pytest backend/tests -q
 node --experimental-strip-types --test tests/backend.test.mjs
 node --test tests/branding.test.mjs
+node --experimental-strip-types --test tests/workspace-routes.test.mjs
 npm run build
 ```
 
