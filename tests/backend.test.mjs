@@ -84,6 +84,12 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   await callBackend('postSalesReturn', { returnId: 7 })
   assert.equal(calls[12].path, '/api/v1/sales-returns/7/post')
   await assert.rejects(callBackend('cancelSalesReturn', { returnId: '../users' }), /记录编号无效/)
+  // 采购退货也必须固定接口路径，并拒绝伪造的单据编号。
+  await callBackend('purchaseReturns', undefined)
+  assert.equal(calls[13].path, '/api/v1/purchase-returns')
+  await callBackend('postPurchaseReturn', { returnId: 8 })
+  assert.equal(calls[14].path, '/api/v1/purchase-returns/8/post')
+  await assert.rejects(callBackend('cancelPurchaseReturn', { returnId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('confirmSalesOrder', { orderId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('updateRole', { code: '../users', label: '错误', permissions: [] }), /角色代码无效/)
   await assert.rejects(callBackend('postReceipt', { receiptId: '../users' }), /记录编号无效/)

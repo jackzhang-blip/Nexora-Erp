@@ -126,6 +126,11 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'receipts': return { method: 'GET', path: '/api/v1/receipts' }
     case 'createReceipt': return { method: 'POST', path: '/api/v1/receipts', body: payload }
     case 'postReceipt': return { method: 'POST', path: `/api/v1/receipts/${positiveId(payload, 'receiptId')}/post` }
+    // 采购退货单编号只能通过正整数校验后进入固定路径。
+    case 'purchaseReturns': return { method: 'GET', path: '/api/v1/purchase-returns' }
+    case 'createPurchaseReturn': return { method: 'POST', path: '/api/v1/purchase-returns', body: payload }
+    case 'postPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/post` }
+    case 'cancelPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/cancel` }
     case 'purchaseOrders': return { method: 'GET', path: '/api/v1/purchase-orders' }
     case 'createPurchaseOrder': return { method: 'POST', path: '/api/v1/purchase-orders', body: payload }
     case 'confirmPurchaseOrder': return { method: 'POST', path: `/api/v1/purchase-orders/${positiveId(payload, 'orderId')}/confirm` }

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from .database import connection
+from .purchase_returns import returned_quantity as purchase_returned_quantity
 from .security import require
 
 router = APIRouter(prefix="/api/v1")
@@ -49,6 +50,13 @@ def received_quantity(db: sqlite3.Connection, order_line_id: int) -> Decimal:
     """, (order_line_id,))), Decimal(0))
 
 
+def returned_quantity(db: sqlite3.Connection, order_line_id: int) -> Decimal:
+    # 原订单的已入库量保持毛额；退供应商数量另外展示，避免历史状态漂移。
+    return sum((purchase_returned_quantity(db, row[0]) for row in db.execute("""
+        SELECT link.receipt_line_id FROM receipt_order_links link
+        WHERE link.purchase_order_line_id = ?""", (order_line_id,))), Decimal(0))
+
+
 def order_data(db: sqlite3.Connection, order_id: int) -> dict:
     row = db.execute("""SELECT po.*, s.name AS supplier_name,
         u.username AS created_by_name FROM purchase_orders po
@@ -65,9 +73,11 @@ def order_data(db: sqlite3.Connection, order_id: int) -> dict:
         quantity = Decimal(entry["quantity"])
         price = Decimal(entry["unit_price"])
         received = received_quantity(db, entry["id"])
+        returned = returned_quantity(db, entry["id"])
         line_total = (quantity * price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         total += line_total
         lines.append({**dict(entry), "received_quantity": str(received),
+                      "returned_quantity": str(returned), "net_received_quantity": str(received - returned),
                       "remaining_quantity": str(quantity - received), "line_total": str(line_total)})
     return {**dict(row), "lines": lines, "total_amount": str(total)}
 
