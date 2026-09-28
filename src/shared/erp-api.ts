@@ -293,7 +293,7 @@ export interface ProductionCompletion {
   rejected_quantity: string | null
   reference: string
   qc_note: string
-  status: 'draft' | 'inspected' | 'posted' | 'cancelled'
+  status: 'draft' | 'inspected' | 'posted' | 'reversed' | 'cancelled'
   created_by: number
   created_by_name: string
   inspected_by: number | null
@@ -304,6 +304,11 @@ export interface ProductionCompletion {
   inspected_at: string | null
   posted_at: string | null
   cancelled_at: string | null
+  reversal_id: number | null
+  reversal_reason: string | null
+  reversed_by: number | null
+  reversed_by_name: string | null
+  reversed_at: string | null
 }
 // 销售订单剩余量由已确认的出库单计算，草稿不会预先扣减。
 export interface SalesOrderLine extends ReceiptLine {
@@ -418,7 +423,7 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'shipment' | 'sales_return' | 'purchase_return' | 'material_issue' | 'material_return' | 'production_completion'
+  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'shipment' | 'sales_return' | 'purchase_return' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
   source_id: number
   source_line_id: number
   receipt_id: number | null
@@ -430,6 +435,7 @@ export interface Movement {
   material_issue_id: number | null
   material_return_id: number | null
   production_completion_id: number | null
+  production_completion_reversal_id: number | null
   created_by: number | null
   created_at: string
 }
@@ -493,6 +499,7 @@ export interface ErpOperations {
   inspectProductionCompletion: { input: { completionId: number; accepted_quantity: string; qc_note: string }; output: ProductionCompletion }
   postProductionCompletion: { input: { completionId: number }; output: ProductionCompletion }
   cancelProductionCompletion: { input: { completionId: number }; output: ProductionCompletion }
+  reverseProductionCompletion: { input: { completionId: number; reason: string }; output: ProductionCompletion }
   createPurchaseReturn: { input: { receipt_id: number; reason: string; lines: { receipt_line_id: number; quantity: string }[] }; output: PurchaseReturn }
   postPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   cancelPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }

@@ -128,3 +128,55 @@ def test_completion_quality_gate_and_partial_stock(monkeypatch, tmp_path):
         assert client.post(f"{base}/production-completions", headers=planner, json=payload).status_code == 409
         stock = client.get(f"{base}/stock?warehouse_id={target_warehouse}", headers=admin).json()
         assert next(item for item in stock if item["id"] == product)["quantity"] == "1.5"
+
+        # 已确认完工须用独立冲销单更正；库存被调走时不得把原仓扣成负数。
+        reverse_url = f"{base}/production-completions/{final}/reverse"
+        assert client.post(reverse_url, headers=planner, json={"reason": "误报"}).status_code == 403
+        assert client.post(reverse_url, headers=warehouse, json={"reason": "误报"}).status_code == 403
+        assert client.post(reverse_url, headers=admin, json={"reason": "  "}).status_code == 422
+        transfer = client.post(f"{base}/transfers", headers=admin, json={
+            "from_warehouse_id": target_warehouse, "to_warehouse_id": 1,
+            "lines": [{"material_id": product, "quantity": "1"}]}).json()["id"]
+        assert client.post(f"{base}/transfers/{transfer}/post", headers=admin).status_code == 200
+        before = len(client.get(f"{base}/movements", headers=admin).json())
+        assert client.post(reverse_url, headers=admin, json={"reason": "质检数量录错"}).status_code == 409
+        assert len(client.get(f"{base}/movements", headers=admin).json()) == before
+        back = client.post(f"{base}/transfers", headers=admin, json={
+            "from_warehouse_id": 1, "to_warehouse_id": target_warehouse,
+            "lines": [{"material_id": product, "quantity": "1"}]}).json()["id"]
+        assert client.post(f"{base}/transfers/{back}/post", headers=admin).status_code == 200
+        reversed_result = client.post(reverse_url, headers=admin, json={"reason": "  质检数量录错  "})
+        assert reversed_result.status_code == 200
+        assert reversed_result.json()["status"] == "reversed"
+        assert reversed_result.json()["reversal_reason"] == "质检数量录错"
+        assert reversed_result.json()["reversed_by_name"] == "admin"
+        assert client.post(reverse_url, headers=admin, json={"reason": "重复"}).status_code == 409
+        movement = client.get(f"{base}/movements", headers=admin).json()[0]
+        assert movement["source_type"] == "production_completion_reversal"
+        assert movement["production_completion_reversal_id"] == reversed_result.json()["reversal_id"]
+        assert movement["quantity"] == "-1"
+        current = client.get(f"{base}/work-orders", headers=planner).json()[0]
+        assert current["status"] == "in_progress"
+        assert current["reported_quantity"] == "1"
+        assert current["remaining_output_quantity"] == "1"
+        assert current["completed_by"] is None
+        assert client.get(f"{base}/production-completions", headers=planner).json()[0]["status"] == "reversed"
+        replacement = client.post(f"{base}/production-completions", headers=planner,
+                                  json=payload).json()["id"]
+        client.post(f"{base}/production-completions/{replacement}/inspect", headers=warehouse,
+                    json={"accepted_quantity": "1", "qc_note": "重新质检合格"})
+        assert client.post(f"{base}/production-completions/{replacement}/post",
+                           headers=warehouse).status_code == 200
+        assert client.get(f"{base}/work-orders", headers=planner).json()[0]["status"] == "completed"
+        assert client.post(f"{base}/production-completions/{replacement}/reverse", headers=admin,
+                           json={"reason": "重新核验"}).status_code == 200
+        rejected = client.post(f"{base}/production-completions", headers=planner,
+                               json=payload).json()["id"]
+        client.post(f"{base}/production-completions/{rejected}/inspect", headers=warehouse,
+                    json={"accepted_quantity": "0", "qc_note": "整批不合格"})
+        assert client.post(f"{base}/production-completions/{rejected}/post",
+                           headers=warehouse).status_code == 200
+        before_zero_reversal = len(client.get(f"{base}/movements", headers=admin).json())
+        assert client.post(f"{base}/production-completions/{rejected}/reverse", headers=admin,
+                           json={"reason": "报工批次录错"}).status_code == 200
+        assert len(client.get(f"{base}/movements", headers=admin).json()) == before_zero_reversal

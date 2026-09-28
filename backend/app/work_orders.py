@@ -41,8 +41,10 @@ def issued_quantity(db: sqlite3.Connection, work_order_line_id: int) -> Decimal:
 
 
 def posted_completion_totals(db: sqlite3.Connection, order_id: int) -> tuple[Decimal, Decimal, Decimal]:
-    rows = db.execute("""SELECT reported_quantity, accepted_quantity, rejected_quantity
-        FROM production_completions WHERE work_order_id = ? AND status = 'posted'""", (order_id,))
+    rows = db.execute("""SELECT pc.reported_quantity, pc.accepted_quantity, pc.rejected_quantity
+        FROM production_completions pc WHERE pc.work_order_id = ? AND pc.status = 'posted'
+        AND NOT EXISTS (SELECT 1 FROM production_completion_reversals r
+            WHERE r.production_completion_id = pc.id)""", (order_id,))
     totals = [Decimal(0), Decimal(0), Decimal(0)]
     for row in rows:
         for index in range(3):
