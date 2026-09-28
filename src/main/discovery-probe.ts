@@ -1,4 +1,7 @@
 import { isIP } from 'node:net'
+import { networkInterfaces } from 'node:os'
+
+interface LocalInterface { address: string; netmask: string; internal: boolean }
 
 export function localAddress(address: string): boolean {
   if (isIP(address) === 4) {
@@ -16,19 +19,36 @@ export function localAddress(address: string): boolean {
 
 export async function inspectDiscoveredAddresses<T extends { id: string }>(
   addresses: readonly string[], port: number, advertisedId: string | undefined,
-  inspect: (address: string, port: number) => Promise<T>
+  inspect: (address: string, port: number) => Promise<T>,
+  interfaces: readonly LocalInterface[] = Object.values(networkInterfaces()).flatMap((entries) => entries ?? [])
 ): Promise<T | null> {
-  // 一台 Windows 主机可能同时广播物理网卡与虚拟网卡；任一地址通过证书和实例校验即可展示。
+  // 优先检查与当前非环回网卡同网段的地址，避免把可达但易变化的虚拟环回地址保存为常用连接。
   const candidates = [...new Set(addresses.filter(address => isIP(address) === 4 && localAddress(address)))]
   if (!candidates.length) return null
-  try {
-    return await Promise.any(candidates.map(async address => {
-      const profile = await inspect(address, port)
-      if (advertisedId && profile.id !== advertisedId) throw new Error('广播实例与服务端证书身份不一致')
-      return profile
-    }))
-  } catch {
-    // 所有地址均不可用时，不把未经身份校验的广播显示为可连接服务。
-    return null
+
+  const onLocalSubnet = (address: string): boolean => {
+    const parts = address.split('.').map(Number)
+    return interfaces.some((entry) => {
+      if (entry.internal || isIP(entry.address) !== 4 || isIP(entry.netmask) !== 4
+        || entry.netmask === '0.0.0.0') return false
+      const local = entry.address.split('.').map(Number)
+      const mask = entry.netmask.split('.').map(Number)
+      return parts.every((part, index) => (part & mask[index]) === (local[index] & mask[index]))
+    })
   }
+  const preferred = candidates.filter(onLocalSubnet)
+  const fallback = candidates.filter((address) => !preferred.includes(address))
+  for (const group of [preferred, fallback]) {
+    if (!group.length) continue
+    try {
+      return await Promise.any(group.map(async address => {
+        const profile = await inspect(address, port)
+        if (advertisedId && profile.id !== advertisedId) throw new Error('广播实例与服务端证书身份不一致')
+        return profile
+      }))
+    } catch {
+      // 同网段地址均不可用时再尝试其他局域网地址，不把未经核验的广播展示为在线服务。
+    }
+  }
+  return null
 }

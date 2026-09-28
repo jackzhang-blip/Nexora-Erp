@@ -19,14 +19,36 @@ test('虚拟网卡地址失败时仍尝试可达的 Windows 局域网地址', as
       visited.push([address, port])
       if (address !== '192.168.3.191') throw new Error('虚拟网卡不可达')
       return { id: 'instance-1', host: address }
-    }
+    }, [{ address: '192.168.3.5', netmask: '255.255.255.0', internal: false }]
   )
 
-  // 不让广播列表的顺序决定发现结果，也不扫描公网或重复地址。
+  // 优先核验同网段地址，不扫描公网或重复地址。
   assert.deepEqual(result, { id: 'instance-1', host: '192.168.3.191' })
-  assert.deepEqual(visited, [
-    ['169.254.39.123', 8000], ['172.29.32.1', 8000], ['192.168.3.191', 8000]
-  ])
+  assert.deepEqual(visited, [['192.168.3.191', 8000]])
+})
+
+test('同网段与虚拟地址都可达时，保存物理局域网地址', async () => {
+  const result = await inspectDiscoveredAddresses(
+    ['172.30.195.124', '192.168.3.5'], 8000, 'instance-1',
+    async address => ({ id: 'instance-1', host: address }),
+    [
+      { address: '172.30.195.124', netmask: '255.255.255.255', internal: true },
+      { address: '192.168.3.5', netmask: '255.255.255.0', internal: false }
+    ]
+  )
+  assert.equal(result?.host, '192.168.3.5')
+})
+
+test('同网段地址无法通过身份核验时，仍回退到其他局域网地址', async () => {
+  const visited = []
+  const result = await inspectDiscoveredAddresses(
+    ['192.168.3.191', '172.29.32.1'], 8000, 'expected', async address => {
+      visited.push(address)
+      return { id: address === '172.29.32.1' ? 'expected' : 'other', host: address }
+    }, [{ address: '192.168.3.5', netmask: '255.255.255.0', internal: false }]
+  )
+  assert.equal(result?.host, '172.29.32.1')
+  assert.deepEqual(visited, ['192.168.3.191', '172.29.32.1'])
 })
 
 test('广播身份不匹配时继续寻找同一实例的正确地址', async () => {
