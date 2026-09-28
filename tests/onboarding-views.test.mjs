@@ -20,3 +20,16 @@ test('启动阶段均映射到独立页面，证书与就绪页保留前置条�
   assert.match(shell, /screen\.value === 'trust' && !candidate\.value/)
   assert.match(shell, /screen\.value === 'ready' && !server\.value/)
 })
+
+test('启动页的长内容在中间滚动，底部说明保留在窗口内', () => {
+  const css = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
+  const rule = (selector) => css.match(new RegExp(`^\\${selector} \\{([^}]+)\\}`, 'm'))?.[1] ?? ''
+
+  // 三个区域的高度约束必须配套；缺少中间区域的 min-height 会再次把底栏推出视口。
+  assert.match(rule('.onboarding'), /\bheight: 100vh;/)
+  assert.match(rule('.onboarding'), /\boverflow: hidden;/)
+  assert.match(rule('.onboard-top'), /\bflex: none;/)
+  assert.match(rule('.onboard-main'), /\bmin-height: 0;/)
+  assert.match(rule('.onboard-main'), /\boverflow-y: auto;/)
+  assert.match(rule('.onboard-footer'), /\bflex: none;/)
+})
