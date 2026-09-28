@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 from .database import connection
 from .inventory import TransferLineInput, balance, require_warehouse
 from .purchase import PurchaseOrderLineInput
+from .sales_returns import returned_quantity
 from .security import require
 
 router = APIRouter(prefix="/api/v1")
@@ -46,6 +47,14 @@ def shipped_quantity(db: sqlite3.Connection, order_line_id: int) -> Decimal:
         WHERE sl.sales_order_line_id = ? AND s.status = 'posted'""", (order_line_id,))), Decimal(0))
 
 
+def returned_order_quantity(db: sqlite3.Connection, order_line_id: int) -> Decimal:
+    # 退货另记正向库存流水；订单显示已退量，但历史已出库量保持原值。
+    line_ids = [row[0] for row in db.execute("""SELECT sl.id FROM shipment_lines sl
+        JOIN shipments s ON s.id = sl.shipment_id
+        WHERE sl.sales_order_line_id = ? AND s.status = 'posted'""", (order_line_id,))]
+    return sum((returned_quantity(db, line_id) for line_id in line_ids), Decimal(0))
+
+
 def sales_order_data(db: sqlite3.Connection, order_id: int) -> dict:
     row = db.execute("""SELECT so.*, c.name AS customer_name, u.username AS created_by_name
         FROM sales_orders so JOIN customers c ON c.id = so.customer_id
@@ -61,9 +70,11 @@ def sales_order_data(db: sqlite3.Connection, order_id: int) -> dict:
         quantity = Decimal(item["quantity"])
         price = Decimal(item["unit_price"])
         shipped = shipped_quantity(db, item["id"])
+        returned = returned_order_quantity(db, item["id"])
         line_total = (quantity * price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         total += line_total
         lines.append({**dict(item), "shipped_quantity": str(shipped),
+                      "returned_quantity": str(returned), "net_delivered_quantity": str(shipped - returned),
                       "remaining_quantity": str(quantity - shipped), "line_total": str(line_total)})
     return {**dict(row), "lines": lines, "total_amount": str(total)}
 
@@ -82,7 +93,12 @@ def shipment_data(db: sqlite3.Connection, shipment_id: int) -> dict:
         JOIN sales_order_lines sol ON sol.id = sl.sales_order_line_id
         JOIN materials m ON m.id = sol.material_id WHERE sl.shipment_id = ? ORDER BY sl.id""",
         (shipment_id,)).fetchall()
-    return {**dict(row), "lines": [dict(item) for item in lines]}
+    result_lines = []
+    for item in lines:
+        returned = returned_quantity(db, item["id"])
+        result_lines.append({**dict(item), "returned_quantity": str(returned),
+                             "returnable_quantity": str(Decimal(item["quantity"]) - returned)})
+    return {**dict(row), "lines": result_lines}
 
 
 def checked_order_lines(db: sqlite3.Connection, order_id: int,
