@@ -66,6 +66,14 @@ macOS 停止服务后会等待 launchd 完全卸载同名作业，再返回停�
 
 macOS 安装包流水线另运行 `scripts/smoke-macos-backup.py`：使用安装包内服务程序启动临时 HTTPS 实例，创建测试管理员与供应商，在服务运行时备份数据库和证书，恢复到新目录并重新登录读取供应商；篡改散列值的归档必须被拒绝且不留下恢复目录。此检查覆盖打包程序的恢复链路，不代替实际主机升级、无人登录重启或跨设备验收。
 
+## 2026-09-28 Mac 已安装服务的桌面退出检查
+
+在 Apple 芯片 Mac 上检查已安装的 Nexora ERP v0.1.0：固定主机以 `system/com.nexora.erp.host` 系统 LaunchDaemon 运行，服务程序位于 `/Library/Application Support/Nexora ERP/service/nexora-server`，桌面程序位于 `/Applications/Nexora ERP.app`。这份已安装应用的准确源码提交号未记录，因此以下结果只代表该设备当前安装版本。
+
+完全退出桌面程序前，系统服务 PID 为 `63286`；使用该主机的证书校验 `https://localhost:8000/api/v1/server/info`，返回实例 ID `6b5de762-4eca-42af-bda3-dbabbacbf671` 且 `ready=true`。通过应用菜单执行“退出”后，原桌面进程 PID `63223` 已消失，系统服务仍为 `running`，PID 仍为 `63286`，同一 HTTPS 接口返回相同实例 ID 和就绪状态。此时 `_nexora._tcp` 广播仍包含服务端口 `8000` 和本机局域网地址 `192.168.3.5`。检查后已重新打开桌面窗口。
+
+这证明该设备的已安装系统服务在桌面程序完全退出后继续运行并广播；尚未从另一台设备完成连接、证书指纹核对或库存读取，也未进行无人登录重启。其他首版验收项仍按上文逐项记录。
+
 ## 2026-09-28 Windows 主机到 Mac 客户端的发现检查
 
 Windows 主机位于 `192.168.3.191:8000`，Mac 客户端位于 `192.168.3.5`。Mac 系统的 mDNS 工具能收到该 Windows 主机的 `_nexora._tcp` 广播；广播同时包含 6 个 IPv4 地址，物理网卡地址排在多个虚拟网卡地址之后。原客户端只检查首个地址，因此扫描页不显示这台主机。Mac 到主机的 TCP 连接成功，使用服务证书核验的 `GET /api/v1/server/info` 返回 HTTP 200、匹配的实例身份、版本 `0.1.0` 和已初始化状态。
