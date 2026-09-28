@@ -18,11 +18,11 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
-import type { Material, Movement, Permission, Receipt, Role, Stock, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
+import type { Material, Movement, Permission, PurchaseOrder, Receipt, Role, Stock, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
-type Tab = 'stock' | 'catalog' | 'receipts' | 'transfers' | 'users' | 'settings'
+type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'transfers' | 'users' | 'settings'
 
 // 让新增的 Naive UI 控件沿用工作台现有的青绿色主色。
 const naiveThemeOverrides: GlobalThemeOverrides = {
@@ -43,6 +43,7 @@ const suppliers = ref<Supplier[]>([])
 const stock = ref<Stock[]>([])
 const movements = ref<Movement[]>([])
 const receipts = ref<Receipt[]>([])
+const purchaseOrders = ref<PurchaseOrder[]>([])
 const warehouses = ref<Warehouse[]>([])
 const transfers = ref<Transfer[]>([])
 const selectedWarehouseId = ref(0)
@@ -55,7 +56,10 @@ const roleLabelDrafts = ref<Record<string, string>>({})
 const resetPasswords = ref<Record<number, string>>({})
 const materialForm = ref({ sku: '', name: '', unit: '件' })
 const supplierForm = ref({ name: '' })
-const receiptForm = ref({ supplier_id: 0, warehouse_id: 1, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
+const receiptForm = ref({ supplier_id: 0, warehouse_id: 1, purchase_order_id: null as number | null,
+  reference: '', lines: [{ material_id: 0, quantity: '1' }] })
+const purchaseForm = ref({ supplier_id: 0, reference: '',
+  lines: [{ material_id: 0, quantity: '1', unit_price: '0' }] })
 const warehouseForm = ref({ code: '', name: '' })
 const transferForm = ref({ from_warehouse_id: 1, to_warehouse_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const newUser = ref({ username: '', password: '', roles: ['viewer'] as string[] })
@@ -82,7 +86,7 @@ let unsubscribeDiscovery: (() => void) | null = null
 const can = (permission: string): boolean => user.value?.permissions.includes(permission) ?? false
 // 导航权限仍按原规则计算；图标与文字绑定，避免图标单独承载含义。
 const visibleTabs = computed(() => [
-  ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }] : []),
+  ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'purchase' as const, label: '采购订单', icon: IconFileList3Line }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }] : []),
   ...(can('users.manage') ? [{ key: 'users' as const, label: '用户权限', icon: IconTeamLine }] : []),
   { key: 'settings' as const, label: '连接与服务', icon: IconSettings3Line }
 ])
@@ -338,14 +342,15 @@ async function refreshData(): Promise<void> {
   if (!visibleTabs.value.some((item) => item.key === activeTab.value)) activeTab.value = visibleTabs.value[0]?.key ?? 'settings'
   // 页面只显示当前角色可访问的入口；数据访问仍以服务端授权为准。
   if (can('inventory.view')) {
-    [materials.value, suppliers.value, stock.value, receipts.value, movements.value, warehouses.value, transfers.value] = await Promise.all([
+    [materials.value, suppliers.value, stock.value, receipts.value, movements.value, warehouses.value, transfers.value, purchaseOrders.value] = await Promise.all([
       window.nexora.callApi('materials', undefined),
       window.nexora.callApi('suppliers', undefined),
       window.nexora.callApi('stock', selectedWarehouseId.value ? { warehouseId: selectedWarehouseId.value } : undefined),
       window.nexora.callApi('receipts', undefined),
       window.nexora.callApi('movements', undefined),
       window.nexora.callApi('warehouses', undefined),
-      window.nexora.callApi('transfers', undefined)
+      window.nexora.callApi('transfers', undefined),
+      window.nexora.callApi('purchaseOrders', undefined)
     ])
   }
   if (can('users.manage')) {
@@ -414,11 +419,49 @@ async function createReceipt(): Promise<void> {
     await window.nexora!.callApi('createReceipt', {
       supplier_id: receiptForm.value.supplier_id,
       warehouse_id: receiptForm.value.warehouse_id,
+      purchase_order_id: receiptForm.value.purchase_order_id,
       reference: receiptForm.value.reference,
       lines: receiptForm.value.lines.map((line) => ({ material_id: line.material_id, quantity: line.quantity }))
     })
-    receiptForm.value = { supplier_id: 0, warehouse_id: receiptForm.value.warehouse_id, reference: '', lines: [{ material_id: 0, quantity: '1' }] }
+    receiptForm.value = { supplier_id: 0, warehouse_id: receiptForm.value.warehouse_id,
+      purchase_order_id: null, reference: '', lines: [{ material_id: 0, quantity: '1' }] }
   }, '入库单草稿已创建，等待仓库员确认。')
+}
+
+function chooseReceiptOrder(): void {
+  // 关联采购订单后使用订单供应商和待入库明细，数量仍允许操作员按本批次调整。
+  const order = purchaseOrders.value.find(item => item.id === receiptForm.value.purchase_order_id)
+  if (!order) {
+    receiptForm.value.supplier_id = 0
+    receiptForm.value.lines = [{ material_id: 0, quantity: '1' }]
+    return
+  }
+  receiptForm.value.supplier_id = order.supplier_id
+  receiptForm.value.lines = order.lines.filter(line => Number(line.remaining_quantity) > 0)
+    .map(line => ({ material_id: line.material_id, quantity: line.remaining_quantity }))
+}
+
+async function createPurchaseOrder(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    await window.nexora!.callApi('createPurchaseOrder', {
+      supplier_id: purchaseForm.value.supplier_id, reference: purchaseForm.value.reference,
+      lines: purchaseForm.value.lines.map(line => ({ material_id: line.material_id,
+        quantity: line.quantity, unit_price: line.unit_price }))
+    })
+    purchaseForm.value = { supplier_id: 0, reference: '',
+      lines: [{ material_id: 0, quantity: '1', unit_price: '0' }] }
+  }, '采购订单草稿已创建。')
+}
+
+async function confirmPurchaseOrder(orderId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('confirmPurchaseOrder', { orderId }), `采购订单 #${orderId} 已确认。`)
+}
+
+async function cancelPurchaseOrder(orderId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('cancelPurchaseOrder', { orderId }), `采购订单 #${orderId} 已取消。`)
 }
 
 async function postReceipt(receiptId: number): Promise<void> {
@@ -657,9 +700,25 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
           <div class="card"><div class="section-heading"><div><p class="eyebrow">WAREHOUSES</p><h2>仓库</h2></div></div><form v-if="can('warehouse.manage')" class="inline-form" @submit.prevent="createWarehouse"><label>仓库编码<input v-model.trim="warehouseForm.code" required maxlength="40" pattern="[A-Za-z0-9_-]+" placeholder="例如 EAST" /></label><label>仓库名称<input v-model.trim="warehouseForm.name" required maxlength="80" placeholder="例如东区仓库" /></label><button class="primary" type="submit" :disabled="busy">添加仓库</button></form><div class="table-wrap"><table><thead><tr><th>编码</th><th>名称</th></tr></thead><tbody><tr v-for="item in warehouses" :key="item.id"><td class="mono">{{ item.code }}</td><td>{{ item.name }}</td></tr></tbody></table></div></div>
         </section>
 
+        <section v-if="activeTab === 'purchase'" class="stack">
+          <div v-if="can('purchase_order.create')" class="card">
+            <div class="section-heading"><div><p class="eyebrow">PURCHASE ORDER</p><h2>新建采购订单</h2></div><span class="pill">草稿</span></div>
+            <form @submit.prevent="createPurchaseOrder">
+              <div class="form-grid"><label>供应商<select v-model.number="purchaseForm.supplier_id" required><option :value="0" disabled>选择供应商</option><option v-for="item in suppliers" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>参考单号（可选）<input v-model.trim="purchaseForm.reference" maxlength="100" /></label></div>
+              <h3>采购明细</h3>
+              <div v-for="(line, index) in purchaseForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>数量<input v-model.trim="line.quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><label>单价（元）<input v-model.trim="line.unit_price" type="number" min="0" max="1000000000" step="0.0001" required /></label><button class="text-button" type="button" :disabled="purchaseForm.lines.length === 1" @click="purchaseForm.lines.splice(index, 1)">移除</button></div>
+              <div class="form-actions"><button class="secondary" type="button" @click="purchaseForm.lines.push({ material_id: 0, quantity: '1', unit_price: '0' })">添加明细</button><button class="primary" type="submit" :disabled="busy || !suppliers.length || !materials.length">保存草稿</button></div>
+            </form>
+          </div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">ORDER LOG</p><h2>采购订单</h2></div></div><div v-if="!purchaseOrders.length" class="muted">暂无采购订单。</div>
+            <article v-for="item in purchaseOrders" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.supplier_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span> · 总额 ¥{{ item.total_amount }}</p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', confirmed: '待入库', partially_received: '部分入库', received: '全部入库', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('purchase_order.confirm')" class="primary small" type="button" :disabled="busy" @click="confirmPurchaseOrder(item.id)">确认订单</button><button v-if="['draft', 'confirmed'].includes(item.status) && can('purchase_order.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelPurchaseOrder(item.id)">取消订单</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} {{ line.received_quantity }}/{{ line.quantity }} {{ line.unit }} · ¥{{ line.unit_price }}/{{ line.unit }}</span></div></article>
+          </div>
+        </section>
+
         <section v-if="activeTab === 'receipts'" class="stack">
-          <div v-if="can('receipt.create')" class="card"><div class="section-heading"><div><p class="eyebrow">PURCHASE RECEIPT</p><h2>新建入库单</h2></div><span class="pill">草稿</span></div><form @submit.prevent="createReceipt"><div class="form-grid"><label>供应商<select v-model.number="receiptForm.supplier_id" required><option :value="0" disabled>选择供应商</option><option v-for="item in suppliers" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>入库仓库<select v-model.number="receiptForm.warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>外部单号（可选）<input v-model.trim="receiptForm.reference" maxlength="100" placeholder="采购单或送货单号" /></label></div><h3>入库明细</h3><div v-for="(line, index) in receiptForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>数量<input v-model.trim="line.quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><button class="text-button" type="button" :disabled="receiptForm.lines.length === 1" @click="removeLine(index)">移除</button></div><div class="form-actions"><button class="secondary" type="button" @click="addLine">添加明细</button><button class="primary" type="submit" :disabled="busy || !materials.length || !suppliers.length">保存草稿</button></div></form></div>
-          <div class="card"><div class="section-heading"><div><p class="eyebrow">RECEIPT LOG</p><h2>入库单</h2></div></div><div v-if="!receipts.length" class="muted">暂无入库单。</div><article v-for="item in receipts" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.supplier_name }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已入库' : '待确认' }}</span><button v-if="item.status === 'draft' && can('receipt.post')" class="primary small" type="button" :disabled="busy" @click="postReceipt(item.id)">确认入库</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article></div>
+          <div v-if="can('receipt.create')" class="card"><div class="section-heading"><div><p class="eyebrow">PURCHASE RECEIPT</p><h2>新建入库单</h2></div><span class="pill">草稿</span></div>
+            <form @submit.prevent="createReceipt"><div class="form-grid"><label>关联采购订单（可选）<select v-model.number="receiptForm.purchase_order_id" @change="chooseReceiptOrder"><option :value="null">不关联订单</option><option v-for="item in purchaseOrders.filter(entry => ['confirmed', 'partially_received'].includes(entry.status))" :key="item.id" :value="item.id">#{{ item.id }} · {{ item.supplier_name }}</option></select></label><label>供应商<select v-model.number="receiptForm.supplier_id" :disabled="receiptForm.purchase_order_id !== null" required><option :value="0" disabled>选择供应商</option><option v-for="item in suppliers" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>入库仓库<select v-model.number="receiptForm.warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>外部单号（可选）<input v-model.trim="receiptForm.reference" maxlength="100" placeholder="采购单或送货单号" /></label></div><h3>入库明细</h3><div v-for="(line, index) in receiptForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>数量<input v-model.trim="line.quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><button class="text-button" type="button" :disabled="receiptForm.lines.length === 1" @click="removeLine(index)">移除</button></div><div class="form-actions"><button class="secondary" type="button" @click="addLine">添加明细</button><button class="primary" type="submit" :disabled="busy || !materials.length || !suppliers.length">保存草稿</button></div></form></div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">RECEIPT LOG</p><h2>入库单</h2></div></div><div v-if="!receipts.length" class="muted">暂无入库单。</div><article v-for="item in receipts" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.supplier_name }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.purchase_order_id">· 采购订单 #{{ item.purchase_order_id }}</span> <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已入库' : '待确认' }}</span><button v-if="item.status === 'draft' && can('receipt.post')" class="primary small" type="button" :disabled="busy" @click="postReceipt(item.id)">确认入库</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article></div>
         </section>
 
         <section v-if="activeTab === 'transfers'" class="stack">

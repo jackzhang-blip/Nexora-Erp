@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 4:
+        if version > 5:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -206,3 +206,41 @@ def migrate() -> None:
                            [(role, code) for role in ("admin", "warehouse")
                             for code in ("warehouse.manage", "transfer.create", "transfer.post")])
             db.execute("PRAGMA user_version = 4")
+        if version < 5:
+            # 采购订单和入库明细使用关联表，历史自由入库单无需改写或猜测订单来源。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE purchase_orders (
+                id INTEGER PRIMARY KEY,
+                supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+                reference TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
+                    ('draft', 'confirmed', 'partially_received', 'received', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                confirmed_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                confirmed_at TEXT,
+                cancelled_at TEXT
+            )""")
+            db.execute("""CREATE TABLE purchase_order_lines (
+                id INTEGER PRIMARY KEY,
+                purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id),
+                material_id INTEGER NOT NULL REFERENCES materials(id),
+                quantity TEXT NOT NULL,
+                unit_price TEXT NOT NULL,
+                UNIQUE (purchase_order_id, material_id)
+            )""")
+            db.execute("""CREATE TABLE receipt_order_links (
+                receipt_line_id INTEGER PRIMARY KEY REFERENCES receipt_lines(id),
+                purchase_order_line_id INTEGER NOT NULL REFERENCES purchase_order_lines(id)
+            )""")
+            db.execute("CREATE INDEX receipt_order_links_order_line ON receipt_order_links(purchase_order_line_id)")
+            db.executemany("INSERT INTO permissions(code) VALUES (?)",
+                           [(code,) for code in ("purchase_order.create", "purchase_order.confirm",
+                                                "purchase_order.cancel")])
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, code) for role in ("admin", "buyer")
+                            for code in ("purchase_order.create", "purchase_order.confirm",
+                                         "purchase_order.cancel")])
+            db.execute("PRAGMA user_version = 5")

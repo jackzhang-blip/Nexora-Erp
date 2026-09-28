@@ -73,7 +73,7 @@ def test_existing_v1_database_keeps_users(monkeypatch, tmp_path):
         db.execute("PRAGMA user_version = 1")
     migrate()
     with sqlite3.connect(database) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 5
         assert db.execute("SELECT username, password_hash, is_active FROM users WHERE id = 7").fetchone() == (
             "existing", "unchanged", 1)
         assert db.execute("SELECT COUNT(*) FROM server_identity").fetchone()[0] == 1
@@ -81,3 +81,4 @@ def test_existing_v1_database_keeps_users(monkeypatch, tmp_path):
         assert db.execute("SELECT receipt_id, warehouse_id FROM receipt_warehouses").fetchone() == (3, 1)
         assert db.execute("SELECT id, warehouse_id, quantity, source_type, source_id, source_line_id, created_by "
                           "FROM stock_movements").fetchone() == (8, 1, '2.125', 'receipt', 3, 5, 7)
+        assert db.execute("SELECT COUNT(*) FROM receipt_order_links").fetchone()[0] == 0
