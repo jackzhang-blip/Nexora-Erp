@@ -128,6 +128,7 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'postReceipt': return { method: 'POST', path: `/api/v1/receipts/${positiveId(payload, 'receiptId')}/post` }
     // 采购退货单编号只能通过正整数校验后进入固定路径。
     case 'purchaseReturns': return { method: 'GET', path: '/api/v1/purchase-returns' }
+    case 'receivablesPayables': return { method: 'GET', path: '/api/v1/finance/receivables-payables' }
     case 'createPurchaseReturn': return { method: 'POST', path: '/api/v1/purchase-returns', body: payload }
     case 'postPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/post` }
     case 'cancelPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/cancel` }

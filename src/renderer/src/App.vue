@@ -18,11 +18,11 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
-import type { Customer, Material, Movement, Permission, PurchaseOrder, PurchaseReturn, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
+import type { Customer, FinancialEntry, Material, Movement, Permission, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
-type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'users' | 'settings'
+type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'finance' | 'users' | 'settings'
 
 // 让新增的 Naive UI 控件沿用工作台现有的青绿色主色。
 const naiveThemeOverrides: GlobalThemeOverrides = {
@@ -45,6 +45,7 @@ const movements = ref<Movement[]>([])
 const receipts = ref<Receipt[]>([])
 const purchaseOrders = ref<PurchaseOrder[]>([])
 const purchaseReturns = ref<PurchaseReturn[]>([])
+const receivablesPayables = ref<ReceivablesPayables | null>(null)
 const warehouses = ref<Warehouse[]>([])
 const transfers = ref<Transfer[]>([])
 const stocktakes = ref<Stocktake[]>([])
@@ -104,6 +105,7 @@ const can = (permission: string): boolean => user.value?.permissions.includes(pe
 const visibleTabs = computed(() => [
   ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'purchase' as const, label: '采购订单', icon: IconFileList3Line }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'purchaseReturns' as const, label: '采购退货', icon: IconHistoryLine }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }, { key: 'stocktakes' as const, label: '库存盘点', icon: IconFileList3Line }] : []),
   ...(can('sales.view') ? [{ key: 'sales' as const, label: '销售订单', icon: IconFileList3Line }, { key: 'shipments' as const, label: '销售出库', icon: IconArchiveLine }, { key: 'salesReturns' as const, label: '销售退货', icon: IconHistoryLine }] : []),
+  ...(can('finance.view') ? [{ key: 'finance' as const, label: '应收应付', icon: IconFileList3Line }] : []),
   ...(can('users.manage') ? [{ key: 'users' as const, label: '用户权限', icon: IconTeamLine }] : []),
   { key: 'settings' as const, label: '连接与服务', icon: IconSettings3Line }
 ])
@@ -132,6 +134,11 @@ function movementSource(item: Movement): string {
   if (item.sales_return_id !== null) return `销售退货单 #${item.sales_return_id}`
   if (item.purchase_return_id !== null) return `采购退货单 #${item.purchase_return_id}`
   return `流水 #${item.id}`
+}
+
+function financialSource(item: FinancialEntry): string {
+  const names = { shipment: '销售出库', sales_return: '销售退货', receipt: '采购入库', purchase_return: '采购退货' }
+  return `${names[item.source_type]} #${item.source_id}`
 }
 
 async function checkConnection(): Promise<void> {
@@ -394,6 +401,11 @@ async function refreshData(): Promise<void> {
       window.nexora.callApi('shipments', undefined),
       window.nexora.callApi('salesReturns', undefined)
     ])
+  }
+  if (can('finance.view')) {
+    receivablesPayables.value = await window.nexora.callApi('receivablesPayables', undefined)
+  } else {
+    receivablesPayables.value = null
   }
   if (can('users.manage')) {
     [permissions.value, roles.value, users.value] = await Promise.all([
@@ -896,6 +908,17 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
             <div class="table-wrap"><table><thead><tr><th>物料编码</th><th>物料名称</th><th>数量</th></tr></thead><tbody><tr v-for="item in stock" :key="item.id"><td class="mono">{{ item.sku }}</td><td>{{ item.name }}</td><td><strong>{{ item.quantity }}</strong> {{ item.unit }}</td></tr><tr v-if="!stock.length"><td colspan="3" class="muted">暂无物料，先到基础资料中添加。</td></tr></tbody></table></div>
           </div>
           <div class="card"><div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2>库存流水</h2></div></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>仓库</th><th>物料</th><th>数量变动</th><th>来源</th></tr></thead><tbody><tr v-for="item in movements" :key="item.id"><td>{{ localTime(item.created_at) }}</td><td>{{ item.warehouse_name }}</td><td>{{ item.material_name }} <small class="mono">{{ item.sku }}</small></td><td>{{ item.quantity.startsWith('-') ? '' : '+' }}{{ item.quantity }} {{ item.unit }}</td><td>{{ movementSource(item) }}</td></tr><tr v-if="!movements.length"><td colspan="5" class="muted">确认入库、调拨、盘点、出库或退货后，这里会显示库存流水。</td></tr></tbody></table></div></div>
+        </section>
+
+        <section v-if="activeTab === 'finance' && receivablesPayables" class="stack">
+          <div class="summary-grid"><div class="metric"><span>业务应收净额</span><strong>¥{{ receivablesPayables.receivable_amount }}</strong></div><div class="metric"><span>业务应付净额</span><strong>¥{{ receivablesPayables.payable_amount }}</strong></div><div class="metric"><span>待定价明细</span><strong>{{ receivablesPayables.unpriced_count }}</strong></div></div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">DOCUMENT RECONCILIATION</p><h2>应收应付来源</h2></div></div>
+            <p class="muted">金额按已确认的出库、入库与退货明细计算，单位为人民币。收付款与未结余额将在下一项需求中接入；无采购单价的历史入库显示“待核价”。</p>
+            <div class="table-wrap"><table><thead><tr><th>确认时间</th><th>类别</th><th>往来单位</th><th>来源单据</th><th>物料</th><th>金额变动</th><th>操作人</th></tr></thead><tbody>
+              <tr v-for="item in receivablesPayables.entries" :key="item.key"><td>{{ localTime(item.posted_at) }}</td><td>{{ item.kind === 'receivable' ? '应收' : '应付' }}</td><td>{{ item.party_name }}</td><td>{{ financialSource(item) }}<small v-if="item.order_id"> · 订单 #{{ item.order_id }}</small></td><td>{{ item.sku }} × {{ item.quantity }}</td><td>{{ item.amount === null ? '待核价' : `¥${item.amount}` }}</td><td>{{ item.posted_by_name ?? (item.posted_by === null ? '未知' : `#${item.posted_by}`) }}</td></tr>
+              <tr v-if="!receivablesPayables.entries.length"><td colspan="7" class="muted">暂无已确认的金额来源单据。</td></tr>
+            </tbody></table></div>
+          </div>
         </section>
 
         <section v-if="activeTab === 'catalog'" class="stack">
