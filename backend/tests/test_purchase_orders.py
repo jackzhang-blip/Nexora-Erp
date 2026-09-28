@@ -1,5 +1,8 @@
 """采购订单、分批入库和超量阻断的业务回归。"""
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -82,3 +85,56 @@ def test_purchase_order_receipt_lifecycle(monkeypatch, tmp_path):
         extra = client.post(f"{base}/purchase-orders", headers=admin, json=payload).json()["id"]
         assert client.post(f"{base}/purchase-orders/{extra}/cancel", headers=admin).status_code == 200
         assert client.post(f"{base}/purchase-orders/{extra}/confirm", headers=admin).status_code == 409
+
+
+def test_two_sessions_cannot_post_receipts_beyond_order_quantity(monkeypatch, tmp_path):
+    monkeypatch.setenv("NEXORA_DB_PATH", str(tmp_path / "concurrent-receipts.db"))
+    with (TestClient(app, client=("127.0.0.1", 12345)) as first,
+          TestClient(app, client=("127.0.0.1", 12346)) as second):
+        base = "/api/v1"
+        assert first.post(f"{base}/setup/admin", json={
+            "username": "admin", "password": "secure-pass-123"}).status_code == 201
+        # 两个独立登录会话分别持有一张草稿，模拟两台客户端同时确认。
+        headers = []
+        for client in (first, second):
+            token = client.post(f"{base}/auth/login", json={
+                "username": "admin", "password": "secure-pass-123"}).json()["token"]
+            headers.append({"Authorization": f"Bearer {token}"})
+        supplier_id = first.post(f"{base}/suppliers", headers=headers[0], json={
+            "name": "并发供应商"}).json()["id"]
+        material_id = first.post(f"{base}/materials", headers=headers[0], json={
+            "sku": "CONCURRENT", "name": "并发物料", "unit": "件"}).json()["id"]
+        order_id = first.post(f"{base}/purchase-orders", headers=headers[0], json={
+            "supplier_id": supplier_id,
+            "lines": [{"material_id": material_id, "quantity": "10", "unit_price": "2"}]
+        }).json()["id"]
+        assert first.post(f"{base}/purchase-orders/{order_id}/confirm",
+                          headers=headers[0]).status_code == 200
+        receipt_ids = []
+        for client, authorization in zip((first, second), headers):
+            response = client.post(f"{base}/receipts", headers=authorization, json={
+                "supplier_id": supplier_id, "purchase_order_id": order_id,
+                "lines": [{"material_id": material_id, "quantity": "6"}]})
+            assert response.status_code == 201
+            receipt_ids.append(response.json()["id"])
+
+        ready = Barrier(2)
+
+        def post_receipt(client, authorization, receipt_id):
+            ready.wait(timeout=5)
+            return client.post(f"{base}/receipts/{receipt_id}/post",
+                               headers=authorization).status_code
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            outcomes = list(workers.map(
+                lambda values: post_receipt(*values),
+                zip((first, second), headers, receipt_ids)))
+
+        # 任一先取得写锁的请求可以成功；另一请求必须看到更新后的剩余数量。
+        assert sorted(outcomes) == [200, 409]
+        assert first.get(f"{base}/stock", headers=headers[0]).json()[0]["quantity"] == "6"
+        movements = second.get(f"{base}/movements", headers=headers[1]).json()
+        assert len(movements) == 1
+        assert movements[0]["quantity"] == "6"
+        order = first.get(f"{base}/purchase-orders", headers=headers[0]).json()[0]
+        assert order["lines"][0]["remaining_quantity"] == "4"
