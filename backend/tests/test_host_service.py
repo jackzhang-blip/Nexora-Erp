@@ -49,7 +49,8 @@ def test_service_startup_failure_writes_restricted_host_log(monkeypatch, tmp_pat
     except RuntimeError:
         host_service.record_service_failure()
 
-    assert "服务启动失败样例" in (logs / "host.err.log").read_text()
+    # 服务日志固定写为 UTF-8；Windows 默认代码页不能用于读取中文诊断。
+    assert "服务启动失败样例" in (logs / "host.err.log").read_text(encoding="utf-8")
 
 
 def test_windows_service_output_works_without_console(monkeypatch, tmp_path):
@@ -66,8 +67,8 @@ def test_windows_service_output_works_without_console(monkeypatch, tmp_path):
         print("服务运行日志")
         print("服务错误日志", file=sys.stderr)
 
-    assert "服务运行日志" in (logs / "host.out.log").read_text()
-    assert "服务错误日志" in (logs / "host.err.log").read_text()
+    assert "服务运行日志" in (logs / "host.out.log").read_text(encoding="utf-8")
+    assert "服务错误日志" in (logs / "host.err.log").read_text(encoding="utf-8")
 
 
 def test_host_config_rejects_invalid_paths_and_ports(tmp_path):
