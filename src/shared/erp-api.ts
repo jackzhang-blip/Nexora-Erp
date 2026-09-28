@@ -108,7 +108,7 @@ export interface FinancialEntry {
   kind: 'receivable' | 'payable'
   party_id: number
   party_name: string
-  source_type: 'shipment' | 'sales_return' | 'sales_return_reversal' | 'receipt' | 'receipt_reversal' | 'purchase_return' | 'purchase_return_reversal'
+  source_type: 'shipment' | 'shipment_reversal' | 'sales_return' | 'sales_return_reversal' | 'receipt' | 'receipt_reversal' | 'purchase_return' | 'purchase_return_reversal'
   source_id: number
   source_line_id: number
   order_id: number | null
@@ -402,6 +402,11 @@ export interface Shipment {
   created_at: string
   posted_at: string | null
   cancelled_at: string | null
+  reversal_id: number | null
+  reversal_reason: string | null
+  reversed_by: number | null
+  reversed_by_name: string | null
+  reversed_at: string | null
   lines: ShipmentLine[]
 }
 export interface ShipmentLine extends ReceiptLine {
@@ -490,7 +495,7 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'receipt_reversal' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'sales_return' | 'sales_return_reversal' | 'purchase_return' | 'purchase_return_reversal' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
+  source_type: 'receipt' | 'receipt_reversal' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'shipment_reversal' | 'sales_return' | 'sales_return_reversal' | 'purchase_return' | 'purchase_return_reversal' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
   source_id: number
   source_line_id: number
   receipt_id: number | null
@@ -500,6 +505,7 @@ export interface Movement {
   stocktake_id: number | null
   stocktake_reversal_id: number | null
   shipment_id: number | null
+  shipment_reversal_id: number | null
   sales_return_id: number | null
   sales_return_reversal_id: number | null
   purchase_return_id: number | null
@@ -593,6 +599,7 @@ export interface ErpOperations {
   createShipment: { input: { sales_order_id: number; warehouse_id: number; reference: string; lines: { material_id: number; quantity: string }[] }; output: Shipment }
   postShipment: { input: { shipmentId: number }; output: Shipment }
   cancelShipment: { input: { shipmentId: number }; output: Shipment }
+  reverseShipment: { input: { shipmentId: number; reason: string }; output: Shipment }
   salesReturns: { input: undefined; output: SalesReturn[] }
   createSalesReturn: { input: { shipment_id: number; warehouse_id: number; reason: string; lines: { shipment_line_id: number; quantity: string }[] }; output: SalesReturn }
   postSalesReturn: { input: { returnId: number }; output: SalesReturn }

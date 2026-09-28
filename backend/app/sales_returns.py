@@ -67,6 +67,8 @@ def checked_return_lines(db: sqlite3.Connection, shipment_id: int,
         raise HTTPException(422, "原出库单不存在")
     if shipment["status"] != "posted":
         raise HTTPException(409, "只有已确认出库单可退货")
+    if db.execute("SELECT 1 FROM shipment_reversals WHERE shipment_id = ?", (shipment_id,)).fetchone():
+        raise HTTPException(409, "原出库单已冲销，不能退货")
     known = {row["id"]: row for row in db.execute("""SELECT sl.id, sl.quantity,
         sol.material_id FROM shipment_lines sl
         JOIN sales_order_lines sol ON sol.id = sl.sales_order_line_id

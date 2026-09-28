@@ -40,18 +40,33 @@ class ShipmentInput(BaseModel):
     lines: list[TransferLineInput] = Field(min_length=1, max_length=100)
 
 
+class ShipmentReverseInput(BaseModel):
+    reason: str = Field(min_length=1, max_length=200)
+
+    @field_validator("reason")
+    @classmethod
+    def trim_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("冲销原因不能为空")
+        return value.strip()
+
+
 def shipped_quantity(db: sqlite3.Connection, order_line_id: int) -> Decimal:
-    # 只累加已确认出库；草稿和取消单不消耗订单数量。
+    # 已冲销出库保留历史，但不再消耗订单的可出库数量。
     return sum((Decimal(row[0]) for row in db.execute("""SELECT sl.quantity
         FROM shipment_lines sl JOIN shipments s ON s.id = sl.shipment_id
-        WHERE sl.sales_order_line_id = ? AND s.status = 'posted'""", (order_line_id,))), Decimal(0))
+        LEFT JOIN shipment_reversals rev ON rev.shipment_id = s.id
+        WHERE sl.sales_order_line_id = ? AND s.status = 'posted' AND rev.id IS NULL""",
+        (order_line_id,))), Decimal(0))
 
 
 def returned_order_quantity(db: sqlite3.Connection, order_line_id: int) -> Decimal:
     # 退货另记正向库存流水；订单显示已退量，但历史已出库量保持原值。
     line_ids = [row[0] for row in db.execute("""SELECT sl.id FROM shipment_lines sl
         JOIN shipments s ON s.id = sl.shipment_id
-        WHERE sl.sales_order_line_id = ? AND s.status = 'posted'""", (order_line_id,))]
+        LEFT JOIN shipment_reversals rev ON rev.shipment_id = s.id
+        WHERE sl.sales_order_line_id = ? AND s.status = 'posted' AND rev.id IS NULL""",
+        (order_line_id,))]
     return sum((returned_quantity(db, line_id) for line_id in line_ids), Decimal(0))
 
 
@@ -81,11 +96,16 @@ def sales_order_data(db: sqlite3.Connection, order_id: int) -> dict:
 
 def shipment_data(db: sqlite3.Connection, shipment_id: int) -> dict:
     row = db.execute("""SELECT s.*, w.name AS warehouse_name, c.name AS customer_name,
-        u.username AS created_by_name FROM shipments s
+        u.username AS created_by_name,
+        rev.id AS reversal_id, rev.reason AS reversal_reason,
+        rev.created_by AS reversed_by, ru.username AS reversed_by_name,
+        rev.created_at AS reversed_at FROM shipments s
         JOIN warehouses w ON w.id = s.warehouse_id
         JOIN sales_orders so ON so.id = s.sales_order_id
         JOIN customers c ON c.id = so.customer_id
-        JOIN users u ON u.id = s.created_by WHERE s.id = ?""", (shipment_id,)).fetchone()
+        JOIN users u ON u.id = s.created_by
+        LEFT JOIN shipment_reversals rev ON rev.shipment_id = s.id
+        LEFT JOIN users ru ON ru.id = rev.created_by WHERE s.id = ?""", (shipment_id,)).fetchone()
     if not row:
         raise HTTPException(404, "出库单不存在")
     lines = db.execute("""SELECT sl.id, sol.material_id, m.sku, m.name AS material_name,
@@ -97,7 +117,8 @@ def shipment_data(db: sqlite3.Connection, shipment_id: int) -> dict:
     for item in lines:
         returned = returned_quantity(db, item["id"])
         result_lines.append({**dict(item), "returned_quantity": str(returned),
-                             "returnable_quantity": str(Decimal(item["quantity"]) - returned)})
+                             "returnable_quantity": str(Decimal(0) if row["reversal_id"] else
+                                                        Decimal(item["quantity"]) - returned)})
     return {**dict(row), "lines": result_lines}
 
 
@@ -119,6 +140,16 @@ def checked_order_lines(db: sqlite3.Connection, order_id: int,
             raise HTTPException(409, f"物料 #{material_id} 超出销售订单未出库数量")
         result[material_id] = item["id"]
     return result
+
+
+def update_order_shipment_status(db: sqlite3.Connection, order_id: int) -> None:
+    lines = db.execute("SELECT id, quantity FROM sales_order_lines WHERE sales_order_id = ?",
+                       (order_id,)).fetchall()
+    shipped = [shipped_quantity(db, line["id"]) for line in lines]
+    status = ("confirmed" if all(quantity == 0 for quantity in shipped) else
+              "shipped" if all(quantity == Decimal(line["quantity"])
+                               for quantity, line in zip(shipped, lines)) else "partially_shipped")
+    db.execute("UPDATE sales_orders SET status = ? WHERE id = ?", (status, order_id))
 
 
 @router.get("/customers")
@@ -245,11 +276,41 @@ def post_shipment(shipment_id: int, user: dict = Depends(require("shipment.post"
                  shipment_id, line["id"], user["id"]))
         db.execute("""UPDATE shipments SET status = 'posted', posted_by = ?,
             posted_at = CURRENT_TIMESTAMP WHERE id = ?""", (user["id"], shipment_id))
-        order_lines = db.execute("SELECT id, quantity FROM sales_order_lines WHERE sales_order_id = ?",
-                                 (shipment["sales_order_id"],)).fetchall()
-        status = "shipped" if all(shipped_quantity(db, row["id"]) == Decimal(row["quantity"])
-                                  for row in order_lines) else "partially_shipped"
-        db.execute("UPDATE sales_orders SET status = ? WHERE id = ?", (status, shipment["sales_order_id"]))
+        update_order_shipment_status(db, shipment["sales_order_id"])
+        return shipment_data(db, shipment_id)
+
+
+@router.post("/shipments/{shipment_id}/reverse", status_code=201)
+def reverse_shipment(shipment_id: int, payload: ShipmentReverseInput,
+                     user: dict = Depends(require("shipment.reverse"))) -> dict:
+    with connection() as db:
+        # 有效销售退货依赖原出库，先处理退货再冲销出库，防止重复入库。
+        db.execute("BEGIN IMMEDIATE")
+        shipment = db.execute("SELECT status, warehouse_id, sales_order_id FROM shipments WHERE id = ?",
+                              (shipment_id,)).fetchone()
+        if not shipment:
+            raise HTTPException(404, "出库单不存在")
+        if shipment["status"] != "posted":
+            raise HTTPException(409, "只有已确认出库单可冲销")
+        if db.execute("SELECT 1 FROM shipment_reversals WHERE shipment_id = ?",
+                      (shipment_id,)).fetchone():
+            raise HTTPException(409, "此出库单已冲销")
+        lines = db.execute("""SELECT sl.id, sl.quantity, sol.material_id
+            FROM shipment_lines sl JOIN sales_order_lines sol ON sol.id = sl.sales_order_line_id
+            WHERE sl.shipment_id = ?""", (shipment_id,)).fetchall()
+        for line in lines:
+            if returned_quantity(db, line["id"]) > 0:
+                raise HTTPException(409, "原出库单仍有已确认销售退货，请先冲销退货")
+        cursor = db.execute("""INSERT INTO shipment_reversals(shipment_id, reason, created_by)
+            VALUES (?, ?, ?)""", (shipment_id, payload.reason, user["id"]))
+        for line in lines:
+            # 在原出库仓追加正向库存，不改写已确认的负向出库流水。
+            db.execute("""INSERT INTO stock_movements(
+                warehouse_id, material_id, quantity, source_type, source_id, source_line_id, created_by)
+                VALUES (?, ?, ?, 'shipment_reversal', ?, ?, ?)""",
+                (shipment["warehouse_id"], line["material_id"], line["quantity"],
+                 cursor.lastrowid, line["id"], user["id"]))
+        update_order_shipment_status(db, shipment["sales_order_id"])
         return shipment_data(db, shipment_id)
 
 

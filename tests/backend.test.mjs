@@ -177,6 +177,11 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   assert.equal(calls[40].path, '/api/v1/receipts/23/reverse')
   assert.deepEqual(JSON.parse(calls[40].body), { reason: '入库录错' })
   await assert.rejects(callBackend('reverseReceipt', { receiptId: '../users', reason: '无效' }), /记录编号无效/)
+  // 出库冲销只能使用主进程限定的路径和编号，原因作为请求体传递。
+  await callBackend('reverseShipment', { shipmentId: 24, reason: '出库录错' })
+  assert.equal(calls[41].path, '/api/v1/shipments/24/reverse')
+  assert.deepEqual(JSON.parse(calls[41].body), { reason: '出库录错' })
+  await assert.rejects(callBackend('reverseShipment', { shipmentId: '../users', reason: '无效' }), /记录编号无效/)
   await assert.rejects(callBackend('confirmSalesOrder', { orderId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('updateRole', { code: '../users', label: '错误', permissions: [] }), /角色代码无效/)
   await assert.rejects(callBackend('postReceipt', { receiptId: '../users' }), /记录编号无效/)
