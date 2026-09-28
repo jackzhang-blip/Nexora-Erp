@@ -18,11 +18,11 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
-import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, MaterialIssue, MaterialReturn, Movement, PaymentRecord, Permission, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse, WorkOrder } from '../../shared/erp-api'
+import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, MaterialIssue, MaterialReturn, Movement, PaymentRecord, Permission, ProductionCompletion, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse, WorkOrder } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
-type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'finance' | 'boms' | 'workOrders' | 'materialIssues' | 'materialReturns' | 'users' | 'settings'
+type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'finance' | 'boms' | 'workOrders' | 'materialIssues' | 'materialReturns' | 'productionCompletions' | 'users' | 'settings'
 
 // 让新增的 Naive UI 控件沿用工作台现有的青绿色主色。
 const naiveThemeOverrides: GlobalThemeOverrides = {
@@ -52,6 +52,7 @@ const boms = ref<Bom[]>([])
 const workOrders = ref<WorkOrder[]>([])
 const materialIssues = ref<MaterialIssue[]>([])
 const materialReturns = ref<MaterialReturn[]>([])
+const productionCompletions = ref<ProductionCompletion[]>([])
 const warehouses = ref<Warehouse[]>([])
 const transfers = ref<Transfer[]>([])
 const stocktakes = ref<Stocktake[]>([])
@@ -85,6 +86,8 @@ const materialIssueForm = ref({ work_order_id: 0, warehouse_id: 1, reference: ''
   lines: [] as { work_order_line_id: number; quantity: string }[] })
 const materialReturnForm = ref({ material_issue_id: 0, reason: '',
   lines: [] as { material_issue_line_id: number; quantity: string }[] })
+const completionForm = ref({ work_order_id: 0, reported_quantity: '1', reference: '' })
+const inspectionDrafts = ref<Record<number, { accepted_quantity: string; qc_note: string }>>({})
 const warehouseForm = ref({ code: '', name: '' })
 const transferForm = ref({ from_warehouse_id: 1, to_warehouse_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const stocktakeForm = ref({ warehouse_id: 1, reference: '', lines: [{ material_id: 0, counted_quantity: '0' }] })
@@ -122,7 +125,7 @@ const visibleTabs = computed(() => [
   ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'purchase' as const, label: '采购订单', icon: IconFileList3Line }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'purchaseReturns' as const, label: '采购退货', icon: IconHistoryLine }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }, { key: 'stocktakes' as const, label: '库存盘点', icon: IconFileList3Line }] : []),
   ...(can('sales.view') ? [{ key: 'sales' as const, label: '销售订单', icon: IconFileList3Line }, { key: 'shipments' as const, label: '销售出库', icon: IconArchiveLine }, { key: 'salesReturns' as const, label: '销售退货', icon: IconHistoryLine }] : []),
   ...(can('finance.view') ? [{ key: 'finance' as const, label: '应收应付', icon: IconFileList3Line }] : []),
-  ...(can('production.view') ? [{ key: 'boms' as const, label: '生产 BOM', icon: IconStackLine }, { key: 'workOrders' as const, label: '生产工单', icon: IconFileList3Line }, { key: 'materialIssues' as const, label: '生产领料', icon: IconArchiveLine }, { key: 'materialReturns' as const, label: '生产退料', icon: IconHistoryLine }] : []),
+  ...(can('production.view') ? [{ key: 'boms' as const, label: '生产 BOM', icon: IconStackLine }, { key: 'workOrders' as const, label: '生产工单', icon: IconFileList3Line }, { key: 'materialIssues' as const, label: '生产领料', icon: IconArchiveLine }, { key: 'materialReturns' as const, label: '生产退料', icon: IconHistoryLine }, { key: 'productionCompletions' as const, label: '完工与质检', icon: IconFileList3Line }] : []),
   ...(can('users.manage') ? [{ key: 'users' as const, label: '用户权限', icon: IconTeamLine }] : []),
   { key: 'settings' as const, label: '连接与服务', icon: IconSettings3Line }
 ])
@@ -134,6 +137,8 @@ const selectedIssueOrder = computed(() => workOrders.value.find(
   item => item.id === materialIssueForm.value.work_order_id))
 const selectedReturnIssue = computed(() => materialIssues.value.find(
   item => item.id === materialReturnForm.value.material_issue_id))
+const selectedCompletionOrder = computed(() => workOrders.value.find(
+  item => item.id === completionForm.value.work_order_id))
 
 function displayError(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : '操作失败'
@@ -156,6 +161,7 @@ function movementSource(item: Movement): string {
   if (item.purchase_return_id !== null) return `采购退货单 #${item.purchase_return_id}`
   if (item.material_issue_id !== null) return `生产领料单 #${item.material_issue_id}`
   if (item.material_return_id !== null) return `生产退料单 #${item.material_return_id}`
+  if (item.production_completion_id !== null) return `生产完工单 #${item.production_completion_id}`
   return `流水 #${item.id}`
 }
 
@@ -437,15 +443,22 @@ async function refreshData(): Promise<void> {
     paymentRecords.value = []
   }
   if (can('production.view')) {
-    [boms.value, workOrders.value, materialIssues.value, materialReturns.value] = await Promise.all([
+    [boms.value, workOrders.value, materialIssues.value, materialReturns.value, productionCompletions.value] = await Promise.all([
       window.nexora.callApi('boms', undefined), window.nexora.callApi('workOrders', undefined),
-      window.nexora.callApi('materialIssues', undefined), window.nexora.callApi('materialReturns', undefined)
+      window.nexora.callApi('materialIssues', undefined), window.nexora.callApi('materialReturns', undefined),
+      window.nexora.callApi('productionCompletions', undefined)
     ])
+    // 刷新列表时保留尚未提交的质检输入，避免其他业务操作意外清空填写内容。
+    const previousInspections = inspectionDrafts.value
+    inspectionDrafts.value = Object.fromEntries(productionCompletions.value.filter(item => item.status === 'draft')
+      .map(item => [item.id, previousInspections[item.id] ?? { accepted_quantity: item.reported_quantity, qc_note: '' }]))
   } else {
     boms.value = []
     workOrders.value = []
     materialIssues.value = []
     materialReturns.value = []
+    productionCompletions.value = []
+    inspectionDrafts.value = {}
   }
   if (can('users.manage')) {
     [permissions.value, roles.value, users.value] = await Promise.all([
@@ -892,6 +905,42 @@ async function cancelMaterialReturn(returnId: number): Promise<void> {
     `生产退料单 #${returnId} 草稿已取消。`)
 }
 
+function selectCompletionOrder(orderId: number): void {
+  const order = workOrders.value.find(item => item.id === orderId)
+  completionForm.value = { work_order_id: orderId,
+    reported_quantity: order?.remaining_output_quantity ?? '1', reference: '' }
+  activeTab.value = 'productionCompletions'
+}
+
+async function createProductionCompletion(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    await window.nexora!.callApi('createProductionCompletion', { ...completionForm.value })
+    completionForm.value = { work_order_id: 0, reported_quantity: '1', reference: '' }
+  }, '完工报工草稿已创建，质检并确认前不会增加成品库存。')
+}
+
+async function inspectProductionCompletion(completionId: number): Promise<void> {
+  if (!window.nexora) return
+  const draft = inspectionDrafts.value[completionId]
+  if (!draft) return
+  await perform(() => window.nexora!.callApi('inspectProductionCompletion', {
+    completionId, accepted_quantity: draft.accepted_quantity, qc_note: draft.qc_note
+  }), `完工单 #${completionId} 的质检结果已记录。`)
+}
+
+async function postProductionCompletion(completionId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('postProductionCompletion', { completionId }),
+    `完工单 #${completionId} 已确认，合格成品已入目标仓库。`)
+}
+
+async function cancelProductionCompletion(completionId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('cancelProductionCompletion', { completionId }),
+    `完工单 #${completionId} 已取消。`)
+}
+
 async function createUser(): Promise<void> {
   if (!window.nexora) return
   await perform(async () => {
@@ -1142,7 +1191,7 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
             <form @submit.prevent="createWorkOrder"><div class="form-grid"><label>启用的 BOM<select v-model.number="workOrderForm.bom_id" required><option :value="0" disabled>选择成品与版本</option><option v-for="item in boms.filter(entry => entry.status === 'active')" :key="item.id" :value="item.id">{{ item.product_name }}（{{ item.product_sku }}）· V{{ item.version }}</option></select></label><label>完工目标仓库<select v-model.number="workOrderForm.warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>目标产量<input v-model.trim="workOrderForm.target_quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><label>参考号（可选）<input v-model.trim="workOrderForm.reference" maxlength="100" /></label><label>备注（可选）<input v-model.trim="workOrderForm.note" maxlength="200" /></label></div><button class="primary" type="submit" :disabled="busy || !boms.some(item => item.status === 'active') || !warehouses.length">保存工单草稿</button></form>
           </div>
           <div class="card"><div class="section-heading"><div><p class="eyebrow">WORK ORDER HISTORY</p><h2>生产工单</h2></div></div><div v-if="!workOrders.length" class="muted">暂无生产工单。</div>
-            <article v-for="item in workOrders" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.product_name }}（{{ item.product_sku }}）· BOM V{{ item.bom_version }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} · 目标 {{ item.target_quantity }} {{ item.product_unit }} · {{ item.warehouse_name }} <span v-if="item.reference">· {{ item.reference }}</span><span v-if="item.note"> · {{ item.note }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', released: '已下达', in_progress: '生产中', completed: '已完工', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('work_order.release')" class="primary small" type="button" :disabled="busy" @click="releaseWorkOrder(item.id)">下达</button><button v-if="(item.status === 'released' || item.status === 'in_progress') && item.lines.some(line => Number(line.remaining_quantity) > 0) && can('material_issue.create')" class="secondary small" type="button" :disabled="busy" @click="selectIssueOrder(item.id)">创建领料单</button><button v-if="(item.status === 'draft' || item.status === 'released') && can('work_order.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelWorkOrder(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} · 需求 {{ line.required_quantity }} · 已领 {{ line.issued_quantity }} · 剩余 {{ line.remaining_quantity }} {{ line.unit }}</span></div></article>
+            <article v-for="item in workOrders" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.product_name }}（{{ item.product_sku }}）· BOM V{{ item.bom_version }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} · 目标 {{ item.target_quantity }} {{ item.product_unit }} · {{ item.warehouse_name }} <span v-if="item.reference">· {{ item.reference }}</span><span v-if="item.note"> · {{ item.note }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', released: '已下达', in_progress: '生产中', completed: '已完工', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('work_order.release')" class="primary small" type="button" :disabled="busy" @click="releaseWorkOrder(item.id)">下达</button><button v-if="(item.status === 'released' || item.status === 'in_progress') && item.lines.some(line => Number(line.remaining_quantity) > 0) && can('material_issue.create')" class="secondary small" type="button" :disabled="busy" @click="selectIssueOrder(item.id)">创建领料单</button><button v-if="item.status === 'in_progress' && Number(item.remaining_output_quantity) > 0 && can('production_completion.create')" class="secondary small" type="button" :disabled="busy" @click="selectCompletionOrder(item.id)">创建完工单</button><button v-if="(item.status === 'draft' || item.status === 'released') && can('work_order.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelWorkOrder(item.id)">取消</button></div></div><div class="receipt-lines"><span>已报工 {{ item.reported_quantity }} · 合格 {{ item.accepted_quantity }} · 不合格 {{ item.rejected_quantity }} · 待报工 {{ item.remaining_output_quantity }} {{ item.product_unit }}</span><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} · 需求 {{ line.required_quantity }} · 已领 {{ line.issued_quantity }} · 剩余 {{ line.remaining_quantity }} {{ line.unit }}</span></div></article>
           </div>
         </section>
 
@@ -1162,13 +1211,25 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
         <section v-if="activeTab === 'materialReturns'" class="stack">
           <div v-if="can('material_return.create')" class="card"><div class="section-heading"><div><p class="eyebrow">MATERIAL RETURN</p><h2>新建生产退料单</h2></div><span class="pill">草稿</span></div>
             <p class="muted">只退回已确认领料的组件，确认后入原领料仓库，并恢复工单可领数量。请按实际退回数量填写。</p>
-            <form @submit.prevent="createMaterialReturn"><div class="form-grid"><label>原领料单<select v-model.number="materialReturnForm.material_issue_id" required @change="selectReturnIssue(materialReturnForm.material_issue_id)"><option :value="0" disabled>选择可退领料单</option><option v-for="item in materialIssues.filter(entry => entry.status === 'posted' && entry.lines.some(line => Number(line.returnable_quantity) > 0))" :key="item.id" :value="item.id">#{{ item.id }} · 工单 #{{ item.work_order_id }} · {{ item.warehouse_name }}</option></select></label><label>退料原因<input v-model.trim="materialReturnForm.reason" required maxlength="200" /></label></div>
+            <form @submit.prevent="createMaterialReturn"><div class="form-grid"><label>原领料单<select v-model.number="materialReturnForm.material_issue_id" required @change="selectReturnIssue(materialReturnForm.material_issue_id)"><option :value="0" disabled>选择可退领料单</option><option v-for="item in materialIssues.filter(entry => entry.status === 'posted' && workOrders.some(order => order.id === entry.work_order_id && order.status === 'in_progress') && entry.lines.some(line => Number(line.returnable_quantity) > 0))" :key="item.id" :value="item.id">#{{ item.id }} · 工单 #{{ item.work_order_id }} · {{ item.warehouse_name }}</option></select></label><label>退料原因<input v-model.trim="materialReturnForm.reason" required maxlength="200" /></label></div>
               <h3>本次退料数量</h3><div v-for="line in materialReturnForm.lines" :key="line.material_issue_line_id" class="line-row"><label>{{ selectedReturnIssue?.lines.find(item => item.id === line.material_issue_line_id)?.material_name }} · 可退 {{ selectedReturnIssue?.lines.find(item => item.id === line.material_issue_line_id)?.returnable_quantity }}<input v-model.trim="line.quantity" type="number" min="0.001" :max="selectedReturnIssue?.lines.find(item => item.id === line.material_issue_line_id)?.returnable_quantity" step="0.001" required /></label><button class="text-button" type="button" :disabled="busy" @click="materialReturnForm.lines = materialReturnForm.lines.filter(item => item.material_issue_line_id !== line.material_issue_line_id)">本次不退</button></div>
               <button class="primary" type="submit" :disabled="busy || !materialReturnForm.lines.length">保存退料草稿</button>
             </form>
           </div>
           <div class="card"><div class="section-heading"><div><p class="eyebrow">RETURN HISTORY</p><h2>生产退料记录</h2></div></div><div v-if="!materialReturns.length" class="muted">暂无退料单。</div>
             <article v-for="item in materialReturns" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · 原领料 #{{ item.material_issue_id }} · 工单 #{{ item.work_order_id }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} · {{ item.reason }}</p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', posted: '已确认', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('material_return.post')" class="primary small" type="button" :disabled="busy" @click="postMaterialReturn(item.id)">确认退料</button><button v-if="item.status === 'draft' && can('material_return.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelMaterialReturn(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article>
+          </div>
+        </section>
+
+        <section v-if="activeTab === 'productionCompletions'" class="stack">
+          <div v-if="can('production_completion.create')" class="card"><div class="section-heading"><div><p class="eyebrow">PRODUCTION COMPLETION</p><h2>新建完工报工单</h2></div><span class="pill">草稿</span></div>
+            <p class="muted">按工单目标产量分批报工。报工数包含待质检的合格与不合格产品；质检并确认后，只有合格数进入工单目标仓库。</p>
+            <form @submit.prevent="createProductionCompletion"><div class="form-grid"><label>生产工单<select v-model.number="completionForm.work_order_id" required @change="selectCompletionOrder(completionForm.work_order_id)"><option :value="0" disabled>选择生产中工单</option><option v-for="item in workOrders.filter(entry => entry.status === 'in_progress' && Number(entry.remaining_output_quantity) > 0)" :key="item.id" :value="item.id">#{{ item.id }} · {{ item.product_name }} · 待报工 {{ item.remaining_output_quantity }} {{ item.product_unit }}</option></select></label><label>本次报工数量<input v-model.trim="completionForm.reported_quantity" type="number" min="0.001" :max="selectedCompletionOrder?.remaining_output_quantity" step="0.001" required /></label><label>参考号（可选）<input v-model.trim="completionForm.reference" maxlength="100" /></label></div><button class="primary" type="submit" :disabled="busy || !completionForm.work_order_id">保存报工草稿</button></form>
+          </div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">COMPLETION HISTORY</p><h2>完工与质检记录</h2></div></div><div v-if="!productionCompletions.length" class="muted">暂无完工单。</div>
+            <article v-for="item in productionCompletions" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · 工单 #{{ item.work_order_id }} · {{ item.product_name }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 报工人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '待质检', inspected: '已质检', posted: '已入库', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'inspected' && can('production_completion.post')" class="primary small" type="button" :disabled="busy" @click="postProductionCompletion(item.id)">确认合格品入库</button><button v-if="(item.status === 'draft' || item.status === 'inspected') && can('production_completion.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelProductionCompletion(item.id)">取消</button></div></div><div class="receipt-lines"><span>报工 {{ item.reported_quantity }} · 合格 {{ item.accepted_quantity ?? '待质检' }} · 不合格 {{ item.rejected_quantity ?? '待质检' }} {{ item.product_unit }}</span><span v-if="item.qc_note">质检说明：{{ item.qc_note }} · 质检人 {{ item.inspected_by_name }}</span></div>
+              <form v-if="item.status === 'draft' && can('production_completion.inspect') && inspectionDrafts[item.id]" class="inline-form" @submit.prevent="inspectProductionCompletion(item.id)"><label>合格数量<input v-model.trim="inspectionDrafts[item.id]!.accepted_quantity" type="number" min="0" :max="item.reported_quantity" step="0.001" required /></label><label>质检说明<input v-model.trim="inspectionDrafts[item.id]!.qc_note" required maxlength="200" /></label><button class="primary small" type="submit" :disabled="busy">记录质检结果</button></form>
+            </article>
           </div>
         </section>
 

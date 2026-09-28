@@ -155,6 +155,17 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'createMaterialReturn': return { method: 'POST', path: '/api/v1/material-returns', body: payload }
     case 'postMaterialReturn': return { method: 'POST', path: `/api/v1/material-returns/${positiveId(payload, 'returnId')}/post` }
     case 'cancelMaterialReturn': return { method: 'POST', path: `/api/v1/material-returns/${positiveId(payload, 'returnId')}/cancel` }
+    case 'productionCompletions': return { method: 'GET', path: '/api/v1/production-completions' }
+    case 'createProductionCompletion': return { method: 'POST', path: '/api/v1/production-completions', body: payload }
+    case 'inspectProductionCompletion': {
+      const completionId = positiveId(payload, 'completionId')
+      const fields = payload as ErpOperations['inspectProductionCompletion']['input']
+      // 路径编号只用于定位单据，请求体仅发送质检接口确认的正式字段。
+      return { method: 'POST', path: `/api/v1/production-completions/${completionId}/inspect`,
+        body: { accepted_quantity: fields.accepted_quantity, qc_note: fields.qc_note } }
+    }
+    case 'postProductionCompletion': return { method: 'POST', path: `/api/v1/production-completions/${positiveId(payload, 'completionId')}/post` }
+    case 'cancelProductionCompletion': return { method: 'POST', path: `/api/v1/production-completions/${positiveId(payload, 'completionId')}/cancel` }
     case 'createPurchaseReturn': return { method: 'POST', path: '/api/v1/purchase-returns', body: payload }
     case 'postPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/post` }
     case 'cancelPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/cancel` }

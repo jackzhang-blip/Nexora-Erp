@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from .database import connection
 from .security import require
+from .work_orders import issued_quantity, posted_completion_totals, required_for_output
 
 router = APIRouter(prefix="/api/v1")
 
@@ -46,7 +47,8 @@ def returned_quantity(db: sqlite3.Connection, issue_line_id: int) -> Decimal:
 
 def checked_lines(db: sqlite3.Connection, issue_id: int,
                   lines: list[tuple[int, Decimal]]) -> dict[int, sqlite3.Row]:
-    issue = db.execute("""SELECT mi.status, wo.status AS work_order_status
+    issue = db.execute("""SELECT mi.status, wo.status AS work_order_status,
+        wo.id AS work_order_id, wo.target_quantity
         FROM material_issues mi JOIN work_orders wo ON wo.id = mi.work_order_id
         WHERE mi.id = ?""", (issue_id,)).fetchone()
     if not issue:
@@ -56,16 +58,22 @@ def checked_lines(db: sqlite3.Connection, issue_id: int,
     if issue["work_order_status"] != "in_progress":
         raise HTTPException(409, "只有生产中的工单可退料")
     known = {row["id"]: row for row in db.execute("""SELECT mil.id, mil.work_order_line_id,
-        wol.component_material_id, mil.quantity FROM material_issue_lines mil
+        wol.component_material_id, wol.required_quantity, mil.quantity FROM material_issue_lines mil
         JOIN work_order_lines wol ON wol.id = mil.work_order_line_id
         WHERE mil.material_issue_id = ?""", (issue_id,))}
     result = {}
+    posted_output, _, _ = posted_completion_totals(db, issue["work_order_id"])
     for line_id, quantity in lines:
         source = known.get(line_id)
         if not source:
             raise HTTPException(422, "退料明细不属于原领料单")
         if quantity > Decimal(source["quantity"]) - returned_quantity(db, line_id):
             raise HTTPException(409, f"领料明细 #{line_id} 超出可退数量")
+        # 已报工消耗的最低需料不能再退回，否则成品入库会失去物料来源。
+        minimum = required_for_output(Decimal(source["required_quantity"]),
+                                      Decimal(issue["target_quantity"]), posted_output)
+        if issued_quantity(db, source["work_order_line_id"]) - quantity < minimum:
+            raise HTTPException(409, f"组件 #{source['component_material_id']} 已用于完工报工，不可退料")
         result[line_id] = source
     return result
 

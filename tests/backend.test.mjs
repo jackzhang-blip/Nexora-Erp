@@ -39,7 +39,8 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   process.env.NEXORA_API_URL = 'http://127.0.0.1:8123'
   const calls = []
   const fetchMock = t.mock.method(globalThis, 'fetch', async (url, options) => {
-    calls.push({ path: url.pathname, search: url.search, method: options.method, authorization: options.headers.Authorization })
+    calls.push({ path: url.pathname, search: url.search, method: options.method,
+      authorization: options.headers.Authorization, body: options.body })
     if (url.pathname.endsWith('/login')) {
       return Response.json({ token: 'private-session-token', user: { id: 1, username: 'admin', roles: ['admin'], permissions: [] } })
     }
@@ -127,6 +128,15 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   await callBackend('postMaterialReturn', { returnId: 15 })
   assert.equal(calls[27].path, '/api/v1/material-returns/15/post')
   await assert.rejects(callBackend('cancelMaterialReturn', { returnId: '../users' }), /记录编号无效/)
+  // 完工质检只发送合格数量和说明，单据编号只用于受限路径。
+  await callBackend('productionCompletions', undefined)
+  assert.equal(calls[28].path, '/api/v1/production-completions')
+  await callBackend('inspectProductionCompletion', { completionId: 16, accepted_quantity: '1', qc_note: '检验合格' })
+  assert.equal(calls[29].path, '/api/v1/production-completions/16/inspect')
+  assert.deepEqual(JSON.parse(calls[29].body), { accepted_quantity: '1', qc_note: '检验合格' })
+  await callBackend('postProductionCompletion', { completionId: 16 })
+  assert.equal(calls[30].path, '/api/v1/production-completions/16/post')
+  await assert.rejects(callBackend('cancelProductionCompletion', { completionId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('confirmSalesOrder', { orderId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('updateRole', { code: '../users', label: '错误', permissions: [] }), /角色代码无效/)
   await assert.rejects(callBackend('postReceipt', { receiptId: '../users' }), /记录编号无效/)

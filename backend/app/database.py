@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 15:
+        if version > 16:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -584,3 +584,39 @@ def migrate() -> None:
                            [(role, permission) for role, permissions in grants.items()
                             for permission in permissions])
             db.execute("PRAGMA user_version = 15")
+        if version < 16:
+            # 完工报工与质检结果独立留痕，只有确认后的合格数进入成品库存。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("ALTER TABLE work_orders ADD COLUMN completed_by INTEGER REFERENCES users(id)")
+            db.execute("ALTER TABLE work_orders ADD COLUMN completed_at TEXT")
+            db.execute("""CREATE TABLE production_completions (
+                id INTEGER PRIMARY KEY,
+                work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+                reported_quantity TEXT NOT NULL,
+                accepted_quantity TEXT,
+                rejected_quantity TEXT,
+                reference TEXT NOT NULL DEFAULT '',
+                qc_note TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'inspected', 'posted', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                inspected_by INTEGER REFERENCES users(id),
+                posted_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                inspected_at TEXT,
+                posted_at TEXT,
+                cancelled_at TEXT
+            )""")
+            db.execute("CREATE INDEX production_completions_order ON production_completions(work_order_id)")
+            db.executemany("INSERT INTO permissions(code) VALUES (?)", [(code,) for code in (
+                "production_completion.create", "production_completion.inspect",
+                "production_completion.post", "production_completion.cancel")])
+            grants = {"admin": ("production_completion.create", "production_completion.inspect",
+                                "production_completion.post", "production_completion.cancel"),
+                      "planner": ("production_completion.create", "production_completion.cancel"),
+                      "warehouse": ("production_completion.inspect", "production_completion.post")}
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, permission) for role, permissions in grants.items()
+                            for permission in permissions])
+            db.execute("PRAGMA user_version = 16")
