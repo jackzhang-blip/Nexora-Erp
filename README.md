@@ -32,6 +32,8 @@ Windows 可把 `python3` 改为 `python`。如果 Python 不在默认路径，�
 
 新增或修改前端界面时，请遵循 [前端 UI 开发规范](docs/frontend-ui-guidelines.md)。
 
+完整财务、质量、售后、CRM 等后续模块的现状、候选顺序和进入条件见 [ERP 后续模块评估](docs/erp-expansion-assessment.md)；该文档不代表相应功能已实现。
+
 常用检查：
 
 ```bash
