@@ -33,3 +33,13 @@ test('启动页的长内容在中间滚动，底部说明保留在窗口内', ()
   assert.match(rule('.onboard-main'), /\boverflow-y: auto;/)
   assert.match(rule('.onboard-footer'), /\bflex: none;/)
 })
+
+test('服务端就绪页左右卡片等宽，窄窗口仍改为单列', () => {
+  const view = readFileSync(new URL('../src/renderer/src/views/onboarding/ConnectionReadyView.vue', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
+
+  // 单独约束就绪页，避免影响手动连接和本机服务创建页的列宽。
+  assert.match(view, /class="onboard-columns ready-columns"/)
+  assert.match(css, /\.ready-columns \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); align-items: stretch; \}/)
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.choice-grid, \.onboard-columns \{ grid-template-columns: 1fr; \}/)
+})

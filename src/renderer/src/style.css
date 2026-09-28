@@ -227,7 +227,8 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
 .fingerprint.compact { padding: 10px; font-size: 11px; }
 .fingerprint-label { margin: 18px 0 8px; color: #7189a6; font-size: 12px; }
 .trust-check { justify-content: center; margin-top: 20px; font-size: 13px; }
-.ready-columns { grid-template-columns: .9fr 1.1fr; }
+/* 就绪页的两张卡片使用等宽列，并在服务端信息较长时保持等高。 */
+.ready-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
 .ready-primary { text-align: center; }
 .ready-primary .onboard-actions { justify-content: center; }
 .ready-symbol { width: 76px; height: 76px; display: grid; place-items: center; margin: 8px auto 22px; border-radius: 50%; background: #19b982; color: white; font-size: 42px; font-weight: 700; box-shadow: 0 8px 22px #1dbb8352; }
