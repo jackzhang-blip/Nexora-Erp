@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from .database import connection, migrate
 from .discovery import DiscoveryPublisher
+from .finance import router as finance_router
 from .inventory import require_warehouse, router as inventory_router
 from .purchase import (linked_order_for_receipt, order_receipt_lines,
                        router as purchase_router, update_order_receipt_status, validate_receipt_post)
@@ -65,6 +66,7 @@ app = FastAPI(title="Nexora ERP API", version="0.1.0", lifespan=lifespan)
 app.include_router(inventory_router)
 app.include_router(purchase_router)
 app.include_router(purchase_returns_router)
+app.include_router(finance_router)
 app.include_router(stocktake_router)
 app.include_router(sales_router)
 app.include_router(sales_returns_router)

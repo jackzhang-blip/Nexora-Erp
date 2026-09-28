@@ -92,6 +92,33 @@ export interface PurchaseReturn {
   lines: PurchaseReturnLine[]
   total_amount: string | null
 }
+// 应收应付按已确认业务来源逐行推导，空金额表示原入库缺少合同单价。
+export interface FinancialEntry {
+  key: string
+  kind: 'receivable' | 'payable'
+  party_id: number
+  party_name: string
+  source_type: 'shipment' | 'sales_return' | 'receipt' | 'purchase_return'
+  source_id: number
+  source_line_id: number
+  order_id: number | null
+  material_id: number
+  sku: string
+  quantity: string
+  unit_price: string | null
+  amount: string | null
+  currency: 'CNY'
+  posted_by: number | null
+  posted_by_name: string | null
+  posted_at: string
+}
+export interface ReceivablesPayables {
+  currency: 'CNY'
+  receivable_amount: string
+  payable_amount: string
+  unpriced_count: number
+  entries: FinancialEntry[]
+}
 // 销售订单剩余量由已确认的出库单计算，草稿不会预先扣减。
 export interface SalesOrderLine extends ReceiptLine {
   unit_price: string
@@ -249,6 +276,7 @@ export interface ErpOperations {
   }
   postReceipt: { input: { receiptId: number }; output: Receipt }
   purchaseReturns: { input: undefined; output: PurchaseReturn[] }
+  receivablesPayables: { input: undefined; output: ReceivablesPayables }
   createPurchaseReturn: { input: { receipt_id: number; reason: string; lines: { receipt_line_id: number; quantity: string }[] }; output: PurchaseReturn }
   postPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   cancelPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }

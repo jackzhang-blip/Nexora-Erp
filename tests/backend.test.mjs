@@ -90,6 +90,9 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   await callBackend('postPurchaseReturn', { returnId: 8 })
   assert.equal(calls[14].path, '/api/v1/purchase-returns/8/post')
   await assert.rejects(callBackend('cancelPurchaseReturn', { returnId: '../users' }), /记录编号无效/)
+  // 财务只读查询同样通过主进程的固定路径，不能由页面拼装任意后端地址。
+  await callBackend('receivablesPayables', undefined)
+  assert.equal(calls[15].path, '/api/v1/finance/receivables-payables')
   await assert.rejects(callBackend('confirmSalesOrder', { orderId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('updateRole', { code: '../users', label: '错误', permissions: [] }), /角色代码无效/)
   await assert.rejects(callBackend('postReceipt', { receiptId: '../users' }), /记录编号无效/)

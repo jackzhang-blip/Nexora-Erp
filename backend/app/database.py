@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 9:
+        if version > 10:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -407,3 +407,12 @@ def migrate() -> None:
                            [(role, permission) for role, permissions in grants.items()
                             for permission in permissions])
             db.execute("PRAGMA user_version = 9")
+        if version < 10:
+            # 金额查询单独授权；历史已确认单据无需改写即可纳入应收应付清单。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("INSERT INTO roles(code, label, is_builtin) VALUES ('finance', '财务员', 1)")
+            db.execute("INSERT INTO permissions(code) VALUES ('finance.view')")
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, "finance.view") for role in ("admin", "finance")])
+            db.execute("PRAGMA user_version = 10")
