@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NButton, NConfigProvider, dateZhCN, zhCN } from 'naive-ui'
 import type { GlobalThemeOverrides } from 'naive-ui'
 // 应用内品牌标记与安装包图标共用第一版 Nexus + Aurora 标志。
@@ -19,10 +19,12 @@ import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
 import IconArrowDownSLine from '~icons/ri/arrow-down-s-line'
+import IconCloseLine from '~icons/ri/close-line'
 import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, MaterialIssue, MaterialReturn, Movement, PaymentRecord, Permission, ProductionCompletion, ProductionCostReport, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse, WorkOrder } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
-import { canVisitRoute, nextExpandedGroup, resolveWorkspaceRoute, routeByKey, visibleRouteGroups } from './workspace-routes'
+import { canVisitRoute, closeRoute, nextExpandedGroup, openRoute, permittedOpenedRoutes, resolveWorkspaceRoute, routeByKey, visibleRouteGroups } from './workspace-routes'
 import type { WorkspaceRouteGroupKey, WorkspaceRouteKey } from './workspace-routes'
+import { scrollActiveTabIntoView } from './workspace-tab-strip'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
 
@@ -33,6 +35,7 @@ const naiveThemeOverrides: GlobalThemeOverrides = {
 
 const screen = ref<Screen>('loading')
 const activeTab = ref<WorkspaceRouteKey>('stock')
+const openedRouteKeys = ref<WorkspaceRouteKey[]>([])
 // 日常默认全部收起，点击分类时最多展开一个。
 const expandedGroupKey = ref<WorkspaceRouteGroupKey | null>(null)
 const version = ref('')
@@ -143,9 +146,21 @@ const visibleGroups = computed(() => visibleRouteGroups(user.value?.permissions 
   ...group, routes: group.routes.map(route => ({ ...route, icon: routeIcons[route.icon] }))
 })))
 const visibleTabs = computed(() => visibleGroups.value.flatMap(group => group.routes))
+const openedTabs = computed(() => openedRouteKeys.value.map(routeByKey))
+function revealCurrentTab(): void {
+  // 路由先更新页面和标签，再在 Vue 完成 DOM 更新后调整横向滚动位置。
+  void nextTick(() => {
+    const strip = document.querySelector<HTMLElement>('.workspace-tabs')
+    if (strip) scrollActiveTabIntoView(strip)
+  })
+}
 watch(screen, current => {
   // 再次登录时从全部收起开始，不保留上个账号的侧栏状态。
-  if (current !== 'app') expandedGroupKey.value = null
+  if (current !== 'app') {
+    expandedGroupKey.value = null
+    // 页面栏只属于当前登录会话，退出后不向下一个账号展示访问记录。
+    openedRouteKeys.value = []
+  }
 })
 watch(visibleGroups, groups => {
   // 当前账号失去某分类的查看权限后，清除其展开状态。
@@ -161,7 +176,9 @@ function toggleRouteGroup(key: WorkspaceRouteGroupKey): void {
 function syncWorkspaceRoute(): void {
   if (screen.value !== 'app' || !user.value) return
   const route = resolveWorkspaceRoute(window.location.hash, user.value.permissions)
+  openedRouteKeys.value = openRoute(permittedOpenedRoutes(openedRouteKeys.value, user.value.permissions), route.key)
   activeTab.value = route.key
+  revealCurrentTab()
   if (window.location.hash !== `#${route.path}`) {
     // 未授权或未知地址不留在历史记录中，也不渲染原页面。
     window.history.replaceState(null, '', `#${route.path}`)
@@ -172,8 +189,16 @@ function navigateToRoute(key: WorkspaceRouteKey): void {
   if (!user.value) return
   const route = routeByKey(key)
   if (!canVisitRoute(route, user.value.permissions)) return
+  openedRouteKeys.value = openRoute(openedRouteKeys.value, key)
   activeTab.value = key
+  revealCurrentTab()
   window.location.hash = route.path
+}
+
+function closeOpenedRoute(key: WorkspaceRouteKey): void {
+  const result = closeRoute(openedRouteKeys.value, key, activeTab.value)
+  openedRouteKeys.value = result.opened
+  if (result.active !== activeTab.value) navigateToRoute(result.active)
 }
 const selectedSalesReturnShipment = computed(() => shipments.value.find(
   item => item.id === salesReturnForm.value.shipment_id))
@@ -1188,13 +1213,14 @@ async function monitorConnection(): Promise<void> {
 
 onMounted(async () => {
   window.addEventListener('hashchange', syncWorkspaceRoute)
+  window.addEventListener('resize', revealCurrentTab)
   if (window.nexora) version.value = await window.nexora.getVersion().catch(() => '')
   if (window.nexora) hostForm.value.dataDir = await window.nexora.defaultDataDir().catch(() => '')
   await checkConnection()
   healthTimer = setInterval(() => { void monitorConnection() }, 5000)
 })
 
-onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer); window.removeEventListener('hashchange', syncWorkspaceRoute) })
+onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer); window.removeEventListener('hashchange', syncWorkspaceRoute); window.removeEventListener('resize', revealCurrentTab) })
 </script>
 
 <template>
@@ -1256,6 +1282,12 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
     </aside>
 
     <main class="content">
+      <nav v-if="screen === 'app'" class="workspace-tabs" aria-label="已打开页面">
+        <div v-for="item in openedTabs" :key="item.key" class="workspace-tab" :class="{ active: activeTab === item.key }">
+          <button class="workspace-tab-link" type="button" :aria-current="activeTab === item.key ? 'page' : undefined" @click="navigateToRoute(item.key)">{{ item.label }}</button>
+          <button v-if="openedTabs.length > 1" class="workspace-tab-close" type="button" :aria-label="`关闭${item.label}`" @click="closeOpenedRoute(item.key)"><IconCloseLine aria-hidden="true" /></button>
+        </div>
+      </nav>
       <header class="topbar">
         <div><p class="eyebrow">NEXORA WORKSPACE</p><h1>{{ screen === 'app' ? visibleTabs.find(item => item.key === activeTab)?.label : '开始使用联光 ERP' }}</h1></div>
         <div v-if="user" class="account"><span>{{ user.username }}<small>{{ user.roles.join(' · ') }}</small></span><button class="text-button" type="button" @click="logout">退出登录</button></div>
