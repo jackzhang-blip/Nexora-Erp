@@ -197,8 +197,37 @@ def test_windows_install_grants_system_access_to_selected_instance(monkeypatch, 
     assert program_acl[1] == ("icacls.exe", str(root), "/inheritance:r")
     assert not any("/T" in command for command in program_acl)
     assert ("icacls.exe", str(data_dir), "/grant", "*S-1-5-18:(OI)(CI)F", "/T") in commands
+    # 故障恢复须在首次启动前配置，CI 才能验证进程异常退出后的自动重启。
+    recovery = ("sc.exe", "failure", host_service.SERVICE_NAME, "reset=", "86400",
+                "actions=", "restart/60000/restart/60000/restart/60000")
+    assert recovery in commands
+    assert commands.index(recovery) < commands.index(("sc.exe", "start", host_service.SERVICE_NAME))
     assert commands[-2] == ("sc.exe", "start", host_service.SERVICE_NAME)
     assert commands[-1] == ("sc.exe", "config", host_service.SERVICE_NAME, "start=", "auto")
+
+
+def test_windows_install_rolls_back_if_recovery_policy_cannot_be_configured(monkeypatch, tmp_path):
+    root = tmp_path / "system"
+    source = tmp_path / "packaged"
+    source.mkdir()
+    (source / "nexora-server.exe").write_text("service-binary")
+    monkeypatch.setattr(host_service.sys, "platform", "win32")
+    monkeypatch.setattr(host_service, "system_root", lambda: root)
+    monkeypatch.setattr(host_service, "_require_admin", lambda: None)
+
+    def control(*args):
+        if args[:2] == ("sc.exe", "failure"):
+            raise RuntimeError("故障恢复策略无法设置")
+
+    monkeypatch.setattr(host_service, "_run", control)
+    monkeypatch.setattr(host_service.subprocess, "run", lambda *args, **_kwargs:
+                        subprocess.CompletedProcess(args, 0, "", ""))
+
+    # 策略缺失时拒绝留下看似安装完成、崩溃后却不会恢复的服务。
+    with pytest.raises(RuntimeError, match="故障恢复策略无法设置"):
+        host_service.install_service(host_service.HostConfig("主机", tmp_path / "data", 8123), source)
+    assert not (root / "host.json").exists()
+    assert not (root / "service").exists()
 
 
 def test_windows_install_rolls_back_when_service_exits_immediately(monkeypatch, tmp_path):

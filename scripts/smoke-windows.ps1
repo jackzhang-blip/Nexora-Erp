@@ -98,6 +98,34 @@ try {
       Authorization = "Bearer $($login.token)"
     } -SkipCertificateCheck
   Assert-TestSupplier -Port 18762 -Password $adminPassword -SupplierId $supplier.id
+  $certificate = Join-Path $serviceData 'server.crt'
+  $originalCertificate = (Get-FileHash $certificate -Algorithm SHA256).Hash
+  $beforeCrash = Get-CimInstance Win32_Service -Filter "Name='NexoraERPHost'"
+  if (-not $beforeCrash -or $beforeCrash.State -ne 'Running' -or $beforeCrash.ProcessId -le 0) {
+    throw '无法取得运行中的 Windows 服务进程，不能验证异常恢复。'
+  }
+  # 强制结束服务进程，必须由 SCM 的故障恢复策略拉起新进程；手动 start 不能替代这项检查。
+  Stop-Process -Id $beforeCrash.ProcessId -Force
+  $recovered = $false
+  for ($attempt = 0; $attempt -lt 480; $attempt++) {
+    $afterCrash = Get-CimInstance Win32_Service -Filter "Name='NexoraERPHost'" -ErrorAction SilentlyContinue
+    if ($afterCrash -and $afterCrash.State -eq 'Running' -and $afterCrash.ProcessId -gt 0 -and
+        $afterCrash.ProcessId -ne $beforeCrash.ProcessId) {
+      $recovered = $true
+      break
+    }
+    Start-Sleep -Milliseconds 250
+  }
+  if (-not $recovered) {
+    & sc.exe queryex NexoraERPHost
+    & sc.exe qfailure NexoraERPHost
+    throw 'Windows 服务进程异常退出后，SCM 未在 120 秒内启动新进程。'
+  }
+  Assert-ServiceHealthy
+  Assert-TestSupplier -Port 18762 -Password $adminPassword -SupplierId $supplier.id
+  if ((Get-FileHash $certificate -Algorithm SHA256).Hash -ne $originalCertificate) {
+    throw 'Windows 服务异常恢复后证书发生变化。'
+  }
   & $service stop
   if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务停止失败。' }
   & $service start
@@ -106,8 +134,6 @@ try {
   Assert-ServiceHealthy
   Assert-TestSupplier -Port 18762 -Password $adminPassword -SupplierId $supplier.id
   # 用同一安装包演练升级和恢复，确认备份含原证书且新版程序能重新接管服务。
-  $certificate = Join-Path $serviceData 'server.crt'
-  $originalCertificate = (Get-FileHash $certificate -Algorithm SHA256).Hash
   & $service upgrade --source (Split-Path $service -Parent)
   if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务升级失败。' }
   Assert-ServiceHealthy
