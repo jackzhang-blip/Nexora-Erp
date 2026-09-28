@@ -9,6 +9,7 @@ import { connect as tlsConnect } from 'node:tls'
 import Bonjour from 'bonjour-service'
 import type { Browser } from 'bonjour-service'
 import { callBackend, getBackendHealth, getServerInfo, selectBackend, type BackendTarget } from './backend'
+import { inspectDiscoveredAddresses, localAddress } from './discovery-probe'
 import { installManagedHost, managedHostStatus, startManagedHost, stopManagedHost, upgradeManagedHost } from './host-service'
 import type { ConnectionCandidate, DiscoveryResult, HostInput, ServerProfile, StartupState } from '../shared/desktop-api'
 
@@ -22,6 +23,7 @@ let stoppingService: Promise<void> | null = null
 let bonjour: Bonjour | null = null
 let browser: Browser | null = null
 let discovered: DiscoveryResult[] = []
+let discoveryGeneration = 0
 let pending: StoredProfile | null = null
 
 function configFile(): string { return join(app.getPath('userData'), 'connections.json') }
@@ -60,20 +62,6 @@ export async function hostStatus(): Promise<{ configured: boolean; running: bool
   }
   return { configured: !!config.host, running: !!service && service.exitCode === null,
     systemManaged: false, migrationNeeded: app.isPackaged && !!config.host }
-}
-
-function localAddress(address: string): boolean {
-  if (isIP(address) === 4) {
-    const parts = address.split('.').map(Number)
-    return parts[0] === 10 || parts[0] === 127 || (parts[0] === 192 && parts[1] === 168)
-      || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31)
-      || (parts[0] === 169 && parts[1] === 254)
-  }
-  if (isIP(address) === 6) {
-    const lower = address.toLowerCase()
-    return lower === '::1' || lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')
-  }
-  return false
 }
 
 async function resolveAddress(raw: string): Promise<string> {
@@ -371,19 +359,21 @@ export function hostFingerprint(): string | null {
 
 export function startDiscovery(onUpdate: (results: DiscoveryResult[]) => void): void {
   stopDiscovery()
+  const generation = discoveryGeneration
   discovered = []
   bonjour ??= new Bonjour()
   browser = bonjour.find({ type: 'nexora', protocol: 'tcp' })
   browser.on('up', (serviceEntry) => {
-    const address = serviceEntry.addresses?.find((candidate) => localAddress(candidate) && isIP(candidate) === 4)
-    if (!address) return
-    void inspectServer(address, serviceEntry.port).then((profile) => {
+    const advertisedId = typeof serviceEntry.txt?.id === 'string' ? serviceEntry.txt.id : undefined
+    void inspectDiscoveredAddresses(serviceEntry.addresses ?? [], serviceEntry.port, advertisedId, inspectServer).then((profile) => {
+      if (generation !== discoveryGeneration || !profile) return
       const result: DiscoveryResult = { ...publicProfile(profile), online: true }
       discovered = [result, ...discovered.filter((entry) => entry.id !== result.id)]
       onUpdate([...discovered])
-    }).catch(() => { /* 非 Nexora 或尚未就绪的服务不进入结果列表。 */ })
+    })
   })
   browser.on('down', (serviceEntry) => {
+    if (generation !== discoveryGeneration) return
     const id = serviceEntry.txt?.id
     discovered = discovered.map((entry) => entry.id === id ? { ...entry, online: false } : entry)
     onUpdate([...discovered])
@@ -391,7 +381,7 @@ export function startDiscovery(onUpdate: (results: DiscoveryResult[]) => void): 
   onUpdate([])
 }
 
-export function stopDiscovery(): void { browser?.stop(); browser = null }
+export function stopDiscovery(): void { discoveryGeneration += 1; browser?.stop(); browser = null }
 
 export function shutdownConnections(): void {
   stopDiscovery()
