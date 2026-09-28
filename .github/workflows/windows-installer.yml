@@ -25,8 +25,12 @@ jobs:
         run: |
           $env:PYTHONPATH = 'backend'
           python -m pytest backend/tests -q
-          node --experimental-strip-types --test tests/backend.test.mjs
-          node --test tests/branding.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # PowerShell 不替原生命令展开通配符，显式枚举全部桌面测试，覆盖发现和重连行为。
+          $desktopTests = @(Get-ChildItem tests -Filter '*.test.mjs' -File | ForEach-Object { $_.FullName })
+          if ($desktopTests.Count -eq 0) { throw '未找到桌面单元测试' }
+          node --experimental-strip-types --test $desktopTests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         shell: pwsh
       - name: 生成 Windows 安装包
         run: npm run dist:win
