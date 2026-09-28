@@ -1,4 +1,4 @@
-"""生产工单以启用 BOM 创建需料快照；发料和完工后续接入。"""
+"""生产工单以启用 BOM 创建需料快照，并汇总净领料数量。"""
 
 import sqlite3
 from decimal import Decimal, ROUND_CEILING
@@ -29,10 +29,15 @@ class WorkOrderInput(BaseModel):
 
 
 def issued_quantity(db: sqlite3.Connection, work_order_line_id: int) -> Decimal:
-    # 草稿不占工单需料，只有确认领料才扣减剩余数量。
-    return sum((Decimal(row[0]) for row in db.execute("""SELECT mil.quantity
+    # 原领料和退料都保留，工单可领量按已确认单据的净数量计算。
+    issued = sum((Decimal(row[0]) for row in db.execute("""SELECT mil.quantity
         FROM material_issue_lines mil JOIN material_issues mi ON mi.id = mil.material_issue_id
         WHERE mil.work_order_line_id = ? AND mi.status = 'posted'""", (work_order_line_id,))), Decimal(0))
+    returned = sum((Decimal(row[0]) for row in db.execute("""SELECT mrl.quantity
+        FROM material_return_lines mrl JOIN material_returns mr ON mr.id = mrl.material_return_id
+        JOIN material_issue_lines mil ON mil.id = mrl.material_issue_line_id
+        WHERE mil.work_order_line_id = ? AND mr.status = 'posted'""", (work_order_line_id,))), Decimal(0))
+    return issued - returned
 
 
 def work_order_data(db: sqlite3.Connection, order_id: int) -> dict:

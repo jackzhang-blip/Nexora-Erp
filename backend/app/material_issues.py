@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 from .database import connection
 from .inventory import balance, require_warehouse
 from .security import require
+from .material_returns import returned_quantity
 from .work_orders import issued_quantity
 
 router = APIRouter(prefix="/api/v1")
@@ -46,7 +47,12 @@ def material_issue_data(db: sqlite3.Connection, issue_id: int) -> dict:
         JOIN work_order_lines wol ON wol.id = mil.work_order_line_id
         JOIN materials m ON m.id = wol.component_material_id
         WHERE mil.material_issue_id = ? ORDER BY mil.id""", (issue_id,)).fetchall()
-    return {**dict(row), "lines": [dict(line) for line in lines]}
+    details = []
+    for line in lines:
+        returned = returned_quantity(db, line["id"])
+        details.append({**dict(line), "returned_quantity": str(returned),
+                        "returnable_quantity": str(Decimal(line["quantity"]) - returned)})
+    return {**dict(row), "lines": details}
 
 
 def checked_lines(db: sqlite3.Connection, order_id: int,

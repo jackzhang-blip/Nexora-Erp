@@ -56,7 +56,7 @@ npm run build
 - 采购退货关联已确认入库明细；确认时重新核对累计可退量和原入库仓库库存，并记录负向库存流水。原入库与订单已收数量保留，同时展示已退与净入库数量。未关联订单的历史入库无单价，退货金额显示待核对。
 - 应收应付清单从已确认出库、入库及对应退货逐行计算，保留单据、物料、往来单位和确认人来源。按订单核对业务净额、收付款净额和未结金额；历史无价入库列为待核价，不计入已知应付总额。
 - 财务员可按订单登记客户收款、供应商付款及退货后的退款，保存外部参考号和操作人。金额超出未结或可退余额会被拒绝；录错的记录通过新冲销记录更正，原记录不删除。当前是手工登记，不会自动连接银行账户或确认资金实际到账。
-- 生产计划员可建立 BOM 草稿并启用版本；同一成品只允许一个启用版本，启用时阻止物料循环引用。工单创建时固定 BOM 版本、目标产量及组件需求。下达后可分批建领料单，仓库员确认时重新核对剩余需料和源仓库存，写入可追溯的负向库存流水；已确认领料不能取消。退料更正、完工入库、质检与成本归集仍待实现。
+- 生产计划员可建立 BOM 草稿并启用版本；同一成品只允许一个启用版本，启用时阻止物料循环引用。工单创建时固定 BOM 版本、目标产量及组件需求。下达后可分批建领料单，仓库员确认时重新核对剩余需料和源仓库存，写入可追溯的负向库存流水；已确认领料不能取消。退料更正单按原领料明细核对累计可退量，确认后回到原仓库并恢复工单可领数量。完工入库、质检与成本归集仍待实现。
 - 销售订单可分批出库；确认出库时在同一写事务中检查订单剩余数量和指定仓库的可用库存，记录带单据来源的负库存流水。
 - 销售退货关联已确认出库明细；确认时重新核对累计可退量，在所选仓库记录正库存流水。原出库记录保留，订单另外显示已退与净交付数量。退货金额按原销售单价展示，并计入应收来源清单的负向调整；实际退款需另行登记。
 - 一张入库单、调拨单或盘点单只允许确认一次。确认状态与库存流水在同一个事务中写入，当前库存可按仓库或全部仓库从流水汇总；调拨前检查来源仓库可用量。盘点在建单时保存账面量，确认前如有库存变化须重新盘点。
@@ -64,4 +64,4 @@ npm run build
 
 ## English summary
 
-Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, user and role administration, purchase orders with partial receipts and linked returns, sales orders with partial shipments and linked returns, versioned production BOMs, work orders and partial material issues, a source-linked receivables/payables list, multi-warehouse stock, transfers, stocktakes, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Packaged hosts use an OS service; remote clients require a live connection. Payment records are entered manually and reconciled to orders. Posted material issues consume warehouse stock; returns, finished goods receipts and costing remain future work. Offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Cross-platform device acceptance remains pending.
+Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, user and role administration, purchase orders with partial receipts and linked returns, sales orders with partial shipments and linked returns, versioned production BOMs, work orders with partial material issues and linked returns, a source-linked receivables/payables list, multi-warehouse stock, transfers, stocktakes, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Packaged hosts use an OS service; remote clients require a live connection. Payment records are entered manually and reconciled to orders. Posted material returns restore stock to the original issue warehouse and adjust net issued quantity; finished goods receipts and costing remain future work. Offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Cross-platform device acceptance remains pending.
