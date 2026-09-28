@@ -27,9 +27,10 @@ try {
 
 # CI 运行器以管理员身份执行时，验证 SCM 接管、停止和重新启动打包后的服务。
 function Assert-ServiceHealthy {
+  param([int]$Port = 18762)
   for ($attempt = 0; $attempt -lt 60; $attempt++) {
     try {
-      $response = Invoke-RestMethod 'https://127.0.0.1:18762/api/v1/health' -SkipCertificateCheck -TimeoutSec 1
+      $response = Invoke-RestMethod "https://127.0.0.1:$Port/api/v1/health" -SkipCertificateCheck -TimeoutSec 1
       if ($response.status -eq 'ok' -and $response.service -eq 'nexora-api') { return }
     } catch {
       # 服务控制器返回后，HTTPS 监听可能还需要短暂初始化。
@@ -37,6 +38,19 @@ function Assert-ServiceHealthy {
     Start-Sleep -Milliseconds 250
   }
   throw 'Windows 系统服务没有通过 HTTPS 健康检查。'
+}
+
+function Assert-TestSupplier {
+  param([int]$Port, [string]$Password, [int]$SupplierId)
+  # 每次重登并经业务接口读取，证明数据库和鉴权会话都能被重启或恢复后的服务使用。
+  $loginBody = @{ username = 'ci_admin'; password = $Password } | ConvertTo-Json -Compress
+  $login = Invoke-RestMethod "https://127.0.0.1:$Port/api/v1/auth/login" -Method Post `
+    -ContentType 'application/json' -Body $loginBody -SkipCertificateCheck
+  $suppliers = Invoke-RestMethod "https://127.0.0.1:$Port/api/v1/suppliers" -Headers @{
+    Authorization = "Bearer $($login.token)"
+  } -SkipCertificateCheck
+  $matching = @($suppliers | Where-Object { $_.id -eq $SupplierId -and $_.name -eq 'CI 验收供应商' })
+  if ($matching.Count -ne 1) { throw "Windows 服务端口 $Port 的测试供应商资料缺失。" }
 }
 
 $request = Join-Path $env:RUNNER_TEMP 'nexora-service-request.json'
@@ -70,18 +84,37 @@ try {
   }
   # SCM 状态只能证明进程仍在；还要从打包后的系统服务实际读取 HTTPS 接口。
   Assert-ServiceHealthy
+  # 只在 CI 临时实例创建测试账号与供应商，后续每次服务重启都经 HTTPS 核对资料。
+  $adminPassword = 'CiSmoke-' + [Guid]::NewGuid().ToString('N')
+  $setupBody = @{ username = 'ci_admin'; password = $adminPassword } | ConvertTo-Json -Compress
+  Invoke-RestMethod 'https://127.0.0.1:18762/api/v1/setup/admin' -Method Post `
+    -ContentType 'application/json' -Body $setupBody -SkipCertificateCheck | Out-Null
+  $loginBody = @{ username = 'ci_admin'; password = $adminPassword } | ConvertTo-Json -Compress
+  $login = Invoke-RestMethod 'https://127.0.0.1:18762/api/v1/auth/login' -Method Post `
+    -ContentType 'application/json' -Body $loginBody -SkipCertificateCheck
+  $supplierBody = @{ name = 'CI 验收供应商' } | ConvertTo-Json -Compress
+  $supplier = Invoke-RestMethod 'https://127.0.0.1:18762/api/v1/suppliers' -Method Post `
+    -ContentType 'application/json' -Body $supplierBody -Headers @{
+      Authorization = "Bearer $($login.token)"
+    } -SkipCertificateCheck
+  Assert-TestSupplier -Port 18762 -Password $adminPassword -SupplierId $supplier.id
   & $service stop
   if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务停止失败。' }
   & $service start
   if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务重新启动失败。' }
   # 重新启动后再次确认数据库和 HTTPS 可用，而不是只相信 sc.exe 的退出码。
   Assert-ServiceHealthy
+  Assert-TestSupplier -Port 18762 -Password $adminPassword -SupplierId $supplier.id
   # 用同一安装包演练升级和恢复，确认备份含原证书且新版程序能重新接管服务。
   $certificate = Join-Path $serviceData 'server.crt'
   $originalCertificate = (Get-FileHash $certificate -Algorithm SHA256).Hash
   & $service upgrade --source (Split-Path $service -Parent)
   if ($LASTEXITCODE -ne 0) { throw 'Windows 系统服务升级失败。' }
   Assert-ServiceHealthy
+  Assert-TestSupplier -Port 18762 -Password $adminPassword -SupplierId $supplier.id
+  if ((Get-FileHash $certificate -Algorithm SHA256).Hash -ne $originalCertificate) {
+    throw 'Windows 升级后服务端证书发生变化。'
+  }
   $backupDir = Join-Path $env:ProgramData 'Nexora ERP/backups'
   $archive = Get-ChildItem $backupDir -Filter 'upgrade-*.nexora-backup' |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -91,6 +124,18 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Windows 成组备份恢复失败。' }
   if ((Get-FileHash (Join-Path $restoredDir 'server.crt') -Algorithm SHA256).Hash -ne $originalCertificate) {
     throw 'Windows 恢复后的服务端证书发生变化。'
+  }
+  # 恢复目录必须能作为独立实例启动并读取原业务资料；文件存在本身不足以证明可恢复。
+  & $service stop
+  if ($LASTEXITCODE -ne 0) { throw '恢复实例启动前无法停止原 Windows 服务。' }
+  $restoredProcess = Start-Process -FilePath $service -ArgumentList @(
+    '--data-dir', "`"$restoredDir`"", '--name', '"CI 恢复服务"', '--port', '18763'
+  ) -PassThru -WindowStyle Hidden
+  try {
+    Assert-ServiceHealthy -Port 18763
+    Assert-TestSupplier -Port 18763 -Password $adminPassword -SupplierId $supplier.id
+  } finally {
+    if (-not $restoredProcess.HasExited) { Stop-Process -Id $restoredProcess.Id -Force }
   }
 } finally {
   # 服务已自行退出时不再执行 stop，保留最初的失败信息。
