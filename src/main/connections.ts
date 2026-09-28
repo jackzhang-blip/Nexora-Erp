@@ -9,7 +9,7 @@ import { connect as tlsConnect } from 'node:tls'
 import Bonjour from 'bonjour-service'
 import type { Browser } from 'bonjour-service'
 import { callBackend, getBackendHealth, getServerInfo, selectBackend, type BackendTarget } from './backend'
-import { inspectDiscoveredAddresses, localAddress } from './discovery-probe'
+import { findPinnedService, inspectDiscoveredAddresses, localAddress } from './discovery-probe'
 import { installManagedHost, managedHostStatus, startManagedHost, stopManagedHost, upgradeManagedHost } from './host-service'
 import type { ConnectionCandidate, DiscoveryResult, HostInput, ServerProfile, StartupState } from '../shared/desktop-api'
 
@@ -136,20 +136,35 @@ export function approveConnection(id: string, fingerprint: string): ServerProfil
 export async function activateSaved(id: string): Promise<ServerProfile> {
   const profile = config.recent.find((entry) => entry.id === id)
   if (!profile) throw new Error('未找到保存的服务端')
-  const actual = await inspectCertificate(profile.host, profile.port)
-  if (actual.fingerprint !== profile.fingerprint || actual.id !== profile.id) {
-    throw new Error('服务端证书已变化，请对照服务端屏幕重新核验后手动连接')
+  let verified: StoredProfile
+  try {
+    const actual = await inspectCertificate(profile.host, profile.port)
+    if (actual.fingerprint !== profile.fingerprint || actual.id !== profile.id) {
+      throw new Error('服务端证书已变化，请对照服务端屏幕重新核验后手动连接')
+    }
+    const info = await getServerInfo({ host: profile.host, port: profile.port,
+      instanceId: profile.id, certificate: profile.certificate })
+    if (!compatibleVersion(info.version)) throw new Error('服务端与客户端版本不兼容')
+    verified = { ...profile, name: info.name, version: info.version }
+  } catch (originalError) {
+    if (profile.isLocal) throw originalError
+    const discovery = new Bonjour()
+    try {
+      const browser = discovery.find({ type: 'nexora', protocol: 'tcp' })
+      // 地址变化后仅用原实例 ID 与已固定的证书指纹寻找新地址，绝不自动信任新证书。
+      const recovered = await findPinnedService(browser, profile, inspectServer)
+      if (!recovered) throw originalError
+      verified = recovered
+    } finally {
+      discovery.destroy()
+    }
   }
-  const info = await getServerInfo({ host: profile.host, port: profile.port,
-    instanceId: profile.id, certificate: profile.certificate })
-  if (!compatibleVersion(info.version)) throw new Error('服务端与客户端版本不兼容')
-  profile.name = info.name
-  profile.version = info.version
   config.activeId = id
-  config.recent = [profile, ...config.recent.filter((entry) => entry.id !== id)]
+  config.recent = [verified, ...config.recent.filter((entry) => entry.id !== id)]
   save()
-  selectBackend({ host: profile.host, port: profile.port, instanceId: profile.id, certificate: profile.certificate })
-  return publicProfile(profile)
+  selectBackend({ host: verified.host, port: verified.port, instanceId: verified.id,
+    certificate: verified.certificate })
+  return publicProfile(verified)
 }
 
 export function disconnect(): void {
