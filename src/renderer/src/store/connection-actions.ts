@@ -360,7 +360,17 @@ export function createConnectionActions(
       return
     checkingHealth = true
     try {
-      const health = await window.nexora.getBackendHealth()
+      let health = await window.nexora.getBackendHealth()
+      if (!health.connected && connectionLost.value && server.value && !server.value.isLocal) {
+        try {
+          // 固定地址持续不可用时，主进程只会用原证书身份尝试发现新地址；恢复后重新读取业务数据。
+          server.value = await window.nexora.activateSaved(server.value.id)
+          health = await window.nexora.getBackendHealth()
+        } catch (cause) {
+          const message = displayError(cause)
+          if (message.includes('证书已变化')) error.value = message
+        }
+      }
       if (!health.connected) {
         connectionLost.value = true
         return
@@ -368,6 +378,7 @@ export function createConnectionActions(
       if (!connectionLost.value) return
       // TLS 请求仍使用固定证书；恢复后从服务端重读，避免展示断线期间的旧库存。
       connectionLost.value = false
+      error.value = ''
       if (screen.value === 'app') {
         try {
           await refreshData()

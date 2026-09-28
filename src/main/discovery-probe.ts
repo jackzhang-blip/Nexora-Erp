@@ -52,3 +52,46 @@ export async function inspectDiscoveredAddresses<T extends { id: string }>(
   }
   return null
 }
+
+export interface ServiceAdvertisement {
+  addresses?: string[]
+  port: number
+  txt?: { id?: unknown }
+}
+
+export interface RecoveryBrowser {
+  on(event: 'up', listener: (service: ServiceAdvertisement) => void): unknown
+  off(event: 'up', listener: (service: ServiceAdvertisement) => void): unknown
+  services: ServiceAdvertisement[]
+}
+
+export interface PinnedIdentity { id: string; fingerprint: string }
+
+export function findPinnedService<T extends PinnedIdentity>(
+  browser: RecoveryBrowser, pinned: PinnedIdentity,
+  inspect: (address: string, port: number) => Promise<T>, timeoutMs = 5000
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    let finished = false
+    const finish = (result: T | null): void => {
+      if (finished) return
+      finished = true
+      clearTimeout(timer)
+      browser.off('up', onUp)
+      resolve(result)
+    }
+    const onUp = (service: ServiceAdvertisement): void => {
+      if (service.txt?.id !== pinned.id || finished) return
+      // 广播只用于定位候选地址；必须核验此前固定的证书指纹，才允许自动改写保存的地址。
+      void inspectDiscoveredAddresses(service.addresses ?? [], service.port, pinned.id, async (address, port) => {
+        const profile = await inspect(address, port)
+        if (profile.fingerprint !== pinned.fingerprint) throw new Error('服务端证书指纹不匹配')
+        return profile
+      }).then((profile) => { if (profile) finish(profile) })
+    }
+    const timer = setTimeout(() => finish(null), timeoutMs)
+    browser.on('up', onUp)
+    // Bonjour 可能在注册监听前就已解析服务；已有结果也必须检查。
+    browser.services.forEach(onUp)
+  })
+}
