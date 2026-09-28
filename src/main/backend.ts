@@ -143,6 +143,10 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'activateBom': return { method: 'POST', path: `/api/v1/boms/${positiveId(payload, 'bomId')}/activate` }
     case 'retireBom': return { method: 'POST', path: `/api/v1/boms/${positiveId(payload, 'bomId')}/retire` }
     case 'cancelBom': return { method: 'POST', path: `/api/v1/boms/${positiveId(payload, 'bomId')}/cancel` }
+    case 'workOrders': return { method: 'GET', path: '/api/v1/work-orders' }
+    case 'createWorkOrder': return { method: 'POST', path: '/api/v1/work-orders', body: payload }
+    case 'releaseWorkOrder': return { method: 'POST', path: `/api/v1/work-orders/${positiveId(payload, 'orderId')}/release` }
+    case 'cancelWorkOrder': return { method: 'POST', path: `/api/v1/work-orders/${positiveId(payload, 'orderId')}/cancel` }
     case 'createPurchaseReturn': return { method: 'POST', path: '/api/v1/purchase-returns', body: payload }
     case 'postPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/post` }
     case 'cancelPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/cancel` }

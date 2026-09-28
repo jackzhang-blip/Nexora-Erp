@@ -182,6 +182,38 @@ export interface Bom {
   cancelled_at: string | null
   lines: BomLine[]
 }
+export interface WorkOrderLine {
+  id: number
+  component_material_id: number
+  sku: string
+  material_name: string
+  unit: string
+  required_quantity: string
+}
+// 工单组件需求在建单时固定，旧 BOM 停用也不会改变已下达工单。
+export interface WorkOrder {
+  id: number
+  bom_id: number
+  bom_version: number
+  product_material_id: number
+  product_sku: string
+  product_name: string
+  product_unit: string
+  warehouse_id: number
+  warehouse_name: string
+  target_quantity: string
+  reference: string
+  note: string
+  status: 'draft' | 'released' | 'in_progress' | 'completed' | 'cancelled'
+  created_by: number
+  created_by_name: string
+  released_by: number | null
+  cancelled_by: number | null
+  created_at: string
+  released_at: string | null
+  cancelled_at: string | null
+  lines: WorkOrderLine[]
+}
 // 销售订单剩余量由已确认的出库单计算，草稿不会预先扣减。
 export interface SalesOrderLine extends ReceiptLine {
   unit_price: string
@@ -350,6 +382,10 @@ export interface ErpOperations {
   activateBom: { input: { bomId: number }; output: Bom }
   retireBom: { input: { bomId: number }; output: Bom }
   cancelBom: { input: { bomId: number }; output: Bom }
+  workOrders: { input: undefined; output: WorkOrder[] }
+  createWorkOrder: { input: { bom_id: number; warehouse_id: number; target_quantity: string; reference: string; note: string }; output: WorkOrder }
+  releaseWorkOrder: { input: { orderId: number }; output: WorkOrder }
+  cancelWorkOrder: { input: { orderId: number }; output: WorkOrder }
   createPurchaseReturn: { input: { receipt_id: number; reason: string; lines: { receipt_line_id: number; quantity: string }[] }; output: PurchaseReturn }
   postPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   cancelPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }

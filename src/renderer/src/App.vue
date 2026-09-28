@@ -18,11 +18,11 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
-import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, Movement, PaymentRecord, Permission, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
+import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, Movement, PaymentRecord, Permission, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse, WorkOrder } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
-type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'finance' | 'boms' | 'users' | 'settings'
+type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'finance' | 'boms' | 'workOrders' | 'users' | 'settings'
 
 // 让新增的 Naive UI 控件沿用工作台现有的青绿色主色。
 const naiveThemeOverrides: GlobalThemeOverrides = {
@@ -49,6 +49,7 @@ const receivablesPayables = ref<ReceivablesPayables | null>(null)
 const financeAccounts = ref<FinanceAccount[]>([])
 const paymentRecords = ref<PaymentRecord[]>([])
 const boms = ref<Bom[]>([])
+const workOrders = ref<WorkOrder[]>([])
 const warehouses = ref<Warehouse[]>([])
 const transfers = ref<Transfer[]>([])
 const stocktakes = ref<Stocktake[]>([])
@@ -77,6 +78,7 @@ const paymentForm = ref({ kind: 'receivable' as 'receivable' | 'payable', order_
 const reversalReasons = ref<Record<number, string>>({})
 const bomForm = ref({ product_material_id: 0, base_quantity: '1', note: '',
   lines: [{ component_material_id: 0, quantity: '1' }] })
+const workOrderForm = ref({ bom_id: 0, warehouse_id: 1, target_quantity: '1', reference: '', note: '' })
 const warehouseForm = ref({ code: '', name: '' })
 const transferForm = ref({ from_warehouse_id: 1, to_warehouse_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const stocktakeForm = ref({ warehouse_id: 1, reference: '', lines: [{ material_id: 0, counted_quantity: '0' }] })
@@ -114,7 +116,7 @@ const visibleTabs = computed(() => [
   ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'purchase' as const, label: '采购订单', icon: IconFileList3Line }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'purchaseReturns' as const, label: '采购退货', icon: IconHistoryLine }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }, { key: 'stocktakes' as const, label: '库存盘点', icon: IconFileList3Line }] : []),
   ...(can('sales.view') ? [{ key: 'sales' as const, label: '销售订单', icon: IconFileList3Line }, { key: 'shipments' as const, label: '销售出库', icon: IconArchiveLine }, { key: 'salesReturns' as const, label: '销售退货', icon: IconHistoryLine }] : []),
   ...(can('finance.view') ? [{ key: 'finance' as const, label: '应收应付', icon: IconFileList3Line }] : []),
-  ...(can('production.view') ? [{ key: 'boms' as const, label: '生产 BOM', icon: IconStackLine }] : []),
+  ...(can('production.view') ? [{ key: 'boms' as const, label: '生产 BOM', icon: IconStackLine }, { key: 'workOrders' as const, label: '生产工单', icon: IconFileList3Line }] : []),
   ...(can('users.manage') ? [{ key: 'users' as const, label: '用户权限', icon: IconTeamLine }] : []),
   { key: 'settings' as const, label: '连接与服务', icon: IconSettings3Line }
 ])
@@ -423,9 +425,12 @@ async function refreshData(): Promise<void> {
     paymentRecords.value = []
   }
   if (can('production.view')) {
-    boms.value = await window.nexora.callApi('boms', undefined)
+    [boms.value, workOrders.value] = await Promise.all([
+      window.nexora.callApi('boms', undefined), window.nexora.callApi('workOrders', undefined)
+    ])
   } else {
     boms.value = []
+    workOrders.value = []
   }
   if (can('users.manage')) {
     [permissions.value, roles.value, users.value] = await Promise.all([
@@ -789,6 +794,25 @@ async function cancelBom(bomId: number): Promise<void> {
   await perform(() => window.nexora!.callApi('cancelBom', { bomId }), `BOM #${bomId} 草稿已取消。`)
 }
 
+async function createWorkOrder(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    await window.nexora!.callApi('createWorkOrder', { ...workOrderForm.value })
+    // 成功后重置选择，避免误把下一张工单挂在旧版 BOM 上。
+    workOrderForm.value = { bom_id: 0, warehouse_id: 1, target_quantity: '1', reference: '', note: '' }
+  }, '生产工单草稿已创建，组件需求已固定。')
+}
+
+async function releaseWorkOrder(orderId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('releaseWorkOrder', { orderId }), `生产工单 #${orderId} 已下达。`)
+}
+
+async function cancelWorkOrder(orderId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('cancelWorkOrder', { orderId }), `生产工单 #${orderId} 已取消。`)
+}
+
 async function createUser(): Promise<void> {
   if (!window.nexora) return
   await perform(async () => {
@@ -1030,6 +1054,16 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
           </div>
           <div class="card"><div class="section-heading"><div><p class="eyebrow">BOM HISTORY</p><h2>成品配方版本</h2></div></div><div v-if="!boms.length" class="muted">暂无 BOM。</div>
             <article v-for="item in boms" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.product_name }}（{{ item.product_sku }}）· V{{ item.version }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} · 基准产出 {{ item.base_quantity }} {{ item.product_unit }} <span v-if="item.note">· {{ item.note }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', active: '已启用', retired: '已停用', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('bom.activate')" class="primary small" type="button" :disabled="busy || boms.some(other => other.product_material_id === item.product_material_id && other.status === 'active')" @click="activateBom(item.id)">启用</button><button v-if="item.status === 'active' && can('bom.retire')" class="secondary small" type="button" :disabled="busy" @click="retireBom(item.id)">停用</button><button v-if="item.status === 'draft' && can('bom.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelBom(item.id)">取消草稿</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article>
+          </div>
+        </section>
+
+        <section v-if="activeTab === 'workOrders'" class="stack">
+          <div v-if="can('work_order.create')" class="card"><div class="section-heading"><div><p class="eyebrow">PRODUCTION ORDERS</p><h2>新建生产工单</h2></div><span class="pill">草稿</span></div>
+            <p class="muted">选择已启用的 BOM 和目标产量。建单时会固定本次组件需求；仓库用于后续完工入库，目前不会改变库存。</p>
+            <form @submit.prevent="createWorkOrder"><div class="form-grid"><label>启用的 BOM<select v-model.number="workOrderForm.bom_id" required><option :value="0" disabled>选择成品与版本</option><option v-for="item in boms.filter(entry => entry.status === 'active')" :key="item.id" :value="item.id">{{ item.product_name }}（{{ item.product_sku }}）· V{{ item.version }}</option></select></label><label>完工目标仓库<select v-model.number="workOrderForm.warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>目标产量<input v-model.trim="workOrderForm.target_quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><label>参考号（可选）<input v-model.trim="workOrderForm.reference" maxlength="100" /></label><label>备注（可选）<input v-model.trim="workOrderForm.note" maxlength="200" /></label></div><button class="primary" type="submit" :disabled="busy || !boms.some(item => item.status === 'active') || !warehouses.length">保存工单草稿</button></form>
+          </div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">WORK ORDER HISTORY</p><h2>生产工单</h2></div></div><div v-if="!workOrders.length" class="muted">暂无生产工单。</div>
+            <article v-for="item in workOrders" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.product_name }}（{{ item.product_sku }}）· BOM V{{ item.bom_version }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} · 目标 {{ item.target_quantity }} {{ item.product_unit }} · {{ item.warehouse_name }} <span v-if="item.reference">· {{ item.reference }}</span><span v-if="item.note"> · {{ item.note }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', released: '已下达', in_progress: '生产中', completed: '已完工', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('work_order.release')" class="primary small" type="button" :disabled="busy" @click="releaseWorkOrder(item.id)">下达</button><button v-if="(item.status === 'draft' || item.status === 'released') && can('work_order.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelWorkOrder(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.required_quantity }} {{ line.unit }}</span></div></article>
           </div>
         </section>
 
