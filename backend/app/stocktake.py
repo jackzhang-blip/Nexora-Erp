@@ -31,6 +31,17 @@ class StocktakeInput(BaseModel):
     lines: list[StocktakeLineInput] = Field(min_length=1, max_length=100)
 
 
+class StocktakeReverseInput(BaseModel):
+    reason: str = Field(min_length=1, max_length=200)
+
+    @field_validator("reason")
+    @classmethod
+    def valid_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("冲销原因不能为空")
+        return value.strip()
+
+
 def movement_checkpoint(db: sqlite3.Connection, warehouse_id: int, material_id: int) -> int:
     # 即使期间出入库相抵后余额未变，流水编号仍能识别已经过时的实盘结果。
     return db.execute("""SELECT COALESCE(MAX(id), 0) FROM stock_movements
@@ -38,9 +49,14 @@ def movement_checkpoint(db: sqlite3.Connection, warehouse_id: int, material_id: 
 
 
 def stocktake_data(db: sqlite3.Connection, stocktake_id: int) -> dict:
-    row = db.execute("""SELECT s.*, w.name AS warehouse_name, u.username AS created_by_name
+    row = db.execute("""SELECT s.*, w.name AS warehouse_name, u.username AS created_by_name,
+        r.id AS reversal_id, r.reason AS reversal_reason,
+        r.created_by AS reversed_by, ru.username AS reversed_by_name,
+        r.created_at AS reversed_at
         FROM stocktakes s JOIN warehouses w ON w.id = s.warehouse_id
-        JOIN users u ON u.id = s.created_by WHERE s.id = ?""", (stocktake_id,)).fetchone()
+        JOIN users u ON u.id = s.created_by
+        LEFT JOIN stocktake_reversals r ON r.stocktake_id = s.id
+        LEFT JOIN users ru ON ru.id = r.created_by WHERE s.id = ?""", (stocktake_id,)).fetchone()
     if not row:
         raise HTTPException(404, "盘点单不存在")
     lines = db.execute("""SELECT sl.id, sl.material_id, m.sku, m.name AS material_name,
@@ -120,4 +136,38 @@ def cancel_stocktake(stocktake_id: int, user: dict = Depends(require("stocktake.
             raise HTTPException(409, "只有草稿盘点单可取消；已确认差异须另建更正单")
         db.execute("""UPDATE stocktakes SET status = 'cancelled', cancelled_by = ?,
             cancelled_at = CURRENT_TIMESTAMP WHERE id = ?""", (user["id"], stocktake_id))
+        return stocktake_data(db, stocktake_id)
+
+
+@router.post("/stocktakes/{stocktake_id}/reverse")
+def reverse_stocktake(stocktake_id: int, payload: StocktakeReverseInput,
+                      user: dict = Depends(require("stocktake.reverse"))) -> dict:
+    with connection() as db:
+        # 写锁覆盖重复冲销、当前库存核对与补偿流水，避免并发操作生成负库存。
+        db.execute("BEGIN IMMEDIATE")
+        stocktake = db.execute("SELECT * FROM stocktakes WHERE id = ?", (stocktake_id,)).fetchone()
+        if not stocktake:
+            raise HTTPException(404, "盘点单不存在")
+        if stocktake["status"] != "posted":
+            raise HTTPException(409, "只有已确认盘点单可冲销")
+        if db.execute("SELECT 1 FROM stocktake_reversals WHERE stocktake_id = ?",
+                      (stocktake_id,)).fetchone():
+            raise HTTPException(409, "此盘点单已冲销")
+        lines = db.execute("SELECT * FROM stocktake_lines WHERE stocktake_id = ?",
+                           (stocktake_id,)).fetchall()
+        for line in lines:
+            difference = Decimal(line["counted_quantity"]) - Decimal(line["book_quantity"])
+            if difference > 0 and balance(db, stocktake["warehouse_id"], line["material_id"]) < difference:
+                raise HTTPException(409, f"物料 #{line['material_id']} 的当前库存不足以冲销盘盈，请先核对实物")
+        reversal_id = db.execute("""INSERT INTO stocktake_reversals(stocktake_id, reason, created_by)
+            VALUES (?, ?, ?)""", (stocktake_id, payload.reason, user["id"])).lastrowid
+        for line in lines:
+            difference = Decimal(line["counted_quantity"]) - Decimal(line["book_quantity"])
+            if difference:
+                # 冲销只追加反向流水；零差异盘点保留冲销记录但不制造零数量流水。
+                db.execute("""INSERT INTO stock_movements(
+                    warehouse_id, material_id, quantity, source_type, source_id, source_line_id, created_by)
+                    VALUES (?, ?, ?, 'stocktake_reversal', ?, ?, ?)""",
+                    (stocktake["warehouse_id"], line["material_id"], str(-difference), reversal_id,
+                     line["id"], user["id"]))
         return stocktake_data(db, stocktake_id)
