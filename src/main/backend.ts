@@ -137,6 +137,12 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
       method: 'POST', path: `/api/v1/finance/payment-records/${positiveId(payload, 'paymentId')}/reverse`,
       body: { reason: (payload as { reason: unknown }).reason }
     }
+    // BOM 的生命周期操作只接受经校验的单据编号。
+    case 'boms': return { method: 'GET', path: '/api/v1/boms' }
+    case 'createBom': return { method: 'POST', path: '/api/v1/boms', body: payload }
+    case 'activateBom': return { method: 'POST', path: `/api/v1/boms/${positiveId(payload, 'bomId')}/activate` }
+    case 'retireBom': return { method: 'POST', path: `/api/v1/boms/${positiveId(payload, 'bomId')}/retire` }
+    case 'cancelBom': return { method: 'POST', path: `/api/v1/boms/${positiveId(payload, 'bomId')}/cancel` }
     case 'createPurchaseReturn': return { method: 'POST', path: '/api/v1/purchase-returns', body: payload }
     case 'postPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/post` }
     case 'cancelPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/cancel` }

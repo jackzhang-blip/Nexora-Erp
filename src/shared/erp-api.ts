@@ -152,6 +152,36 @@ export interface FinanceOverview {
   accounts: FinanceAccount[]
   payments: PaymentRecord[]
 }
+export interface BomLine {
+  id: number
+  component_material_id: number
+  sku: string
+  material_name: string
+  unit: string
+  quantity: string
+}
+// 生产工单将固定引用一个 BOM 版本，停用后历史内容仍可查询。
+export interface Bom {
+  id: number
+  product_material_id: number
+  product_sku: string
+  product_name: string
+  product_unit: string
+  version: number
+  base_quantity: string
+  note: string
+  status: 'draft' | 'active' | 'retired' | 'cancelled'
+  created_by: number
+  created_by_name: string
+  activated_by: number | null
+  retired_by: number | null
+  cancelled_by: number | null
+  created_at: string
+  activated_at: string | null
+  retired_at: string | null
+  cancelled_at: string | null
+  lines: BomLine[]
+}
 // 销售订单剩余量由已确认的出库单计算，草稿不会预先扣减。
 export interface SalesOrderLine extends ReceiptLine {
   unit_price: string
@@ -315,6 +345,11 @@ export interface ErpOperations {
   paymentRecords: { input: undefined; output: PaymentRecord[] }
   createPaymentRecord: { input: { kind: 'receivable' | 'payable'; order_id: number; action: 'settlement' | 'refund'; amount: string; reference: string; note: string }; output: PaymentRecord }
   reversePaymentRecord: { input: { paymentId: number; reason: string }; output: PaymentRecord }
+  boms: { input: undefined; output: Bom[] }
+  createBom: { input: { product_material_id: number; base_quantity: string; note: string; lines: { component_material_id: number; quantity: string }[] }; output: Bom }
+  activateBom: { input: { bomId: number }; output: Bom }
+  retireBom: { input: { bomId: number }; output: Bom }
+  cancelBom: { input: { bomId: number }; output: Bom }
   createPurchaseReturn: { input: { receipt_id: number; reason: string; lines: { receipt_line_id: number; quantity: string }[] }; output: PurchaseReturn }
   postPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   cancelPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }

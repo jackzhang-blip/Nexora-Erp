@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 11:
+        if version > 12:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -440,3 +440,44 @@ def migrate() -> None:
                            [(role, permission) for role in ("admin", "finance")
                             for permission in ("finance.record", "finance.reverse")])
             db.execute("PRAGMA user_version = 11")
+        if version < 12:
+            # 每个成品保留 BOM 历史版本，同一时刻只允许一个版本启用。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE boms (
+                id INTEGER PRIMARY KEY,
+                product_material_id INTEGER NOT NULL REFERENCES materials(id),
+                version INTEGER NOT NULL,
+                base_quantity TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'retired', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                activated_by INTEGER REFERENCES users(id),
+                retired_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                activated_at TEXT,
+                retired_at TEXT,
+                cancelled_at TEXT,
+                UNIQUE (product_material_id, version)
+            )""")
+            db.execute("""CREATE UNIQUE INDEX boms_one_active_product
+                ON boms(product_material_id) WHERE status = 'active'""")
+            db.execute("""CREATE TABLE bom_lines (
+                id INTEGER PRIMARY KEY,
+                bom_id INTEGER NOT NULL REFERENCES boms(id),
+                component_material_id INTEGER NOT NULL REFERENCES materials(id),
+                quantity TEXT NOT NULL,
+                UNIQUE (bom_id, component_material_id)
+            )""")
+            db.execute("INSERT INTO roles(code, label, is_builtin) VALUES ('planner', '生产计划员', 1)")
+            db.executemany("INSERT INTO permissions(code) VALUES (?)", [(code,) for code in (
+                "production.view", "bom.create", "bom.activate", "bom.retire", "bom.cancel")])
+            grants = {"admin": ("production.view", "bom.create", "bom.activate", "bom.retire", "bom.cancel"),
+                      "planner": ("inventory.view", "production.view", "bom.create", "bom.activate",
+                                  "bom.retire", "bom.cancel"),
+                      "warehouse": ("production.view",)}
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, permission) for role, permissions in grants.items()
+                            for permission in permissions])
+            db.execute("PRAGMA user_version = 12")
