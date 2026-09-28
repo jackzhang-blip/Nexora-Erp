@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 12:
+        if version > 13:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -481,3 +481,37 @@ def migrate() -> None:
                            [(role, permission) for role, permissions in grants.items()
                             for permission in permissions])
             db.execute("PRAGMA user_version = 12")
+        if version < 13:
+            # 工单固定引用 BOM 版本并快照需料数量；后续版本切换不影响旧工单。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE work_orders (
+                id INTEGER PRIMARY KEY,
+                bom_id INTEGER NOT NULL REFERENCES boms(id),
+                warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+                target_quantity TEXT NOT NULL,
+                reference TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
+                    ('draft', 'released', 'in_progress', 'completed', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                released_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                released_at TEXT,
+                cancelled_at TEXT
+            )""")
+            db.execute("""CREATE TABLE work_order_lines (
+                id INTEGER PRIMARY KEY,
+                work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+                component_material_id INTEGER NOT NULL REFERENCES materials(id),
+                required_quantity TEXT NOT NULL,
+                UNIQUE (work_order_id, component_material_id)
+            )""")
+            db.execute("CREATE INDEX work_orders_bom ON work_orders(bom_id)")
+            db.executemany("INSERT INTO permissions(code) VALUES (?)", [(code,) for code in (
+                "work_order.create", "work_order.release", "work_order.cancel")])
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, permission) for role in ("admin", "planner")
+                            for permission in ("work_order.create", "work_order.release", "work_order.cancel")])
+            db.execute("PRAGMA user_version = 13")

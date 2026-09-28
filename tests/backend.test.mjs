@@ -109,6 +109,12 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   await callBackend('activateBom', { bomId: 12 })
   assert.equal(calls[21].path, '/api/v1/boms/12/activate')
   await assert.rejects(callBackend('retireBom', { bomId: '../users' }), /记录编号无效/)
+  // 生产工单列表和下达操作也必须经过主进程的固定路径与正整数编号校验。
+  await callBackend('workOrders', undefined)
+  assert.equal(calls[22].path, '/api/v1/work-orders')
+  await callBackend('releaseWorkOrder', { orderId: 13 })
+  assert.equal(calls[23].path, '/api/v1/work-orders/13/release')
+  await assert.rejects(callBackend('cancelWorkOrder', { orderId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('confirmSalesOrder', { orderId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('updateRole', { code: '../users', label: '错误', permissions: [] }), /角色代码无效/)
   await assert.rejects(callBackend('postReceipt', { receiptId: '../users' }), /记录编号无效/)

@@ -25,6 +25,7 @@ from .production import router as production_router
 from .sales import router as sales_router
 from .sales_returns import router as sales_returns_router
 from .stocktake import router as stocktake_router
+from .work_orders import router as work_orders_router
 from .security import bearer, current_user, hash_password, require, token_hash, user_details, verify_password
 
 
@@ -69,6 +70,7 @@ app.include_router(purchase_router)
 app.include_router(purchase_returns_router)
 app.include_router(finance_router)
 app.include_router(production_router)
+app.include_router(work_orders_router)
 app.include_router(stocktake_router)
 app.include_router(sales_router)
 app.include_router(sales_returns_router)
