@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 6:
+        if version > 7:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -275,3 +275,68 @@ def migrate() -> None:
                            [(role, code) for role in ("admin", "warehouse")
                             for code in ("stocktake.create", "stocktake.post", "stocktake.cancel")])
             db.execute("PRAGMA user_version = 6")
+        if version < 7:
+            # 销售订单与出库明细独立存储；确认出库时才消耗库存和订单剩余量。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE customers (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.execute("""CREATE TABLE sales_orders (
+                id INTEGER PRIMARY KEY,
+                customer_id INTEGER NOT NULL REFERENCES customers(id),
+                reference TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
+                    ('draft', 'confirmed', 'partially_shipped', 'shipped', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                confirmed_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                confirmed_at TEXT,
+                cancelled_at TEXT
+            )""")
+            db.execute("""CREATE TABLE sales_order_lines (
+                id INTEGER PRIMARY KEY,
+                sales_order_id INTEGER NOT NULL REFERENCES sales_orders(id),
+                material_id INTEGER NOT NULL REFERENCES materials(id),
+                quantity TEXT NOT NULL,
+                unit_price TEXT NOT NULL,
+                UNIQUE (sales_order_id, material_id)
+            )""")
+            db.execute("""CREATE TABLE shipments (
+                id INTEGER PRIMARY KEY,
+                sales_order_id INTEGER NOT NULL REFERENCES sales_orders(id),
+                warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+                reference TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'posted', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                posted_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                posted_at TEXT,
+                cancelled_at TEXT
+            )""")
+            db.execute("""CREATE TABLE shipment_lines (
+                id INTEGER PRIMARY KEY,
+                shipment_id INTEGER NOT NULL REFERENCES shipments(id),
+                sales_order_line_id INTEGER NOT NULL REFERENCES sales_order_lines(id),
+                quantity TEXT NOT NULL,
+                UNIQUE (shipment_id, sales_order_line_id)
+            )""")
+            db.execute("CREATE INDEX shipment_lines_order_line ON shipment_lines(sales_order_line_id)")
+            db.execute("INSERT INTO roles(code, label, is_builtin) VALUES ('seller', '销售员', 1)")
+            db.executemany("INSERT INTO permissions(code) VALUES (?)", [(code,) for code in (
+                "sales.view", "customer.manage", "sales_order.create", "sales_order.confirm",
+                "sales_order.cancel", "shipment.create", "shipment.post", "shipment.cancel")])
+            grants = {"admin": ("sales.view", "customer.manage", "sales_order.create",
+                                 "sales_order.confirm", "sales_order.cancel", "shipment.create", "shipment.post",
+                                 "shipment.cancel"),
+                      "seller": ("inventory.view", "sales.view", "customer.manage", "sales_order.create",
+                                 "sales_order.confirm", "sales_order.cancel", "shipment.create", "shipment.cancel"),
+                      "warehouse": ("sales.view", "shipment.create", "shipment.post", "shipment.cancel")}
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, permission) for role, permissions in grants.items()
+                            for permission in permissions])
+            db.execute("PRAGMA user_version = 7")

@@ -117,6 +117,8 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     }
     case 'suppliers': return { method: 'GET', path: '/api/v1/suppliers' }
     case 'createSupplier': return { method: 'POST', path: '/api/v1/suppliers', body: payload }
+    case 'customers': return { method: 'GET', path: '/api/v1/customers' }
+    case 'createCustomer': return { method: 'POST', path: '/api/v1/customers', body: payload }
     case 'materials': return { method: 'GET', path: '/api/v1/materials' }
     case 'createMaterial': return { method: 'POST', path: '/api/v1/materials', body: payload }
     case 'warehouses': return { method: 'GET', path: '/api/v1/warehouses' }
@@ -128,6 +130,14 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'createPurchaseOrder': return { method: 'POST', path: '/api/v1/purchase-orders', body: payload }
     case 'confirmPurchaseOrder': return { method: 'POST', path: `/api/v1/purchase-orders/${positiveId(payload, 'orderId')}/confirm` }
     case 'cancelPurchaseOrder': return { method: 'POST', path: `/api/v1/purchase-orders/${positiveId(payload, 'orderId')}/cancel` }
+    case 'salesOrders': return { method: 'GET', path: '/api/v1/sales-orders' }
+    case 'createSalesOrder': return { method: 'POST', path: '/api/v1/sales-orders', body: payload }
+    case 'confirmSalesOrder': return { method: 'POST', path: `/api/v1/sales-orders/${positiveId(payload, 'orderId')}/confirm` }
+    case 'cancelSalesOrder': return { method: 'POST', path: `/api/v1/sales-orders/${positiveId(payload, 'orderId')}/cancel` }
+    case 'shipments': return { method: 'GET', path: '/api/v1/shipments' }
+    case 'createShipment': return { method: 'POST', path: '/api/v1/shipments', body: payload }
+    case 'postShipment': return { method: 'POST', path: `/api/v1/shipments/${positiveId(payload, 'shipmentId')}/post` }
+    case 'cancelShipment': return { method: 'POST', path: `/api/v1/shipments/${positiveId(payload, 'shipmentId')}/cancel` }
     case 'transfers': return { method: 'GET', path: '/api/v1/transfers' }
     case 'createTransfer': return { method: 'POST', path: '/api/v1/transfers', body: payload }
     case 'postTransfer': return { method: 'POST', path: `/api/v1/transfers/${positiveId(payload, 'transferId')}/post` }

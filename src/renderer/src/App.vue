@@ -18,11 +18,11 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
-import type { Material, Movement, Permission, PurchaseOrder, Receipt, Role, Stock, Stocktake, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
+import type { Customer, Material, Movement, Permission, PurchaseOrder, Receipt, Role, SalesOrder, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
-type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'transfers' | 'stocktakes' | 'users' | 'settings'
+type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'users' | 'settings'
 
 // 让新增的 Naive UI 控件沿用工作台现有的青绿色主色。
 const naiveThemeOverrides: GlobalThemeOverrides = {
@@ -47,6 +47,9 @@ const purchaseOrders = ref<PurchaseOrder[]>([])
 const warehouses = ref<Warehouse[]>([])
 const transfers = ref<Transfer[]>([])
 const stocktakes = ref<Stocktake[]>([])
+const customers = ref<Customer[]>([])
+const salesOrders = ref<SalesOrder[]>([])
+const shipments = ref<Shipment[]>([])
 const selectedWarehouseId = ref(0)
 const roles = ref<Role[]>([])
 const permissions = ref<Permission[]>([])
@@ -64,6 +67,11 @@ const purchaseForm = ref({ supplier_id: 0, reference: '',
 const warehouseForm = ref({ code: '', name: '' })
 const transferForm = ref({ from_warehouse_id: 1, to_warehouse_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const stocktakeForm = ref({ warehouse_id: 1, reference: '', lines: [{ material_id: 0, counted_quantity: '0' }] })
+const customerForm = ref({ name: '' })
+const salesForm = ref({ customer_id: 0, reference: '',
+  lines: [{ material_id: 0, quantity: '1', unit_price: '0' }] })
+const shipmentForm = ref({ sales_order_id: 0, warehouse_id: 1, reference: '',
+  lines: [{ material_id: 0, quantity: '1' }] })
 const newUser = ref({ username: '', password: '', roles: ['viewer'] as string[] })
 const newRole = ref({ code: '', label: '', permissions: ['inventory.view'] as string[] })
 const passwordChange = ref({ current_password: '', new_password: '' })
@@ -89,6 +97,7 @@ const can = (permission: string): boolean => user.value?.permissions.includes(pe
 // 导航权限仍按原规则计算；图标与文字绑定，避免图标单独承载含义。
 const visibleTabs = computed(() => [
   ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'purchase' as const, label: '采购订单', icon: IconFileList3Line }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }, { key: 'stocktakes' as const, label: '库存盘点', icon: IconFileList3Line }] : []),
+  ...(can('sales.view') ? [{ key: 'sales' as const, label: '销售订单', icon: IconFileList3Line }, { key: 'shipments' as const, label: '销售出库', icon: IconArchiveLine }] : []),
   ...(can('users.manage') ? [{ key: 'users' as const, label: '用户权限', icon: IconTeamLine }] : []),
   { key: 'settings' as const, label: '连接与服务', icon: IconSettings3Line }
 ])
@@ -102,6 +111,15 @@ function localTime(value: string): string {
   // SQLite 的 CURRENT_TIMESTAMP 是 UTC，展示时换算成用户设备的本地时区。
   const date = new Date(value.replace(' ', 'T') + 'Z')
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function movementSource(item: Movement): string {
+  // 所有库存变动都显示原始业务单据，便于从数量追溯到责任操作。
+  if (item.receipt_id !== null) return `入库单 #${item.receipt_id}`
+  if (item.transfer_id !== null) return `调拨单 #${item.transfer_id}`
+  if (item.stocktake_id !== null) return `盘点单 #${item.stocktake_id}`
+  if (item.shipment_id !== null) return `出库单 #${item.shipment_id}`
+  return `流水 #${item.id}`
 }
 
 async function checkConnection(): Promise<void> {
@@ -356,6 +374,13 @@ async function refreshData(): Promise<void> {
       window.nexora.callApi('stocktakes', undefined)
     ])
   }
+  if (can('sales.view')) {
+    [customers.value, salesOrders.value, shipments.value] = await Promise.all([
+      window.nexora.callApi('customers', undefined),
+      window.nexora.callApi('salesOrders', undefined),
+      window.nexora.callApi('shipments', undefined)
+    ])
+  }
   if (can('users.manage')) {
     [permissions.value, roles.value, users.value] = await Promise.all([
       window.nexora.callApi('permissions', undefined), window.nexora.callApi('roles', undefined),
@@ -526,6 +551,75 @@ async function cancelStocktake(stocktakeId: number): Promise<void> {
   if (!window.nexora) return
   await perform(() => window.nexora!.callApi('cancelStocktake', { stocktakeId }),
     `盘点单 #${stocktakeId} 已取消。`)
+}
+
+async function createCustomer(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    await window.nexora!.callApi('createCustomer', { name: customerForm.value.name })
+    customerForm.value = { name: '' }
+  }, '客户已创建。')
+}
+
+async function createSalesOrder(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    // 销售单价和数量只从表单读取，服务端独立计算订单金额与出库进度。
+    await window.nexora!.callApi('createSalesOrder', {
+      customer_id: salesForm.value.customer_id,
+      reference: salesForm.value.reference,
+      lines: salesForm.value.lines.map(line => ({ material_id: line.material_id,
+        quantity: line.quantity, unit_price: line.unit_price }))
+    })
+    salesForm.value = { customer_id: 0, reference: '',
+      lines: [{ material_id: 0, quantity: '1', unit_price: '0' }] }
+  }, '销售订单草稿已创建。')
+}
+
+async function confirmSalesOrder(orderId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('confirmSalesOrder', { orderId }),
+    `销售订单 #${orderId} 已确认，可创建出库单。`)
+}
+
+async function cancelSalesOrder(orderId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('cancelSalesOrder', { orderId }),
+    `销售订单 #${orderId} 已取消。`)
+}
+
+function chooseShipmentOrder(): void {
+  const order = salesOrders.value.find(item => item.id === shipmentForm.value.sales_order_id)
+  // 订单选择后仅填入未出库明细，最终数量仍由操作人填写并由服务端复核。
+  shipmentForm.value.lines = order?.lines.filter(line => Number(line.remaining_quantity) > 0)
+    .map(line => ({ material_id: line.material_id, quantity: line.remaining_quantity }))
+    ?? [{ material_id: 0, quantity: '1' }]
+}
+
+async function createShipment(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    await window.nexora!.callApi('createShipment', {
+      sales_order_id: shipmentForm.value.sales_order_id,
+      warehouse_id: shipmentForm.value.warehouse_id,
+      reference: shipmentForm.value.reference,
+      lines: shipmentForm.value.lines.map(line => ({ material_id: line.material_id, quantity: line.quantity }))
+    })
+    shipmentForm.value = { sales_order_id: 0, warehouse_id: shipmentForm.value.warehouse_id,
+      reference: '', lines: [{ material_id: 0, quantity: '1' }] }
+  }, '出库单草稿已创建。')
+}
+
+async function postShipment(shipmentId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('postShipment', { shipmentId }),
+    `出库单 #${shipmentId} 已确认，仓库库存与订单进度已更新。`)
+}
+
+async function cancelShipment(shipmentId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('cancelShipment', { shipmentId }),
+    `出库单 #${shipmentId} 已取消。`)
 }
 
 async function createUser(): Promise<void> {
@@ -722,7 +816,7 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
             </div>
             <div class="table-wrap"><table><thead><tr><th>物料编码</th><th>物料名称</th><th>数量</th></tr></thead><tbody><tr v-for="item in stock" :key="item.id"><td class="mono">{{ item.sku }}</td><td>{{ item.name }}</td><td><strong>{{ item.quantity }}</strong> {{ item.unit }}</td></tr><tr v-if="!stock.length"><td colspan="3" class="muted">暂无物料，先到基础资料中添加。</td></tr></tbody></table></div>
           </div>
-          <div class="card"><div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2>库存流水</h2></div></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>仓库</th><th>物料</th><th>数量变动</th><th>来源</th></tr></thead><tbody><tr v-for="item in movements" :key="item.id"><td>{{ localTime(item.created_at) }}</td><td>{{ item.warehouse_name }}</td><td>{{ item.material_name }} <small class="mono">{{ item.sku }}</small></td><td>{{ item.quantity.startsWith('-') ? '' : '+' }}{{ item.quantity }} {{ item.unit }}</td><td>{{ item.receipt_id ? `入库单 #${item.receipt_id}` : item.transfer_id ? `调拨单 #${item.transfer_id}` : `盘点单 #${item.stocktake_id}` }}</td></tr><tr v-if="!movements.length"><td colspan="5" class="muted">确认入库、调拨或盘点后，这里会显示库存流水。</td></tr></tbody></table></div></div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2>库存流水</h2></div></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>仓库</th><th>物料</th><th>数量变动</th><th>来源</th></tr></thead><tbody><tr v-for="item in movements" :key="item.id"><td>{{ localTime(item.created_at) }}</td><td>{{ item.warehouse_name }}</td><td>{{ item.material_name }} <small class="mono">{{ item.sku }}</small></td><td>{{ item.quantity.startsWith('-') ? '' : '+' }}{{ item.quantity }} {{ item.unit }}</td><td>{{ movementSource(item) }}</td></tr><tr v-if="!movements.length"><td colspan="5" class="muted">确认入库、调拨、盘点或出库后，这里会显示库存流水。</td></tr></tbody></table></div></div>
         </section>
 
         <section v-if="activeTab === 'catalog'" class="stack">
@@ -757,6 +851,41 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
             <form @submit.prevent="createTransfer"><div class="form-grid"><label>来源仓库<select v-model.number="transferForm.from_warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>目标仓库<select v-model.number="transferForm.to_warehouse_id" required><option :value="0" disabled>选择目标仓库</option><option v-for="item in warehouses.filter(entry => entry.id !== transferForm.from_warehouse_id)" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>参考单号（可选）<input v-model.trim="transferForm.reference" maxlength="100" /></label></div>
               <h3>调拨明细</h3><div v-for="(line, index) in transferForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>数量<input v-model.trim="line.quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><button class="text-button" type="button" :disabled="transferForm.lines.length === 1" @click="transferForm.lines.splice(index, 1)">移除</button></div><div class="form-actions"><button class="secondary" type="button" @click="transferForm.lines.push({ material_id: 0, quantity: '1' })">添加明细</button><button class="primary" type="submit" :disabled="busy || warehouses.length < 2 || !materials.length">保存草稿</button></div></form></div>
           <div class="card"><div class="section-heading"><div><p class="eyebrow">TRANSFER LOG</p><h2>调拨单</h2></div></div><div v-if="!transfers.length" class="muted">暂无调拨单。</div><article v-for="item in transfers" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.from_warehouse_name }} → {{ item.to_warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已调拨' : '待确认' }}</span><button v-if="item.status === 'draft' && can('transfer.post')" class="primary small" type="button" :disabled="busy" @click="postTransfer(item.id)">确认调拨</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article></div>
+        </section>
+
+        <section v-if="activeTab === 'sales'" class="stack">
+          <div v-if="can('customer.manage')" class="card">
+            <div class="section-heading"><div><p class="eyebrow">CUSTOMERS</p><h2>客户资料</h2></div></div>
+            <form class="inline-form" @submit.prevent="createCustomer"><label>客户名称<input v-model.trim="customerForm.name" required maxlength="120" placeholder="输入客户名称" /></label><button class="primary" type="submit" :disabled="busy">添加客户</button></form>
+            <div class="receipt-lines"><span v-for="item in customers" :key="item.id">{{ item.name }}</span></div>
+          </div>
+          <div v-if="can('sales_order.create')" class="card">
+            <div class="section-heading"><div><p class="eyebrow">SALES ORDER</p><h2>新建销售订单</h2></div><span class="pill">草稿</span></div>
+            <form @submit.prevent="createSalesOrder">
+              <div class="form-grid"><label>客户<select v-model.number="salesForm.customer_id" required><option :value="0" disabled>选择客户</option><option v-for="item in customers" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>参考单号（可选）<input v-model.trim="salesForm.reference" maxlength="100" /></label></div>
+              <h3>销售明细</h3>
+              <div v-for="(line, index) in salesForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>数量<input v-model.trim="line.quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><label>单价（元）<input v-model.trim="line.unit_price" type="number" min="0" max="1000000000" step="0.0001" required /></label><button class="text-button" type="button" :disabled="salesForm.lines.length === 1" @click="salesForm.lines.splice(index, 1)">移除</button></div>
+              <div class="form-actions"><button class="secondary" type="button" @click="salesForm.lines.push({ material_id: 0, quantity: '1', unit_price: '0' })">添加明细</button><button class="primary" type="submit" :disabled="busy || !customers.length || !materials.length">保存草稿</button></div>
+            </form>
+          </div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">SALES LOG</p><h2>销售订单</h2></div></div><div v-if="!salesOrders.length" class="muted">暂无销售订单。</div>
+            <article v-for="item in salesOrders" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.customer_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span> · 总额 ¥{{ item.total_amount }}</p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', confirmed: '待出库', partially_shipped: '部分出库', shipped: '全部出库', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('sales_order.confirm')" class="primary small" type="button" :disabled="busy" @click="confirmSalesOrder(item.id)">确认订单</button><button v-if="['draft', 'confirmed'].includes(item.status) && can('sales_order.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelSalesOrder(item.id)">取消订单</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} {{ line.shipped_quantity }}/{{ line.quantity }} {{ line.unit }} · ¥{{ line.unit_price }}/{{ line.unit }}</span></div></article>
+          </div>
+        </section>
+
+        <section v-if="activeTab === 'shipments'" class="stack">
+          <div v-if="can('shipment.create')" class="card">
+            <div class="section-heading"><div><p class="eyebrow">SALES SHIPMENT</p><h2>新建出库单</h2></div><span class="pill">草稿</span></div>
+            <form @submit.prevent="createShipment">
+              <div class="form-grid"><label>销售订单<select v-model.number="shipmentForm.sales_order_id" required @change="chooseShipmentOrder"><option :value="0" disabled>选择待出库订单</option><option v-for="item in salesOrders.filter(entry => ['confirmed', 'partially_shipped'].includes(entry.status))" :key="item.id" :value="item.id">#{{ item.id }} · {{ item.customer_name }}</option></select></label><label>出库仓库<select v-model.number="shipmentForm.warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>参考单号（可选）<input v-model.trim="shipmentForm.reference" maxlength="100" /></label></div>
+              <p class="muted">确认出库时将从所选仓库扣减库存，并再次核对销售订单剩余数量。</p>
+              <div v-for="(line, index) in shipmentForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>出库数量<input v-model.trim="line.quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><button class="text-button" type="button" :disabled="shipmentForm.lines.length === 1" @click="shipmentForm.lines.splice(index, 1)">移除</button></div>
+              <div class="form-actions"><button class="secondary" type="button" @click="shipmentForm.lines.push({ material_id: 0, quantity: '1' })">添加明细</button><button class="primary" type="submit" :disabled="busy || !materials.length || !salesOrders.some(entry => ['confirmed', 'partially_shipped'].includes(entry.status))">保存草稿</button></div>
+            </form>
+          </div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">SHIPMENT LOG</p><h2>出库单</h2></div></div><div v-if="!shipments.length" class="muted">暂无出库单。</div>
+            <article v-for="item in shipments" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.customer_name }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 销售订单 #{{ item.sales_order_id }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已出库' : item.status === 'cancelled' ? '已取消' : '待确认' }}</span><button v-if="item.status === 'draft' && can('shipment.post')" class="primary small" type="button" :disabled="busy" @click="postShipment(item.id)">确认出库</button><button v-if="item.status === 'draft' && can('shipment.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelShipment(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article>
+          </div>
         </section>
 
         <section v-if="activeTab === 'stocktakes'" class="stack">
