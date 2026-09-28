@@ -1242,7 +1242,7 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
       <div v-if="screen === 'app'" class="side-group">
         <div v-for="group in visibleGroups" :key="group.key" class="nav-group">
           <button class="side-category" :class="{ current: group.routes.some(item => item.key === activeTab) }" type="button" :aria-expanded="expandedGroupKey === group.key" :aria-controls="`route-group-${group.key}`" @click="toggleRouteGroup(group.key)">{{ group.label }}<IconArrowDownSLine class="category-chevron" :class="{ expanded: expandedGroupKey === group.key }" aria-hidden="true" /></button>
-          <div :id="`route-group-${group.key}`" class="nav-panel" :class="{ expanded: expandedGroupKey === group.key }" :aria-hidden="expandedGroupKey !== group.key" :inert="expandedGroupKey !== group.key">
+          <div :id="`route-group-${group.key}`" class="nav-panel" :class="{ expanded: expandedGroupKey === group.key }" :aria-hidden="expandedGroupKey !== group.key" :inert="expandedGroupKey !== group.key ? true : undefined">
             <div class="nav-list">
               <button v-for="item in group.routes" :key="item.key" class="nav-item" :class="{ active: activeTab === item.key }" type="button" :aria-current="activeTab === item.key ? 'page' : undefined" @click="navigateToRoute(item.key)"><component :is="item.icon" class="nav-icon" aria-hidden="true" />{{ item.label }}</button>
             </div>
