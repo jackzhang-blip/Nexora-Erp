@@ -29,6 +29,7 @@ from .work_orders import router as work_orders_router
 from .material_issues import router as material_issues_router
 from .material_returns import router as material_returns_router
 from .production_completions import router as production_completions_router
+from .production_costs import router as production_costs_router
 from .security import bearer, current_user, hash_password, require, token_hash, user_details, verify_password
 
 
@@ -77,6 +78,7 @@ app.include_router(work_orders_router)
 app.include_router(material_issues_router)
 app.include_router(material_returns_router)
 app.include_router(production_completions_router)
+app.include_router(production_costs_router)
 app.include_router(stocktake_router)
 app.include_router(sales_router)
 app.include_router(sales_returns_router)

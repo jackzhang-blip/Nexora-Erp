@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 17:
+        if version > 18:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -635,3 +635,36 @@ def migrate() -> None:
             db.execute("""INSERT INTO role_permissions(role_code, permission_code)
                 VALUES ('admin', 'production_completion.reverse')""")
             db.execute("PRAGMA user_version = 17")
+        if version < 18:
+            # 生产核价和人工、制造费用只追加记录；更正通过独立冲销保留原金额。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE production_cost_entries (
+                id INTEGER PRIMARY KEY,
+                work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+                kind TEXT NOT NULL CHECK (kind IN ('material', 'labor', 'overhead')),
+                material_issue_line_id INTEGER REFERENCES material_issue_lines(id),
+                unit_cost TEXT,
+                amount TEXT,
+                reference TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.execute("CREATE INDEX production_cost_entries_order ON production_cost_entries(work_order_id)")
+            db.execute("""CREATE TABLE production_cost_reversals (
+                id INTEGER PRIMARY KEY,
+                entry_id INTEGER NOT NULL UNIQUE REFERENCES production_cost_entries(id),
+                reason TEXT NOT NULL,
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.executemany("INSERT INTO permissions(code) VALUES (?)", [(code,) for code in (
+                "production_cost.view", "production_cost.record", "production_cost.reverse")])
+            grants = {"admin": ("production_cost.view", "production_cost.record", "production_cost.reverse"),
+                      "finance": ("production_cost.view", "production_cost.record", "production_cost.reverse"),
+                      "planner": ("production_cost.view",)}
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, permission) for role, permissions in grants.items()
+                            for permission in permissions])
+            db.execute("PRAGMA user_version = 18")

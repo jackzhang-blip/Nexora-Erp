@@ -18,11 +18,11 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
-import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, MaterialIssue, MaterialReturn, Movement, PaymentRecord, Permission, ProductionCompletion, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse, WorkOrder } from '../../shared/erp-api'
+import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, MaterialIssue, MaterialReturn, Movement, PaymentRecord, Permission, ProductionCompletion, ProductionCostReport, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse, WorkOrder } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
-type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'finance' | 'boms' | 'workOrders' | 'materialIssues' | 'materialReturns' | 'productionCompletions' | 'users' | 'settings'
+type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'finance' | 'boms' | 'workOrders' | 'materialIssues' | 'materialReturns' | 'productionCompletions' | 'productionCosts' | 'users' | 'settings'
 
 // 让新增的 Naive UI 控件沿用工作台现有的青绿色主色。
 const naiveThemeOverrides: GlobalThemeOverrides = {
@@ -53,6 +53,7 @@ const workOrders = ref<WorkOrder[]>([])
 const materialIssues = ref<MaterialIssue[]>([])
 const materialReturns = ref<MaterialReturn[]>([])
 const productionCompletions = ref<ProductionCompletion[]>([])
+const productionCostReport = ref<ProductionCostReport | null>(null)
 const warehouses = ref<Warehouse[]>([])
 const transfers = ref<Transfer[]>([])
 const stocktakes = ref<Stocktake[]>([])
@@ -89,6 +90,9 @@ const materialReturnForm = ref({ material_issue_id: 0, reason: '',
 const completionForm = ref({ work_order_id: 0, reported_quantity: '1', reference: '' })
 const inspectionDrafts = ref<Record<number, { accepted_quantity: string; qc_note: string }>>({})
 const completionReversalReasons = ref<Record<number, string>>({})
+const materialValuationForm = ref({ material_issue_line_id: 0, unit_cost: '0', reference: '', note: '' })
+const productionChargeForm = ref({ work_order_id: 0, kind: 'labor' as 'labor' | 'overhead', amount: '', reference: '', note: '' })
+const costReversalReasons = ref<Record<number, string>>({})
 const warehouseForm = ref({ code: '', name: '' })
 const transferForm = ref({ from_warehouse_id: 1, to_warehouse_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const stocktakeForm = ref({ warehouse_id: 1, reference: '', lines: [{ material_id: 0, counted_quantity: '0' }] })
@@ -127,6 +131,7 @@ const visibleTabs = computed(() => [
   ...(can('sales.view') ? [{ key: 'sales' as const, label: '销售订单', icon: IconFileList3Line }, { key: 'shipments' as const, label: '销售出库', icon: IconArchiveLine }, { key: 'salesReturns' as const, label: '销售退货', icon: IconHistoryLine }] : []),
   ...(can('finance.view') ? [{ key: 'finance' as const, label: '应收应付', icon: IconFileList3Line }] : []),
   ...(can('production.view') ? [{ key: 'boms' as const, label: '生产 BOM', icon: IconStackLine }, { key: 'workOrders' as const, label: '生产工单', icon: IconFileList3Line }, { key: 'materialIssues' as const, label: '生产领料', icon: IconArchiveLine }, { key: 'materialReturns' as const, label: '生产退料', icon: IconHistoryLine }, { key: 'productionCompletions' as const, label: '完工与质检', icon: IconFileList3Line }] : []),
+  ...(can('production_cost.view') ? [{ key: 'productionCosts' as const, label: '生产成本', icon: IconFileList3Line }] : []),
   ...(can('users.manage') ? [{ key: 'users' as const, label: '用户权限', icon: IconTeamLine }] : []),
   { key: 'settings' as const, label: '连接与服务', icon: IconSettings3Line }
 ])
@@ -462,6 +467,8 @@ async function refreshData(): Promise<void> {
     productionCompletions.value = []
     inspectionDrafts.value = {}
   }
+  productionCostReport.value = can('production_cost.view')
+    ? await window.nexora.callApi('productionCosts', undefined) : null
   if (can('users.manage')) {
     [permissions.value, roles.value, users.value] = await Promise.all([
       window.nexora.callApi('permissions', undefined), window.nexora.callApi('roles', undefined),
@@ -951,6 +958,32 @@ async function reverseProductionCompletion(completionId: number): Promise<void> 
   delete completionReversalReasons.value[completionId]
 }
 
+async function recordMaterialValuation(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    await window.nexora!.callApi('recordMaterialValuation', { ...materialValuationForm.value })
+    materialValuationForm.value = { material_issue_line_id: 0, unit_cost: '0', reference: '', note: '' }
+  }, '领料明细核定单价已记录。')
+}
+
+async function recordProductionCharge(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    await window.nexora!.callApi('recordProductionCharge', { ...productionChargeForm.value })
+    productionChargeForm.value = { work_order_id: 0, kind: 'labor', amount: '', reference: '', note: '' }
+  }, '生产费用已归集到工单。')
+}
+
+async function reverseProductionCost(entryId: number): Promise<void> {
+  if (!window.nexora) return
+  const reason = costReversalReasons.value[entryId]?.trim()
+  if (!reason) return
+  await perform(async () => {
+    await window.nexora!.callApi('reverseProductionCost', { entryId, reason })
+    delete costReversalReasons.value[entryId]
+  }, `成本记录 #${entryId} 已冲销，原记录仍可查询。`)
+}
+
 async function createUser(): Promise<void> {
   if (!window.nexora) return
   await perform(async () => {
@@ -1241,6 +1274,29 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
               <form v-if="item.status === 'draft' && can('production_completion.inspect') && inspectionDrafts[item.id]" class="inline-form" @submit.prevent="inspectProductionCompletion(item.id)"><label>合格数量<input v-model.trim="inspectionDrafts[item.id]!.accepted_quantity" type="number" min="0" :max="item.reported_quantity" step="0.001" required /></label><label>质检说明<input v-model.trim="inspectionDrafts[item.id]!.qc_note" required maxlength="200" /></label><button class="primary small" type="submit" :disabled="busy">记录质检结果</button></form>
               <form v-if="item.status === 'posted' && can('production_completion.reverse')" class="inline-form" @submit.prevent="reverseProductionCompletion(item.id)"><label>冲销原因<input v-model.trim="completionReversalReasons[item.id]" required maxlength="200" placeholder="说明报工或质检记录错误" /></label><button class="secondary small" type="submit" :disabled="busy">冲销已确认完工</button></form>
             </article>
+          </div>
+        </section>
+
+        <section v-if="activeTab === 'productionCosts'" class="stack">
+          <div class="card">
+            <div class="section-heading"><div><p class="eyebrow">PRODUCTION COST</p><h2>工单成本归集</h2></div></div>
+            <p class="muted">材料单价由财务按凭据人工核定，金额按已领减已退数量计算。存在待核价领料时，总成本显示待核价；这不是库存计价或总账凭证。</p>
+            <div v-if="!productionCostReport?.orders.length" class="muted">暂无生产工单。</div>
+            <article v-for="item in productionCostReport?.orders ?? []" :key="item.work_order_id" class="receipt">
+              <div class="receipt-head"><strong>工单 #{{ item.work_order_id }} · {{ item.product_name }}</strong><span class="pill">{{ item.work_order_status === 'draft' ? '未下达' : item.total_amount === null ? '待核价' : '当前已知' }}</span></div>
+              <div class="receipt-lines"><span>材料已知金额 ¥{{ item.known_material_amount }}</span><span>人工 ¥{{ item.labor_amount }}</span><span>制造费用 ¥{{ item.overhead_amount }}</span><span>总成本 {{ item.total_amount === null ? '待核价' : `¥${item.total_amount}` }}</span><span v-if="item.unpriced_issue_count">待核价领料 {{ item.unpriced_issue_count }} 条</span></div>
+            </article>
+          </div>
+          <div v-if="can('production_cost.record')" class="two-columns">
+            <div class="card"><div class="section-heading"><h2>核定领料单价</h2></div>
+              <form @submit.prevent="recordMaterialValuation"><div class="form-grid"><label>待核价领料<select v-model.number="materialValuationForm.material_issue_line_id" required><option :value="0" disabled>选择领料明细</option><option v-for="line in productionCostReport?.unpriced_lines ?? []" :key="line.material_issue_line_id" :value="line.material_issue_line_id">工单 #{{ line.work_order_id }} · 领料 #{{ line.material_issue_id }} · {{ line.material_name }} · 净领 {{ line.net_quantity }} {{ line.unit }}</option></select></label><label>核定单价（元）<input v-model.trim="materialValuationForm.unit_cost" type="number" min="0" max="1000000000" step="0.0001" required /></label><label>依据编号<input v-model.trim="materialValuationForm.reference" maxlength="100" required placeholder="发票或内部核价单编号" /></label><label>说明（可选）<input v-model.trim="materialValuationForm.note" maxlength="200" /></label></div><button class="primary" type="submit" :disabled="busy || !materialValuationForm.material_issue_line_id">保存核价</button></form>
+            </div>
+            <div class="card"><div class="section-heading"><h2>登记人工或制造费用</h2></div>
+              <form @submit.prevent="recordProductionCharge"><div class="form-grid"><label>生产工单<select v-model.number="productionChargeForm.work_order_id" required><option :value="0" disabled>选择已下达工单</option><option v-for="item in (productionCostReport?.orders ?? []).filter(entry => entry.work_order_status !== 'draft' && entry.work_order_status !== 'cancelled')" :key="item.work_order_id" :value="item.work_order_id">#{{ item.work_order_id }} · {{ item.product_name }}</option></select></label><label>费用类别<select v-model="productionChargeForm.kind"><option value="labor">人工</option><option value="overhead">制造费用</option></select></label><label>金额（元）<input v-model.trim="productionChargeForm.amount" type="number" min="0.01" max="1000000000000" step="0.01" required /></label><label>依据编号<input v-model.trim="productionChargeForm.reference" maxlength="100" required /></label><label>说明（可选）<input v-model.trim="productionChargeForm.note" maxlength="200" /></label></div><button class="primary" type="submit" :disabled="busy || !productionChargeForm.work_order_id">登记费用</button></form>
+            </div>
+          </div>
+          <div class="card"><div class="section-heading"><h2>成本记录与冲销</h2></div><div v-if="!productionCostReport?.entries.length" class="muted">暂无成本记录。</div>
+            <article v-for="item in productionCostReport?.entries ?? []" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · 工单 #{{ item.work_order_id }} · {{ { material: '材料核价', labor: '人工', overhead: '制造费用' }[item.kind] }}</strong><p class="muted">{{ localTime(item.created_at) }} · {{ item.created_by_name }} · 依据 {{ item.reference }}</p></div><span class="pill">{{ item.status === 'active' ? '有效' : '已冲销' }}</span></div><div class="receipt-lines"><span v-if="item.kind === 'material'">{{ item.material_name }}（{{ item.material_sku }}）· 净领 {{ item.net_quantity }} · 单价 ¥{{ item.unit_cost }}</span><span>当前计入 {{ item.current_amount === null ? '已冲销' : `¥${item.current_amount}` }}</span><span v-if="item.note">{{ item.note }}</span><span v-if="item.reversal_id">冲销原因：{{ item.reversal_reason }} · {{ item.reversed_by_name }} · {{ localTime(item.reversed_at!) }}</span></div><form v-if="item.status === 'active' && can('production_cost.reverse')" class="inline-form" @submit.prevent="reverseProductionCost(item.id)"><label>冲销原因<input v-model.trim="costReversalReasons[item.id]" required maxlength="200" /></label><button class="secondary small" type="submit" :disabled="busy">冲销记录</button></form></article>
           </div>
         </section>
 

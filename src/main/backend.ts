@@ -173,6 +173,15 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
       return { method: 'POST', path: `/api/v1/production-completions/${completionId}/reverse`,
         body: { reason: fields.reason } }
     }
+    case 'productionCosts': return { method: 'GET', path: '/api/v1/production-costs' }
+    case 'recordMaterialValuation': return { method: 'POST', path: '/api/v1/production-costs/material-valuations', body: payload }
+    case 'recordProductionCharge': return { method: 'POST', path: '/api/v1/production-costs/charges', body: payload }
+    case 'reverseProductionCost': {
+      const entryId = positiveId(payload, 'entryId')
+      const fields = payload as ErpOperations['reverseProductionCost']['input']
+      // 记录编号只进入固定路径，请求体仅包含冲销原因。
+      return { method: 'POST', path: `/api/v1/production-costs/${entryId}/reverse`, body: { reason: fields.reason } }
+    }
     case 'createPurchaseReturn': return { method: 'POST', path: '/api/v1/purchase-returns', body: payload }
     case 'postPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/post` }
     case 'cancelPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/cancel` }

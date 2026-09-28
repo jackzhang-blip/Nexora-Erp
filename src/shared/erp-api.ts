@@ -310,6 +310,48 @@ export interface ProductionCompletion {
   reversed_by_name: string | null
   reversed_at: string | null
 }
+// 成本记录保留原始依据和冲销信息；材料金额随已确认退料后的净领料量计算。
+export interface ProductionCostEntry {
+  id: number
+  work_order_id: number
+  kind: 'material' | 'labor' | 'overhead'
+  material_issue_line_id: number | null
+  unit_cost: string | null
+  amount: string | null
+  reference: string
+  note: string
+  created_by: number
+  created_by_name: string
+  created_at: string
+  material_sku: string | null
+  material_name: string | null
+  issue_quantity: string | null
+  net_quantity: string | null
+  current_amount: string | null
+  status: 'active' | 'reversed'
+  reversal_id: number | null
+  reversal_reason: string | null
+  reversed_by: number | null
+  reversed_by_name: string | null
+  reversed_at: string | null
+}
+export interface ProductionCostOrder {
+  work_order_id: number
+  product_name: string
+  work_order_status: WorkOrder['status']
+  known_material_amount: string
+  labor_amount: string
+  overhead_amount: string
+  total_amount: string | null
+  unpriced_issue_count: number
+}
+export interface ProductionCostReport {
+  currency: 'CNY'
+  orders: ProductionCostOrder[]
+  entries: ProductionCostEntry[]
+  unpriced_lines: { material_issue_line_id: number; material_issue_id: number; work_order_id: number;
+    sku: string; material_name: string; unit: string; net_quantity: string }[]
+}
 // 销售订单剩余量由已确认的出库单计算，草稿不会预先扣减。
 export interface SalesOrderLine extends ReceiptLine {
   unit_price: string
@@ -500,6 +542,10 @@ export interface ErpOperations {
   postProductionCompletion: { input: { completionId: number }; output: ProductionCompletion }
   cancelProductionCompletion: { input: { completionId: number }; output: ProductionCompletion }
   reverseProductionCompletion: { input: { completionId: number; reason: string }; output: ProductionCompletion }
+  productionCosts: { input: undefined; output: ProductionCostReport }
+  recordMaterialValuation: { input: { material_issue_line_id: number; unit_cost: string; reference: string; note: string }; output: ProductionCostEntry }
+  recordProductionCharge: { input: { work_order_id: number; kind: 'labor' | 'overhead'; amount: string; reference: string; note: string }; output: ProductionCostEntry }
+  reverseProductionCost: { input: { entryId: number; reason: string }; output: ProductionCostEntry }
   createPurchaseReturn: { input: { receipt_id: number; reason: string; lines: { receipt_line_id: number; quantity: string }[] }; output: PurchaseReturn }
   postPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   cancelPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
