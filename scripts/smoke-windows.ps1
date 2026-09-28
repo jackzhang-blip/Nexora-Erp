@@ -174,6 +174,11 @@ $desktopProcess = Start-Process -FilePath $desktop -ArgumentList '--remote-debug
 try {
   node scripts/smoke-desktop.mjs http://127.0.0.1:18752
   if ($LASTEXITCODE -ne 0) { throw '桌面首次进入页检查失败。' }
+  node scripts/smoke-desktop-close.mjs http://127.0.0.1:18752
+  if ($LASTEXITCODE -ne 0) { throw 'Windows 桌面窗口关闭检查失败。' }
+  Start-Sleep -Seconds 2
+  $desktopProcess.Refresh()
+  if ($desktopProcess.HasExited) { throw '关闭窗口后 Windows 托盘进程意外退出。' }
 } finally {
   if (-not $desktopProcess.HasExited) { Stop-Process -Id $desktopProcess.Id -Force }
 }
