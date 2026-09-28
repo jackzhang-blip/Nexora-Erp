@@ -31,12 +31,16 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .side-group { min-height: 0; flex: 1; margin-top: 28px; overflow-y: auto; }
 .nav-group + .nav-group { margin-top: 7px; }
 /* 分类按钮和页面按钮分层，收起时仍能辨认当前页面所属模块。 */
-.side-category { display: flex; align-items: center; justify-content: space-between; width: 100%; border: 0; border-radius: 9px; padding: 11px 13px; background: none; color: #aabbd2; text-align: left; font-size: 13px; font-weight: 700; }
+.side-category { display: flex; align-items: center; justify-content: space-between; width: 100%; border: 0; border-radius: 9px; padding: 11px 13px; background: none; color: #aabbd2; text-align: left; font-size: 13px; font-weight: 700; transition: background-color .18s ease, color .18s ease; }
 .side-category:hover, .side-category[aria-expanded="true"] { background: #1d304f; color: #fff; }
 .side-category.current { color: #8de2d8; }
-.category-chevron { width: 18px; height: 18px; flex: none; transition: transform .18s ease; }
+.category-chevron { width: 18px; height: 18px; flex: none; transition: transform .24s cubic-bezier(.16, 1, .3, 1); }
 .category-chevron.expanded { transform: rotate(180deg); }
-.nav-list { padding-left: 8px; }
+/* 用网格轨道过渡内容高度，避免给各模块的不同菜单项数量写固定高度。 */
+.nav-panel { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .26s cubic-bezier(.16, 1, .3, 1), opacity .2s ease; }
+.nav-panel.expanded { grid-template-rows: 1fr; opacity: 1; }
+.nav-list { min-height: 0; overflow: hidden; padding-left: 8px; transform: translateY(-6px); transition: transform .26s cubic-bezier(.16, 1, .3, 1); }
+.nav-panel.expanded .nav-list { transform: translateY(0); }
 /* 导航图标只辅助文字，固定尺寸以免不同 SVG 改变侧栏行高。 */
 .nav-item { display: flex; align-items: center; gap: 11px; width: 100%; margin: 5px 0; border: 0; border-radius: 9px; padding: 13px 15px; background: none; color: #b8c6d9; text-align: left; font-size: 14px; }
 .nav-icon { width: 18px; height: 18px; flex: none; }
@@ -228,7 +232,10 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
 @keyframes scan-turn { to { transform: rotate(360deg); } }
 /* 按本页需求保留卡片的明确交互动画；扫描装饰仍遵循系统减少动态效果设置。 */
 @keyframes choice-rise { from { opacity: 0; translate: 0 22px; } to { opacity: 1; translate: 0 0; } }
-@media (prefers-reduced-motion: reduce) { .scan-orbit, .scan-core { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .scan-orbit, .scan-core { animation: none; }
+  .side-category, .category-chevron, .nav-panel, .nav-list { transition: none; }
+}
 
 @media (max-width: 1080px) {
   .two-columns { grid-template-columns: 1fr; }

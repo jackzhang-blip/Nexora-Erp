@@ -50,3 +50,14 @@ test('分类默认收起，同一时间只能展开一个分类', () => {
   expanded = nextExpandedGroup(expanded, 'finance')
   assert.equal(expanded, null)
 })
+
+test('收起的页面入口不可聚焦，动效遵循减少动态效果设置', () => {
+  const app = readFileSync(new URL('../src/renderer/src/App.vue', import.meta.url), 'utf8')
+  const style = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
+
+  // 内容保留在 DOM 中完成收起动画时，必须同步关闭交互与辅助技术访问。
+  assert.match(app, /class="nav-panel"[^>]*:aria-hidden="expandedGroupKey !== group\.key"[^>]*:inert="expandedGroupKey !== group\.key"/)
+  assert.match(style, /\.nav-panel \{[^}]*grid-template-rows: 0fr;[^}]*transition: grid-template-rows/)
+  assert.match(style, /\.nav-panel\.expanded \{ grid-template-rows: 1fr;/)
+  assert.match(style, /@media \(prefers-reduced-motion: reduce\) \{[^}]*\}[^}]*\.nav-panel[^}]*transition: none;/)
+})
