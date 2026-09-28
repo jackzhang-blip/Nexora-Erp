@@ -39,7 +39,7 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   process.env.NEXORA_API_URL = 'http://127.0.0.1:8123'
   const calls = []
   const fetchMock = t.mock.method(globalThis, 'fetch', async (url, options) => {
-    calls.push({ path: url.pathname, method: options.method, authorization: options.headers.Authorization })
+    calls.push({ path: url.pathname, search: url.search, method: options.method, authorization: options.headers.Authorization })
     if (url.pathname.endsWith('/login')) {
       return Response.json({ token: 'private-session-token', user: { id: 1, username: 'admin', roles: ['admin'], permissions: [] } })
     }
@@ -57,6 +57,16 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   assert.equal(calls[3].path, '/api/v1/users/2/status')
   await callBackend('updateRole', { code: 'stock_clerk', label: '库存员', permissions: ['inventory.view'] })
   assert.equal(calls[4].path, '/api/v1/roles/stock_clerk')
+  // 新增仓库与调拨操作仍经过固定白名单，仓库筛选编号不能拼接任意路径。
+  await callBackend('warehouses', undefined)
+  assert.equal(calls[5].path, '/api/v1/warehouses')
+  await callBackend('postTransfer', { transferId: 6 })
+  assert.equal(calls[6].path, '/api/v1/transfers/6/post')
+  await callBackend('stock', { warehouseId: 2 })
+  assert.equal(calls[7].path, '/api/v1/stock')
+  assert.equal(calls[7].search, '?warehouse_id=2')
+  await assert.rejects(callBackend('stock', { warehouseId: '../users' }), /记录编号无效/)
+  await assert.rejects(callBackend('postTransfer', { transferId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('updateRole', { code: '../users', label: '错误', permissions: [] }), /角色代码无效/)
   await assert.rejects(callBackend('postReceipt', { receiptId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('unknown-operation', undefined), /不允许的业务操作/)

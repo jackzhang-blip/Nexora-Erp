@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from .database import connection, migrate
 from .discovery import DiscoveryPublisher
+from .inventory import require_warehouse, router as inventory_router
 from .security import bearer, current_user, hash_password, require, token_hash, user_details, verify_password
 
 
@@ -55,6 +56,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Nexora ERP API", version="0.1.0", lifespan=lifespan)
+app.include_router(inventory_router)
 
 
 class HealthResponse(BaseModel):
@@ -158,6 +160,8 @@ class ReceiptLineInput(BaseModel):
 
 class ReceiptInput(BaseModel):
     supplier_id: int = Field(gt=0)
+    # 老客户端省略仓库时继续入主仓库；新客户端必须让用户明确选择。
+    warehouse_id: int = Field(default=1, gt=0)
     reference: str = Field(default="", max_length=100)
     lines: list[ReceiptLineInput] = Field(min_length=1, max_length=100)
 
@@ -207,9 +211,12 @@ def ensure_active_admin_remains(db: sqlite3.Connection, user_id: int) -> None:
 
 def receipt_data(db: sqlite3.Connection, receipt_id: int) -> dict:
     row = db.execute("""
-        SELECT r.*, s.name AS supplier_name, u.username AS created_by_name
+        SELECT r.*, s.name AS supplier_name, u.username AS created_by_name,
+               w.id AS warehouse_id, w.name AS warehouse_name
         FROM receipts r JOIN suppliers s ON s.id = r.supplier_id
-        JOIN users u ON u.id = r.created_by WHERE r.id = ?
+        JOIN users u ON u.id = r.created_by
+        JOIN receipt_warehouses rw ON rw.receipt_id = r.id
+        JOIN warehouses w ON w.id = rw.warehouse_id WHERE r.id = ?
     """, (receipt_id,)).fetchone()
     if not row:
         raise HTTPException(404, "入库单不存在")
@@ -305,7 +312,8 @@ def change_password(payload: ChangePasswordInput, user: dict = Depends(current_u
 def list_permissions(_: dict = Depends(require("users.manage"))) -> list[dict]:
     labels = {"users.manage": "管理用户与角色", "catalog.manage": "管理基础资料",
               "inventory.view": "查看库存与入库单", "receipt.create": "创建入库单",
-              "receipt.post": "确认入库"}
+              "receipt.post": "确认入库", "warehouse.manage": "管理仓库",
+              "transfer.create": "创建调拨单", "transfer.post": "确认调拨"}
     with connection() as db:
         return [{"code": row[0], "label": labels.get(row[0], row[0])}
                 for row in db.execute("SELECT code FROM permissions ORDER BY code")]
@@ -456,6 +464,8 @@ def create_receipt(payload: ReceiptInput, user: dict = Depends(require("receipt.
     if len({line.material_id for line in payload.lines}) != len(payload.lines):
         raise HTTPException(422, "一张入库单不能重复选择同一物料")
     with connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        require_warehouse(db, payload.warehouse_id)
         if not db.execute("SELECT 1 FROM suppliers WHERE id = ?", (payload.supplier_id,)).fetchone():
             raise HTTPException(422, "供应商不存在")
         for line in payload.lines:
@@ -464,6 +474,8 @@ def create_receipt(payload: ReceiptInput, user: dict = Depends(require("receipt.
         cursor = db.execute("""
             INSERT INTO receipts(supplier_id, reference, created_by) VALUES (?, ?, ?)
         """, (payload.supplier_id, payload.reference.strip(), user["id"]))
+        db.execute("INSERT INTO receipt_warehouses(receipt_id, warehouse_id) VALUES (?, ?)",
+                   (cursor.lastrowid, payload.warehouse_id))
         db.executemany("""
             INSERT INTO receipt_lines(receipt_id, material_id, quantity) VALUES (?, ?, ?)
         """, [(cursor.lastrowid, line.material_id, str(line.quantity)) for line in payload.lines])
@@ -481,9 +493,12 @@ def post_receipt(receipt_id: int, user: dict = Depends(require("receipt.post")))
         if row["status"] != "draft":
             raise HTTPException(409, "此入库单已经确认")
         db.execute("""
-            INSERT INTO stock_movements(material_id, quantity, receipt_line_id)
-            SELECT material_id, quantity, id FROM receipt_lines WHERE receipt_id = ?
-        """, (receipt_id,))
+            INSERT INTO stock_movements(warehouse_id, material_id, quantity, source_type,
+                                        source_id, source_line_id, created_by)
+            SELECT rw.warehouse_id, rl.material_id, rl.quantity, 'receipt', ?, rl.id, ?
+            FROM receipt_lines rl JOIN receipt_warehouses rw ON rw.receipt_id = rl.receipt_id
+            WHERE rl.receipt_id = ?
+        """, (receipt_id, user["id"], receipt_id))
         db.execute("""
             UPDATE receipts SET status = 'posted', posted_by = ?, posted_at = CURRENT_TIMESTAMP
             WHERE id = ?
@@ -492,11 +507,14 @@ def post_receipt(receipt_id: int, user: dict = Depends(require("receipt.post")))
 
 
 @app.get("/api/v1/stock")
-def list_stock(_: dict = Depends(require("inventory.view"))) -> list[dict]:
+def list_stock(warehouse_id: int | None = None, _: dict = Depends(require("inventory.view"))) -> list[dict]:
     with connection() as db:
+        if warehouse_id is not None:
+            require_warehouse(db, warehouse_id)
         # SQLite 的 SUM 会转成浮点数，因此在 Python 中用 Decimal 计算库存。
         quantities: dict[int, Decimal] = {}
-        for row in db.execute("SELECT material_id, quantity FROM stock_movements"):
+        for row in db.execute("SELECT material_id, quantity FROM stock_movements WHERE (? IS NULL OR warehouse_id = ?)",
+                              (warehouse_id, warehouse_id)):
             quantities[row["material_id"]] = quantities.get(row["material_id"], Decimal(0)) + Decimal(row["quantity"])
         return [{**dict(row), "quantity": str(quantities.get(row["id"], Decimal(0)))}
                 for row in db.execute("SELECT id, sku, name, unit FROM materials ORDER BY sku")]
@@ -506,10 +524,14 @@ def list_stock(_: dict = Depends(require("inventory.view"))) -> list[dict]:
 def list_movements(_: dict = Depends(require("inventory.view"))) -> list[dict]:
     with connection() as db:
         return [dict(row) for row in db.execute("""
-            SELECT sm.id, sm.material_id, m.sku, m.name AS material_name, m.unit,
-                   sm.quantity, rl.receipt_id, sm.created_at
+            SELECT sm.id, sm.warehouse_id, w.name AS warehouse_name,
+                   sm.material_id, m.sku, m.name AS material_name, m.unit,
+                   sm.quantity, sm.source_type, sm.source_id, sm.source_line_id,
+                   CASE WHEN sm.source_type = 'receipt' THEN sm.source_id END AS receipt_id,
+                   CASE WHEN sm.source_type IN ('transfer_out', 'transfer_in') THEN sm.source_id END AS transfer_id,
+                   sm.created_by, sm.created_at
             FROM stock_movements sm
             JOIN materials m ON m.id = sm.material_id
-            JOIN receipt_lines rl ON rl.id = sm.receipt_line_id
+            JOIN warehouses w ON w.id = sm.warehouse_id
             ORDER BY sm.id DESC
         """)]

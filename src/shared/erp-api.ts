@@ -11,6 +11,7 @@ export interface Permission { code: string; label: string }
 export interface Role { code: string; label: string; is_builtin: boolean; permissions: string[] }
 export interface Supplier { id: number; name: string }
 export interface Material { id: number; sku: string; name: string; unit: string }
+export interface Warehouse { id: number; code: string; name: string }
 export interface Stock extends Material { quantity: string }
 export interface ReceiptLine {
   id: number
@@ -24,6 +25,8 @@ export interface Receipt {
   id: number
   supplier_id: number
   supplier_name: string
+  warehouse_id: number
+  warehouse_name: string
   reference: string
   status: 'draft' | 'posted'
   created_by: number
@@ -33,14 +36,28 @@ export interface Receipt {
   posted_at: string | null
   lines: ReceiptLine[]
 }
+// 调拨单沿用单据的状态与明细结构，同时明确记录两个仓库。
+export interface Transfer extends Omit<Receipt, 'supplier_id' | 'supplier_name' | 'warehouse_id' | 'warehouse_name'> {
+  from_warehouse_id: number
+  from_warehouse_name: string
+  to_warehouse_id: number
+  to_warehouse_name: string
+}
 export interface Movement {
   id: number
+  warehouse_id: number
+  warehouse_name: string
   material_id: number
   sku: string
   material_name: string
   unit: string
   quantity: string
-  receipt_id: number
+  source_type: 'receipt' | 'transfer_out' | 'transfer_in'
+  source_id: number
+  source_line_id: number
+  receipt_id: number | null
+  transfer_id: number | null
+  created_by: number | null
   created_at: string
 }
 
@@ -64,12 +81,17 @@ export interface ErpOperations {
   createSupplier: { input: { name: string }; output: Supplier }
   materials: { input: undefined; output: Material[] }
   createMaterial: { input: { sku: string; name: string; unit: string }; output: Material }
+  warehouses: { input: undefined; output: Warehouse[] }
+  createWarehouse: { input: { code: string; name: string }; output: Warehouse }
   receipts: { input: undefined; output: Receipt[] }
   createReceipt: {
-    input: { supplier_id: number; reference: string; lines: { material_id: number; quantity: string }[] }
+    input: { supplier_id: number; warehouse_id: number; reference: string; lines: { material_id: number; quantity: string }[] }
     output: Receipt
   }
   postReceipt: { input: { receiptId: number }; output: Receipt }
-  stock: { input: undefined; output: Stock[] }
+  transfers: { input: undefined; output: Transfer[] }
+  createTransfer: { input: { from_warehouse_id: number; to_warehouse_id: number; reference: string; lines: { material_id: number; quantity: string }[] }; output: Transfer }
+  postTransfer: { input: { transferId: number }; output: Transfer }
+  stock: { input: { warehouseId?: number } | undefined; output: Stock[] }
   movements: { input: undefined; output: Movement[] }
 }

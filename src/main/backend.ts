@@ -119,10 +119,16 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'createSupplier': return { method: 'POST', path: '/api/v1/suppliers', body: payload }
     case 'materials': return { method: 'GET', path: '/api/v1/materials' }
     case 'createMaterial': return { method: 'POST', path: '/api/v1/materials', body: payload }
+    case 'warehouses': return { method: 'GET', path: '/api/v1/warehouses' }
+    case 'createWarehouse': return { method: 'POST', path: '/api/v1/warehouses', body: payload }
     case 'receipts': return { method: 'GET', path: '/api/v1/receipts' }
     case 'createReceipt': return { method: 'POST', path: '/api/v1/receipts', body: payload }
     case 'postReceipt': return { method: 'POST', path: `/api/v1/receipts/${positiveId(payload, 'receiptId')}/post` }
-    case 'stock': return { method: 'GET', path: '/api/v1/stock' }
+    case 'transfers': return { method: 'GET', path: '/api/v1/transfers' }
+    case 'createTransfer': return { method: 'POST', path: '/api/v1/transfers', body: payload }
+    case 'postTransfer': return { method: 'POST', path: `/api/v1/transfers/${positiveId(payload, 'transferId')}/post` }
+    case 'stock': return { method: 'GET', path: payload && typeof payload === 'object' && 'warehouseId' in payload && payload.warehouseId !== undefined
+      ? `/api/v1/stock?warehouse_id=${positiveId(payload, 'warehouseId')}` : '/api/v1/stock' }
     case 'movements': return { method: 'GET', path: '/api/v1/movements' }
     default: throw new Error('不允许的业务操作')
   }

@@ -18,11 +18,11 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
-import type { Material, Movement, Permission, Receipt, Role, Stock, Supplier, User } from '../../shared/erp-api'
+import type { Material, Movement, Permission, Receipt, Role, Stock, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
-type Tab = 'stock' | 'catalog' | 'receipts' | 'users' | 'settings'
+type Tab = 'stock' | 'catalog' | 'receipts' | 'transfers' | 'users' | 'settings'
 
 // 让新增的 Naive UI 控件沿用工作台现有的青绿色主色。
 const naiveThemeOverrides: GlobalThemeOverrides = {
@@ -43,6 +43,9 @@ const suppliers = ref<Supplier[]>([])
 const stock = ref<Stock[]>([])
 const movements = ref<Movement[]>([])
 const receipts = ref<Receipt[]>([])
+const warehouses = ref<Warehouse[]>([])
+const transfers = ref<Transfer[]>([])
+const selectedWarehouseId = ref(0)
 const roles = ref<Role[]>([])
 const permissions = ref<Permission[]>([])
 const users = ref<User[]>([])
@@ -52,7 +55,9 @@ const roleLabelDrafts = ref<Record<string, string>>({})
 const resetPasswords = ref<Record<number, string>>({})
 const materialForm = ref({ sku: '', name: '', unit: '件' })
 const supplierForm = ref({ name: '' })
-const receiptForm = ref({ supplier_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
+const receiptForm = ref({ supplier_id: 0, warehouse_id: 1, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
+const warehouseForm = ref({ code: '', name: '' })
+const transferForm = ref({ from_warehouse_id: 1, to_warehouse_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const newUser = ref({ username: '', password: '', roles: ['viewer'] as string[] })
 const newRole = ref({ code: '', label: '', permissions: ['inventory.view'] as string[] })
 const passwordChange = ref({ current_password: '', new_password: '' })
@@ -77,7 +82,7 @@ let unsubscribeDiscovery: (() => void) | null = null
 const can = (permission: string): boolean => user.value?.permissions.includes(permission) ?? false
 // 导航权限仍按原规则计算；图标与文字绑定，避免图标单独承载含义。
 const visibleTabs = computed(() => [
-  ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }] : []),
+  ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }] : []),
   ...(can('users.manage') ? [{ key: 'users' as const, label: '用户权限', icon: IconTeamLine }] : []),
   { key: 'settings' as const, label: '连接与服务', icon: IconSettings3Line }
 ])
@@ -143,6 +148,8 @@ async function switchServer(): Promise<void> {
   user.value = null
   connectionLost.value = false
   server.value = null
+  // 仓库编号只在当前服务端有效，切换实例时重置筛选，避免请求另一实例不存在的仓库。
+  selectedWarehouseId.value = 0
   await window.nexora.disconnect()
   recentServers.value = await window.nexora.recentServers()
   await go('welcome')
@@ -331,12 +338,14 @@ async function refreshData(): Promise<void> {
   if (!visibleTabs.value.some((item) => item.key === activeTab.value)) activeTab.value = visibleTabs.value[0]?.key ?? 'settings'
   // 页面只显示当前角色可访问的入口；数据访问仍以服务端授权为准。
   if (can('inventory.view')) {
-    [materials.value, suppliers.value, stock.value, receipts.value, movements.value] = await Promise.all([
+    [materials.value, suppliers.value, stock.value, receipts.value, movements.value, warehouses.value, transfers.value] = await Promise.all([
       window.nexora.callApi('materials', undefined),
       window.nexora.callApi('suppliers', undefined),
-      window.nexora.callApi('stock', undefined),
+      window.nexora.callApi('stock', selectedWarehouseId.value ? { warehouseId: selectedWarehouseId.value } : undefined),
       window.nexora.callApi('receipts', undefined),
-      window.nexora.callApi('movements', undefined)
+      window.nexora.callApi('movements', undefined),
+      window.nexora.callApi('warehouses', undefined),
+      window.nexora.callApi('transfers', undefined)
     ])
   }
   if (can('users.manage')) {
@@ -404,16 +413,45 @@ async function createReceipt(): Promise<void> {
   await perform(async () => {
     await window.nexora!.callApi('createReceipt', {
       supplier_id: receiptForm.value.supplier_id,
+      warehouse_id: receiptForm.value.warehouse_id,
       reference: receiptForm.value.reference,
       lines: receiptForm.value.lines.map((line) => ({ material_id: line.material_id, quantity: line.quantity }))
     })
-    receiptForm.value = { supplier_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] }
+    receiptForm.value = { supplier_id: 0, warehouse_id: receiptForm.value.warehouse_id, reference: '', lines: [{ material_id: 0, quantity: '1' }] }
   }, '入库单草稿已创建，等待仓库员确认。')
 }
 
 async function postReceipt(receiptId: number): Promise<void> {
   if (!window.nexora) return
   await perform(() => window.nexora!.callApi('postReceipt', { receiptId }), `入库单 #${receiptId} 已确认，库存流水已生成。`)
+}
+
+async function createWarehouse(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    await window.nexora!.callApi('createWarehouse', { ...warehouseForm.value })
+    warehouseForm.value = { code: '', name: '' }
+  }, '仓库已创建。')
+}
+
+async function createTransfer(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    // 只发送表单字段，避免把 Vue 响应式对象传入进程通信。
+    await window.nexora!.callApi('createTransfer', {
+      from_warehouse_id: transferForm.value.from_warehouse_id,
+      to_warehouse_id: transferForm.value.to_warehouse_id,
+      reference: transferForm.value.reference,
+      lines: transferForm.value.lines.map(line => ({ material_id: line.material_id, quantity: line.quantity }))
+    })
+    transferForm.value = { from_warehouse_id: transferForm.value.from_warehouse_id, to_warehouse_id: 0,
+      reference: '', lines: [{ material_id: 0, quantity: '1' }] }
+  }, '调拨单草稿已创建。')
+}
+
+async function postTransfer(transferId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('postTransfer', { transferId }), `调拨单 #${transferId} 已确认，双向库存流水已生成。`)
 }
 
 async function createUser(): Promise<void> {
@@ -604,22 +642,31 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
           <div class="card">
             <div class="section-heading">
               <div><p class="eyebrow">INVENTORY</p><h2>当前库存</h2></div>
+              <label>仓库<select v-model.number="selectedWarehouseId" :disabled="busy" @change="perform(refreshData, '库存已切换。')"><option :value="0">全部仓库</option><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
               <!-- 用 Naive UI 按钮接入现有刷新操作，并以 Tailwind 工具类避免窄屏挤压。 -->
               <NButton text type="primary" class="shrink-0" :disabled="busy" @click="perform(refreshData, '数据已刷新。')"><template #icon><IconRefreshLine aria-hidden="true" /></template>刷新</NButton>
             </div>
             <div class="table-wrap"><table><thead><tr><th>物料编码</th><th>物料名称</th><th>数量</th></tr></thead><tbody><tr v-for="item in stock" :key="item.id"><td class="mono">{{ item.sku }}</td><td>{{ item.name }}</td><td><strong>{{ item.quantity }}</strong> {{ item.unit }}</td></tr><tr v-if="!stock.length"><td colspan="3" class="muted">暂无物料，先到基础资料中添加。</td></tr></tbody></table></div>
           </div>
-          <div class="card"><div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2>入库流水</h2></div></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>物料</th><th>入库数量</th><th>来源</th></tr></thead><tbody><tr v-for="item in movements" :key="item.id"><td>{{ localTime(item.created_at) }}</td><td>{{ item.material_name }} <small class="mono">{{ item.sku }}</small></td><td>+{{ item.quantity }} {{ item.unit }}</td><td>入库单 #{{ item.receipt_id }}</td></tr><tr v-if="!movements.length"><td colspan="4" class="muted">确认入库单后，这里会显示库存流水。</td></tr></tbody></table></div></div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2>库存流水</h2></div></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>仓库</th><th>物料</th><th>数量变动</th><th>来源</th></tr></thead><tbody><tr v-for="item in movements" :key="item.id"><td>{{ localTime(item.created_at) }}</td><td>{{ item.warehouse_name }}</td><td>{{ item.material_name }} <small class="mono">{{ item.sku }}</small></td><td>{{ item.quantity.startsWith('-') ? '' : '+' }}{{ item.quantity }} {{ item.unit }}</td><td>{{ item.receipt_id ? `入库单 #${item.receipt_id}` : `调拨单 #${item.transfer_id}` }}</td></tr><tr v-if="!movements.length"><td colspan="5" class="muted">确认入库或调拨后，这里会显示库存流水。</td></tr></tbody></table></div></div>
         </section>
 
         <section v-if="activeTab === 'catalog'" class="stack">
           <div class="two-columns"><div class="card"><div class="section-heading"><div><p class="eyebrow">MATERIALS</p><h2>物料</h2></div></div><form v-if="can('catalog.manage')" class="inline-form" @submit.prevent="createMaterial"><label>物料编码<input v-model.trim="materialForm.sku" required maxlength="40" placeholder="SKU-001" /></label><label>名称<input v-model.trim="materialForm.name" required maxlength="120" placeholder="物料名称" /></label><label>单位<input v-model.trim="materialForm.unit" required maxlength="20" placeholder="件" /></label><button class="primary" type="submit" :disabled="busy">添加物料</button></form><div class="table-wrap"><table><thead><tr><th>编码</th><th>名称</th><th>单位</th></tr></thead><tbody><tr v-for="item in materials" :key="item.id"><td class="mono">{{ item.sku }}</td><td>{{ item.name }}</td><td>{{ item.unit }}</td></tr><tr v-if="!materials.length"><td colspan="3" class="muted">暂无物料。</td></tr></tbody></table></div></div>
           <div class="card"><div class="section-heading"><div><p class="eyebrow">SUPPLIERS</p><h2>供应商</h2></div></div><form v-if="can('catalog.manage')" class="inline-form" @submit.prevent="createSupplier"><label>供应商名称<input v-model.trim="supplierForm.name" required maxlength="120" placeholder="输入供应商名称" /></label><button class="primary" type="submit" :disabled="busy">添加供应商</button></form><div class="table-wrap"><table><thead><tr><th>名称</th></tr></thead><tbody><tr v-for="item in suppliers" :key="item.id"><td>{{ item.name }}</td></tr><tr v-if="!suppliers.length"><td class="muted">暂无供应商。</td></tr></tbody></table></div></div></div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">WAREHOUSES</p><h2>仓库</h2></div></div><form v-if="can('warehouse.manage')" class="inline-form" @submit.prevent="createWarehouse"><label>仓库编码<input v-model.trim="warehouseForm.code" required maxlength="40" pattern="[A-Za-z0-9_-]+" placeholder="例如 EAST" /></label><label>仓库名称<input v-model.trim="warehouseForm.name" required maxlength="80" placeholder="例如东区仓库" /></label><button class="primary" type="submit" :disabled="busy">添加仓库</button></form><div class="table-wrap"><table><thead><tr><th>编码</th><th>名称</th></tr></thead><tbody><tr v-for="item in warehouses" :key="item.id"><td class="mono">{{ item.code }}</td><td>{{ item.name }}</td></tr></tbody></table></div></div>
         </section>
 
         <section v-if="activeTab === 'receipts'" class="stack">
-          <div v-if="can('receipt.create')" class="card"><div class="section-heading"><div><p class="eyebrow">PURCHASE RECEIPT</p><h2>新建入库单</h2></div><span class="pill">草稿</span></div><form @submit.prevent="createReceipt"><div class="form-grid"><label>供应商<select v-model.number="receiptForm.supplier_id" required><option :value="0" disabled>选择供应商</option><option v-for="item in suppliers" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>外部单号（可选）<input v-model.trim="receiptForm.reference" maxlength="100" placeholder="采购单或送货单号" /></label></div><h3>入库明细</h3><div v-for="(line, index) in receiptForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>数量<input v-model.trim="line.quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><button class="text-button" type="button" :disabled="receiptForm.lines.length === 1" @click="removeLine(index)">移除</button></div><div class="form-actions"><button class="secondary" type="button" @click="addLine">添加明细</button><button class="primary" type="submit" :disabled="busy || !materials.length || !suppliers.length">保存草稿</button></div></form></div>
-          <div class="card"><div class="section-heading"><div><p class="eyebrow">RECEIPT LOG</p><h2>入库单</h2></div></div><div v-if="!receipts.length" class="muted">暂无入库单。</div><article v-for="item in receipts" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.supplier_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已入库' : '待确认' }}</span><button v-if="item.status === 'draft' && can('receipt.post')" class="primary small" type="button" :disabled="busy" @click="postReceipt(item.id)">确认入库</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article></div>
+          <div v-if="can('receipt.create')" class="card"><div class="section-heading"><div><p class="eyebrow">PURCHASE RECEIPT</p><h2>新建入库单</h2></div><span class="pill">草稿</span></div><form @submit.prevent="createReceipt"><div class="form-grid"><label>供应商<select v-model.number="receiptForm.supplier_id" required><option :value="0" disabled>选择供应商</option><option v-for="item in suppliers" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>入库仓库<select v-model.number="receiptForm.warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>外部单号（可选）<input v-model.trim="receiptForm.reference" maxlength="100" placeholder="采购单或送货单号" /></label></div><h3>入库明细</h3><div v-for="(line, index) in receiptForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>数量<input v-model.trim="line.quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><button class="text-button" type="button" :disabled="receiptForm.lines.length === 1" @click="removeLine(index)">移除</button></div><div class="form-actions"><button class="secondary" type="button" @click="addLine">添加明细</button><button class="primary" type="submit" :disabled="busy || !materials.length || !suppliers.length">保存草稿</button></div></form></div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">RECEIPT LOG</p><h2>入库单</h2></div></div><div v-if="!receipts.length" class="muted">暂无入库单。</div><article v-for="item in receipts" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.supplier_name }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已入库' : '待确认' }}</span><button v-if="item.status === 'draft' && can('receipt.post')" class="primary small" type="button" :disabled="busy" @click="postReceipt(item.id)">确认入库</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article></div>
+        </section>
+
+        <section v-if="activeTab === 'transfers'" class="stack">
+          <div v-if="can('transfer.create')" class="card"><div class="section-heading"><div><p class="eyebrow">WAREHOUSE TRANSFER</p><h2>新建调拨单</h2></div><span class="pill">草稿</span></div>
+            <form @submit.prevent="createTransfer"><div class="form-grid"><label>来源仓库<select v-model.number="transferForm.from_warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>目标仓库<select v-model.number="transferForm.to_warehouse_id" required><option :value="0" disabled>选择目标仓库</option><option v-for="item in warehouses.filter(entry => entry.id !== transferForm.from_warehouse_id)" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>参考单号（可选）<input v-model.trim="transferForm.reference" maxlength="100" /></label></div>
+              <h3>调拨明细</h3><div v-for="(line, index) in transferForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>数量<input v-model.trim="line.quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><button class="text-button" type="button" :disabled="transferForm.lines.length === 1" @click="transferForm.lines.splice(index, 1)">移除</button></div><div class="form-actions"><button class="secondary" type="button" @click="transferForm.lines.push({ material_id: 0, quantity: '1' })">添加明细</button><button class="primary" type="submit" :disabled="busy || warehouses.length < 2 || !materials.length">保存草稿</button></div></form></div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">TRANSFER LOG</p><h2>调拨单</h2></div></div><div v-if="!transfers.length" class="muted">暂无调拨单。</div><article v-for="item in transfers" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.from_warehouse_name }} → {{ item.to_warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已调拨' : '待确认' }}</span><button v-if="item.status === 'draft' && can('transfer.post')" class="primary small" type="button" :disabled="busy" @click="postTransfer(item.id)">确认调拨</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article></div>
         </section>
 
         <section v-if="activeTab === 'users' && can('users.manage')" class="stack">
