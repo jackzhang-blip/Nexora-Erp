@@ -1,11 +1,18 @@
 import { spawnSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { checkBackendBuildEnvironment, selectBackendPython } from './backend-build-env.mjs'
 
 // 构建缓存放在仓库的忽略目录，Mac 与 Windows 都不依赖用户级缓存写权限。
 const cache = join(process.cwd(), 'build', 'pyinstaller-cache')
 mkdirSync(cache, { recursive: true })
-const python = process.env.NEXORA_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
+const python = selectBackendPython(process.cwd())
+try {
+  checkBackendBuildEnvironment(python)
+} catch (error) {
+  console.error(error.message)
+  process.exit(1)
+}
 const result = spawnSync(python, ['-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir',
   '--name', 'nexora-server', '--distpath', 'build', '--workpath', 'build/pyinstaller',
   '--specpath', 'build/pyinstaller', 'backend/launcher.py'], {

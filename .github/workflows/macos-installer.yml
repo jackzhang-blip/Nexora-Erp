@@ -1,0 +1,37 @@
+name: macOS 内部安装包
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'codex/**']
+
+jobs:
+  build-macos:
+    # 公共仓库的 macos-15 标准运行器是 Apple 芯片，用于检查 arm64 打包。
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: 安装依赖
+        run: |
+          npm ci
+          python -m pip install -r backend/requirements-dev.txt 'pyinstaller>=6,<7'
+      - name: 验证后端和桌面接口
+        run: |
+          PYTHONPATH=backend python -m pytest backend/tests -q
+          node --experimental-strip-types --test tests/*.test.mjs
+      - name: 生成 macOS 安装包
+        run: npm run dist:mac
+      - name: 验证打包服务异常恢复
+        run: python scripts/smoke-macos-launchd.py --source 'release/mac-arm64/Nexora ERP.app/Contents/Resources/backend-service'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexora-macos-arm64-internal
+          path: release/*.dmg
