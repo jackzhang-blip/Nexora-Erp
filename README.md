@@ -1,6 +1,6 @@
 # Nexora ERP（联光 ERP）
 
-面向企业内部的桌面 ERP。当前版本已具备用户与角色权限管理、物料、供应商与客户资料、采购订单及分批入库、销售订单及分批出库与退货、多仓库库存、调拨与盘点流水，以及局域网服务端的创建、发现和连接。
+面向企业内部的桌面 ERP。当前版本已具备用户与角色权限管理、物料、供应商与客户资料、采购订单及分批入库与退货、销售订单及分批出库与退货、多仓库库存、调拨与盘点流水，以及局域网服务端的创建、发现和连接。
 
 ## 当前工作方式
 
@@ -10,7 +10,7 @@
 
 首次连接其他电脑时，请将客户端展示的 SHA-256 指纹与服务端电脑“服务端已就绪”页面中的指纹完整核对，再输入账号密码。连接记录只保存地址、服务端身份和证书，不保存密码。证书变化时，自动重连会被阻止，需重新核验。
 
-**当前数据集中保存在服务端。**远程客户端断网后不能继续编辑；工作台会提示断线并重试，连接恢复后重新读取服务端数据。没有本地数据合并或离线同步。MySQL、跨设备数据同步、财务、采购退货、人力资源与 CRM 是后续阶段的工作。
+**当前数据集中保存在服务端。**远程客户端断网后不能继续编辑；工作台会提示断线并重试，连接恢复后重新读取服务端数据。没有本地数据合并或离线同步。MySQL、跨设备数据同步、财务、人力资源与 CRM 是后续阶段的工作。
 
 ## 开发
 
@@ -53,6 +53,7 @@ npm run build
 - 管理员可停用账号、重置密码并配置自定义角色的权限；修改密码后旧登录立即失效。系统始终保留至少一位启用的内置管理员。
 - 服务端为每个实例生成独立 HTTPS 证书，私钥保存在数据目录。使用成组备份命令保存 `nexora.db`、`server.crt` 和 `server.key`；丢失私钥会要求客户端重新核验身份。
 - 采购订单确认后可关联多张入库单，服务端按已确认入库量计算剩余数量并阻止超量；没有关联订单的旧入库流程继续可用。
+- 采购退货关联已确认入库明细；确认时重新核对累计可退量和原入库仓库库存，并记录负向库存流水。原入库与订单已收数量保留，同时展示已退与净入库数量。未关联订单的历史入库无单价，退货金额显示待核对。
 - 销售订单可分批出库；确认出库时在同一写事务中检查订单剩余数量和指定仓库的可用库存，记录带单据来源的负库存流水。
 - 销售退货关联已确认出库明细；确认时重新核对累计可退量，在所选仓库记录正库存流水。原出库记录保留，订单另外显示已退与净交付数量。退货金额按原销售单价展示，尚未生成应收调整。
 - 一张入库单、调拨单或盘点单只允许确认一次。确认状态与库存流水在同一个事务中写入，当前库存可按仓库或全部仓库从流水汇总；调拨前检查来源仓库可用量。盘点在建单时保存账面量，确认前如有库存变化须重新盘点。
@@ -60,4 +61,4 @@ npm run build
 
 ## English summary
 
-Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, user and role administration, purchase orders and partial receipts, sales orders with partial shipments and linked returns, multi-warehouse stock, transfers, stocktakes, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Packaged hosts use an OS service; remote clients require a live connection. Offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Cross-platform device acceptance remains pending.
+Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, user and role administration, purchase orders with partial receipts and linked returns, sales orders with partial shipments and linked returns, multi-warehouse stock, transfers, stocktakes, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Packaged hosts use an OS service; remote clients require a live connection. Offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Cross-platform device acceptance remains pending.

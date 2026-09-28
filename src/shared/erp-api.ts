@@ -22,6 +22,10 @@ export interface ReceiptLine {
   unit: string
   quantity: string
 }
+export interface ReceivedLine extends ReceiptLine {
+  returned_quantity: string
+  returnable_quantity: string
+}
 export interface Receipt {
   id: number
   supplier_id: number
@@ -36,12 +40,14 @@ export interface Receipt {
   posted_by: number | null
   created_at: string
   posted_at: string | null
-  lines: ReceiptLine[]
+  lines: ReceivedLine[]
 }
 // 已入库数量由服务端按确认单据汇总，前端只展示而不自行累计。
 export interface PurchaseOrderLine extends ReceiptLine {
   unit_price: string
   received_quantity: string
+  net_received_quantity: string
+  returned_quantity: string
   remaining_quantity: string
   line_total: string
 }
@@ -60,6 +66,31 @@ export interface PurchaseOrder {
   cancelled_at: string | null
   lines: PurchaseOrderLine[]
   total_amount: string
+}
+// 历史未关联采购订单的入库单没有单价，退货金额明确为未知。
+export interface PurchaseReturnLine extends ReceiptLine {
+  receipt_line_id: number
+  unit_price: string | null
+  line_total: string | null
+}
+export interface PurchaseReturn {
+  id: number
+  receipt_id: number
+  supplier_id: number
+  supplier_name: string
+  warehouse_id: number
+  warehouse_name: string
+  reason: string
+  status: 'draft' | 'posted' | 'cancelled'
+  created_by: number
+  created_by_name: string
+  posted_by: number | null
+  cancelled_by: number | null
+  created_at: string
+  posted_at: string | null
+  cancelled_at: string | null
+  lines: PurchaseReturnLine[]
+  total_amount: string | null
 }
 // 销售订单剩余量由已确认的出库单计算，草稿不会预先扣减。
 export interface SalesOrderLine extends ReceiptLine {
@@ -174,7 +205,7 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'shipment' | 'sales_return'
+  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'shipment' | 'sales_return' | 'purchase_return'
   source_id: number
   source_line_id: number
   receipt_id: number | null
@@ -182,6 +213,7 @@ export interface Movement {
   stocktake_id: number | null
   shipment_id: number | null
   sales_return_id: number | null
+  purchase_return_id: number | null
   created_by: number | null
   created_at: string
 }
@@ -216,6 +248,10 @@ export interface ErpOperations {
     output: Receipt
   }
   postReceipt: { input: { receiptId: number }; output: Receipt }
+  purchaseReturns: { input: undefined; output: PurchaseReturn[] }
+  createPurchaseReturn: { input: { receipt_id: number; reason: string; lines: { receipt_line_id: number; quantity: string }[] }; output: PurchaseReturn }
+  postPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
+  cancelPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   purchaseOrders: { input: undefined; output: PurchaseOrder[] }
   createPurchaseOrder: { input: { supplier_id: number; reference: string; lines: { material_id: number; quantity: string; unit_price: string }[] }; output: PurchaseOrder }
   confirmPurchaseOrder: { input: { orderId: number }; output: PurchaseOrder }

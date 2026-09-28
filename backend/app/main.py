@@ -19,6 +19,7 @@ from .discovery import DiscoveryPublisher
 from .inventory import require_warehouse, router as inventory_router
 from .purchase import (linked_order_for_receipt, order_receipt_lines,
                        router as purchase_router, update_order_receipt_status, validate_receipt_post)
+from .purchase_returns import returned_quantity as purchase_returned_quantity, router as purchase_returns_router
 from .sales import router as sales_router
 from .sales_returns import router as sales_returns_router
 from .stocktake import router as stocktake_router
@@ -63,6 +64,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Nexora ERP API", version="0.1.0", lifespan=lifespan)
 app.include_router(inventory_router)
 app.include_router(purchase_router)
+app.include_router(purchase_returns_router)
 app.include_router(stocktake_router)
 app.include_router(sales_router)
 app.include_router(sales_returns_router)
@@ -235,8 +237,14 @@ def receipt_data(db: sqlite3.Connection, receipt_id: int) -> dict:
         FROM receipt_lines rl JOIN materials m ON m.id = rl.material_id
         WHERE rl.receipt_id = ? ORDER BY rl.id
     """, (receipt_id,)).fetchall()
+    detailed_lines = []
+    for line in lines:
+        # 同一次读取只汇总一次已退量，可退数量只由已确认单据推导。
+        returned = purchase_returned_quantity(db, line["id"])
+        detailed_lines.append({**dict(line), "returned_quantity": str(returned),
+                               "returnable_quantity": str(Decimal(line["quantity"]) - returned)})
     return {**dict(row), "purchase_order_id": linked_order_for_receipt(db, receipt_id),
-            "lines": [dict(line) for line in lines]}
+            "lines": detailed_lines}
 
 
 @app.get("/api/v1/health", response_model=HealthResponse, tags=["health"])
@@ -561,6 +569,7 @@ def list_movements(_: dict = Depends(require("inventory.view"))) -> list[dict]:
                    CASE WHEN sm.source_type = 'stocktake' THEN sm.source_id END AS stocktake_id,
                    CASE WHEN sm.source_type = 'shipment' THEN sm.source_id END AS shipment_id,
                    CASE WHEN sm.source_type = 'sales_return' THEN sm.source_id END AS sales_return_id,
+                   CASE WHEN sm.source_type = 'purchase_return' THEN sm.source_id END AS purchase_return_id,
                    sm.created_by, sm.created_at
             FROM stock_movements sm
             JOIN materials m ON m.id = sm.material_id

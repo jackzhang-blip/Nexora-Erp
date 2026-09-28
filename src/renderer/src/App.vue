@@ -18,11 +18,11 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
-import type { Customer, Material, Movement, Permission, PurchaseOrder, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
+import type { Customer, Material, Movement, Permission, PurchaseOrder, PurchaseReturn, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
-type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'users' | 'settings'
+type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'users' | 'settings'
 
 // 让新增的 Naive UI 控件沿用工作台现有的青绿色主色。
 const naiveThemeOverrides: GlobalThemeOverrides = {
@@ -44,6 +44,7 @@ const stock = ref<Stock[]>([])
 const movements = ref<Movement[]>([])
 const receipts = ref<Receipt[]>([])
 const purchaseOrders = ref<PurchaseOrder[]>([])
+const purchaseReturns = ref<PurchaseReturn[]>([])
 const warehouses = ref<Warehouse[]>([])
 const transfers = ref<Transfer[]>([])
 const stocktakes = ref<Stocktake[]>([])
@@ -65,6 +66,8 @@ const receiptForm = ref({ supplier_id: 0, warehouse_id: 1, purchase_order_id: nu
   reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const purchaseForm = ref({ supplier_id: 0, reference: '',
   lines: [{ material_id: 0, quantity: '1', unit_price: '0' }] })
+const purchaseReturnForm = ref({ receipt_id: 0, reason: '',
+  lines: [] as { receipt_line_id: number; quantity: string }[] })
 const warehouseForm = ref({ code: '', name: '' })
 const transferForm = ref({ from_warehouse_id: 1, to_warehouse_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const stocktakeForm = ref({ warehouse_id: 1, reference: '', lines: [{ material_id: 0, counted_quantity: '0' }] })
@@ -99,13 +102,15 @@ let unsubscribeDiscovery: (() => void) | null = null
 const can = (permission: string): boolean => user.value?.permissions.includes(permission) ?? false
 // 导航权限仍按原规则计算；图标与文字绑定，避免图标单独承载含义。
 const visibleTabs = computed(() => [
-  ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'purchase' as const, label: '采购订单', icon: IconFileList3Line }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }, { key: 'stocktakes' as const, label: '库存盘点', icon: IconFileList3Line }] : []),
+  ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'purchase' as const, label: '采购订单', icon: IconFileList3Line }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'purchaseReturns' as const, label: '采购退货', icon: IconHistoryLine }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }, { key: 'stocktakes' as const, label: '库存盘点', icon: IconFileList3Line }] : []),
   ...(can('sales.view') ? [{ key: 'sales' as const, label: '销售订单', icon: IconFileList3Line }, { key: 'shipments' as const, label: '销售出库', icon: IconArchiveLine }, { key: 'salesReturns' as const, label: '销售退货', icon: IconHistoryLine }] : []),
   ...(can('users.manage') ? [{ key: 'users' as const, label: '用户权限', icon: IconTeamLine }] : []),
   { key: 'settings' as const, label: '连接与服务', icon: IconSettings3Line }
 ])
 const selectedSalesReturnShipment = computed(() => shipments.value.find(
   item => item.id === salesReturnForm.value.shipment_id))
+const selectedPurchaseReturnReceipt = computed(() => receipts.value.find(
+  item => item.id === purchaseReturnForm.value.receipt_id))
 
 function displayError(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : '操作失败'
@@ -125,6 +130,7 @@ function movementSource(item: Movement): string {
   if (item.stocktake_id !== null) return `盘点单 #${item.stocktake_id}`
   if (item.shipment_id !== null) return `出库单 #${item.shipment_id}`
   if (item.sales_return_id !== null) return `销售退货单 #${item.sales_return_id}`
+  if (item.purchase_return_id !== null) return `采购退货单 #${item.purchase_return_id}`
   return `流水 #${item.id}`
 }
 
@@ -368,7 +374,7 @@ async function refreshData(): Promise<void> {
   if (!visibleTabs.value.some((item) => item.key === activeTab.value)) activeTab.value = visibleTabs.value[0]?.key ?? 'settings'
   // 页面只显示当前角色可访问的入口；数据访问仍以服务端授权为准。
   if (can('inventory.view')) {
-    [materials.value, suppliers.value, stock.value, receipts.value, movements.value, warehouses.value, transfers.value, purchaseOrders.value, stocktakes.value] = await Promise.all([
+    [materials.value, suppliers.value, stock.value, receipts.value, movements.value, warehouses.value, transfers.value, purchaseOrders.value, stocktakes.value, purchaseReturns.value] = await Promise.all([
       window.nexora.callApi('materials', undefined),
       window.nexora.callApi('suppliers', undefined),
       window.nexora.callApi('stock', selectedWarehouseId.value ? { warehouseId: selectedWarehouseId.value } : undefined),
@@ -377,7 +383,8 @@ async function refreshData(): Promise<void> {
       window.nexora.callApi('warehouses', undefined),
       window.nexora.callApi('transfers', undefined),
       window.nexora.callApi('purchaseOrders', undefined),
-      window.nexora.callApi('stocktakes', undefined)
+      window.nexora.callApi('stocktakes', undefined),
+      window.nexora.callApi('purchaseReturns', undefined)
     ])
   }
   if (can('sales.view')) {
@@ -502,6 +509,37 @@ async function cancelPurchaseOrder(orderId: number): Promise<void> {
 async function postReceipt(receiptId: number): Promise<void> {
   if (!window.nexora) return
   await perform(() => window.nexora!.callApi('postReceipt', { receiptId }), `入库单 #${receiptId} 已确认，库存流水已生成。`)
+}
+
+function choosePurchaseReturnReceipt(): void {
+  const receipt = selectedPurchaseReturnReceipt.value
+  // 原入库行决定退货上限和出库仓库，页面只预填当前尚可退的数量。
+  purchaseReturnForm.value.lines = receipt?.lines.filter(line => Number(line.returnable_quantity) > 0)
+    .map(line => ({ receipt_line_id: line.id, quantity: line.returnable_quantity })) ?? []
+}
+
+async function createPurchaseReturn(): Promise<void> {
+  if (!window.nexora || !purchaseReturnForm.value.lines.length) return
+  await perform(async () => {
+    await window.nexora!.callApi('createPurchaseReturn', {
+      receipt_id: purchaseReturnForm.value.receipt_id,
+      reason: purchaseReturnForm.value.reason,
+      lines: purchaseReturnForm.value.lines.map(line => ({ ...line }))
+    })
+    purchaseReturnForm.value = { receipt_id: 0, reason: '', lines: [] }
+  }, '采购退货草稿已创建。')
+}
+
+async function postPurchaseReturn(returnId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('postPurchaseReturn', { returnId }),
+    `采购退货单 #${returnId} 已确认，原入库仓库库存已扣减。`)
+}
+
+async function cancelPurchaseReturn(returnId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('cancelPurchaseReturn', { returnId }),
+    `采购退货单 #${returnId} 已取消。`)
 }
 
 async function createWarehouse(): Promise<void> {
@@ -857,7 +895,7 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
             </div>
             <div class="table-wrap"><table><thead><tr><th>物料编码</th><th>物料名称</th><th>数量</th></tr></thead><tbody><tr v-for="item in stock" :key="item.id"><td class="mono">{{ item.sku }}</td><td>{{ item.name }}</td><td><strong>{{ item.quantity }}</strong> {{ item.unit }}</td></tr><tr v-if="!stock.length"><td colspan="3" class="muted">暂无物料，先到基础资料中添加。</td></tr></tbody></table></div>
           </div>
-          <div class="card"><div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2>库存流水</h2></div></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>仓库</th><th>物料</th><th>数量变动</th><th>来源</th></tr></thead><tbody><tr v-for="item in movements" :key="item.id"><td>{{ localTime(item.created_at) }}</td><td>{{ item.warehouse_name }}</td><td>{{ item.material_name }} <small class="mono">{{ item.sku }}</small></td><td>{{ item.quantity.startsWith('-') ? '' : '+' }}{{ item.quantity }} {{ item.unit }}</td><td>{{ movementSource(item) }}</td></tr><tr v-if="!movements.length"><td colspan="5" class="muted">确认入库、调拨、盘点、出库或销售退货后，这里会显示库存流水。</td></tr></tbody></table></div></div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2>库存流水</h2></div></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>仓库</th><th>物料</th><th>数量变动</th><th>来源</th></tr></thead><tbody><tr v-for="item in movements" :key="item.id"><td>{{ localTime(item.created_at) }}</td><td>{{ item.warehouse_name }}</td><td>{{ item.material_name }} <small class="mono">{{ item.sku }}</small></td><td>{{ item.quantity.startsWith('-') ? '' : '+' }}{{ item.quantity }} {{ item.unit }}</td><td>{{ movementSource(item) }}</td></tr><tr v-if="!movements.length"><td colspan="5" class="muted">确认入库、调拨、盘点、出库或退货后，这里会显示库存流水。</td></tr></tbody></table></div></div>
         </section>
 
         <section v-if="activeTab === 'catalog'" class="stack">
@@ -877,14 +915,30 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
             </form>
           </div>
           <div class="card"><div class="section-heading"><div><p class="eyebrow">ORDER LOG</p><h2>采购订单</h2></div></div><div v-if="!purchaseOrders.length" class="muted">暂无采购订单。</div>
-            <article v-for="item in purchaseOrders" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.supplier_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span> · 总额 ¥{{ item.total_amount }}</p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', confirmed: '待入库', partially_received: '部分入库', received: '全部入库', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('purchase_order.confirm')" class="primary small" type="button" :disabled="busy" @click="confirmPurchaseOrder(item.id)">确认订单</button><button v-if="['draft', 'confirmed'].includes(item.status) && can('purchase_order.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelPurchaseOrder(item.id)">取消订单</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} {{ line.received_quantity }}/{{ line.quantity }} {{ line.unit }} · ¥{{ line.unit_price }}/{{ line.unit }}</span></div></article>
+            <article v-for="item in purchaseOrders" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.supplier_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span> · 总额 ¥{{ item.total_amount }}</p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', confirmed: '待入库', partially_received: '部分入库', received: '全部入库', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('purchase_order.confirm')" class="primary small" type="button" :disabled="busy" @click="confirmPurchaseOrder(item.id)">确认订单</button><button v-if="['draft', 'confirmed'].includes(item.status) && can('purchase_order.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelPurchaseOrder(item.id)">取消订单</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} 已入 {{ line.received_quantity }}/{{ line.quantity }} {{ line.unit }} · 已退 {{ line.returned_quantity }} · 净入 {{ line.net_received_quantity }} · ¥{{ line.unit_price }}/{{ line.unit }}</span></div></article>
           </div>
         </section>
 
         <section v-if="activeTab === 'receipts'" class="stack">
           <div v-if="can('receipt.create')" class="card"><div class="section-heading"><div><p class="eyebrow">PURCHASE RECEIPT</p><h2>新建入库单</h2></div><span class="pill">草稿</span></div>
             <form @submit.prevent="createReceipt"><div class="form-grid"><label>关联采购订单（可选）<select v-model.number="receiptForm.purchase_order_id" @change="chooseReceiptOrder"><option :value="null">不关联订单</option><option v-for="item in purchaseOrders.filter(entry => ['confirmed', 'partially_received'].includes(entry.status))" :key="item.id" :value="item.id">#{{ item.id }} · {{ item.supplier_name }}</option></select></label><label>供应商<select v-model.number="receiptForm.supplier_id" :disabled="receiptForm.purchase_order_id !== null" required><option :value="0" disabled>选择供应商</option><option v-for="item in suppliers" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>入库仓库<select v-model.number="receiptForm.warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>外部单号（可选）<input v-model.trim="receiptForm.reference" maxlength="100" placeholder="采购单或送货单号" /></label></div><h3>入库明细</h3><div v-for="(line, index) in receiptForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>数量<input v-model.trim="line.quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><button class="text-button" type="button" :disabled="receiptForm.lines.length === 1" @click="removeLine(index)">移除</button></div><div class="form-actions"><button class="secondary" type="button" @click="addLine">添加明细</button><button class="primary" type="submit" :disabled="busy || !materials.length || !suppliers.length">保存草稿</button></div></form></div>
-          <div class="card"><div class="section-heading"><div><p class="eyebrow">RECEIPT LOG</p><h2>入库单</h2></div></div><div v-if="!receipts.length" class="muted">暂无入库单。</div><article v-for="item in receipts" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.supplier_name }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.purchase_order_id">· 采购订单 #{{ item.purchase_order_id }}</span> <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已入库' : '待确认' }}</span><button v-if="item.status === 'draft' && can('receipt.post')" class="primary small" type="button" :disabled="busy" @click="postReceipt(item.id)">确认入库</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article></div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">RECEIPT LOG</p><h2>入库单</h2></div></div><div v-if="!receipts.length" class="muted">暂无入库单。</div><article v-for="item in receipts" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.supplier_name }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.purchase_order_id">· 采购订单 #{{ item.purchase_order_id }}</span> <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已入库' : '待确认' }}</span><button v-if="item.status === 'draft' && can('receipt.post')" class="primary small" type="button" :disabled="busy" @click="postReceipt(item.id)">确认入库</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }} · 已退 {{ line.returned_quantity }}</span></div></article></div>
+        </section>
+
+        <section v-if="activeTab === 'purchaseReturns'" class="stack">
+          <div v-if="can('purchase_return.create')" class="card">
+            <div class="section-heading"><div><p class="eyebrow">PURCHASE RETURN</p><h2>新建采购退货</h2></div><span class="pill">草稿</span></div>
+            <p class="muted">退货从原入库仓库扣减。若货物已调走，请先调回；未关联采购订单的历史入库单不显示退货金额。</p>
+            <form @submit.prevent="createPurchaseReturn">
+              <div class="form-grid"><label>原入库单<select v-model.number="purchaseReturnForm.receipt_id" required @change="choosePurchaseReturnReceipt"><option :value="0" disabled>选择可退货的入库单</option><option v-for="item in receipts.filter(entry => entry.status === 'posted' && entry.lines.some(line => Number(line.returnable_quantity) > 0))" :key="item.id" :value="item.id">#{{ item.id }} · {{ item.supplier_name }} · {{ item.warehouse_name }}</option></select></label><label>退货原因<input v-model.trim="purchaseReturnForm.reason" required maxlength="200" /></label></div>
+              <h3>退货明细</h3>
+              <div v-for="(line, index) in purchaseReturnForm.lines" :key="line.receipt_line_id" class="line-row"><label>原入库物料<input :value="selectedPurchaseReturnReceipt?.lines.find(item => item.id === line.receipt_line_id)?.material_name" disabled /></label><label>退货数量（最多 {{ selectedPurchaseReturnReceipt?.lines.find(item => item.id === line.receipt_line_id)?.returnable_quantity }}）<input v-model.trim="line.quantity" type="number" min="0.001" :max="selectedPurchaseReturnReceipt?.lines.find(item => item.id === line.receipt_line_id)?.returnable_quantity" step="0.001" required /></label><button class="text-button" type="button" @click="purchaseReturnForm.lines.splice(index, 1)">移除</button></div>
+              <div class="form-actions"><button class="primary" type="submit" :disabled="busy || !purchaseReturnForm.lines.length">保存草稿</button></div>
+            </form>
+          </div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">RETURN LOG</p><h2>采购退货记录</h2></div></div><div v-if="!purchaseReturns.length" class="muted">暂无采购退货单。</div>
+            <article v-for="item in purchaseReturns" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.supplier_name }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 原入库单 #{{ item.receipt_id }} · {{ item.reason }} · 创建人 {{ item.created_by_name }} · 原价金额 {{ item.total_amount === null ? '待核对' : `¥${item.total_amount}` }}</p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已退供应商' : item.status === 'cancelled' ? '已取消' : '待确认' }}</span><button v-if="item.status === 'draft' && can('purchase_return.post')" class="primary small" type="button" :disabled="busy" @click="postPurchaseReturn(item.id)">确认退货</button><button v-if="item.status === 'draft' && can('purchase_return.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelPurchaseReturn(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }} · {{ line.line_total === null ? '金额待核对' : `¥${line.line_total}` }}</span></div></article>
+          </div>
         </section>
 
         <section v-if="activeTab === 'transfers'" class="stack">
