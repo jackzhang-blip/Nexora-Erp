@@ -26,6 +26,7 @@ from .sales import router as sales_router
 from .sales_returns import router as sales_returns_router
 from .stocktake import router as stocktake_router
 from .work_orders import router as work_orders_router
+from .material_issues import router as material_issues_router
 from .security import bearer, current_user, hash_password, require, token_hash, user_details, verify_password
 
 
@@ -71,6 +72,7 @@ app.include_router(purchase_returns_router)
 app.include_router(finance_router)
 app.include_router(production_router)
 app.include_router(work_orders_router)
+app.include_router(material_issues_router)
 app.include_router(stocktake_router)
 app.include_router(sales_router)
 app.include_router(sales_returns_router)
@@ -576,6 +578,7 @@ def list_movements(_: dict = Depends(require("inventory.view"))) -> list[dict]:
                    CASE WHEN sm.source_type = 'shipment' THEN sm.source_id END AS shipment_id,
                    CASE WHEN sm.source_type = 'sales_return' THEN sm.source_id END AS sales_return_id,
                    CASE WHEN sm.source_type = 'purchase_return' THEN sm.source_id END AS purchase_return_id,
+                   CASE WHEN sm.source_type = 'material_issue' THEN sm.source_id END AS material_issue_id,
                    sm.created_by, sm.created_at
             FROM stock_movements sm
             JOIN materials m ON m.id = sm.material_id

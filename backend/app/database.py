@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 13:
+        if version > 14:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -515,3 +515,38 @@ def migrate() -> None:
                            [(role, permission) for role in ("admin", "planner")
                             for permission in ("work_order.create", "work_order.release", "work_order.cancel")])
             db.execute("PRAGMA user_version = 13")
+        if version < 14:
+            # 每次领料保留独立草稿和确认记录，库存流水以领料明细为不可变来源。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE material_issues (
+                id INTEGER PRIMARY KEY,
+                work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+                warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+                reference TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'posted', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                posted_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                posted_at TEXT,
+                cancelled_at TEXT
+            )""")
+            db.execute("""CREATE TABLE material_issue_lines (
+                id INTEGER PRIMARY KEY,
+                material_issue_id INTEGER NOT NULL REFERENCES material_issues(id),
+                work_order_line_id INTEGER NOT NULL REFERENCES work_order_lines(id),
+                quantity TEXT NOT NULL,
+                UNIQUE (material_issue_id, work_order_line_id)
+            )""")
+            db.execute("CREATE INDEX material_issues_order ON material_issues(work_order_id)")
+            db.execute("CREATE INDEX material_issue_lines_order_line ON material_issue_lines(work_order_line_id)")
+            db.executemany("INSERT INTO permissions(code) VALUES (?)", [(code,) for code in (
+                "material_issue.create", "material_issue.post", "material_issue.cancel")])
+            grants = {"admin": ("material_issue.create", "material_issue.post", "material_issue.cancel"),
+                      "planner": ("material_issue.create", "material_issue.cancel"),
+                      "warehouse": ("material_issue.create", "material_issue.post", "material_issue.cancel")}
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, permission) for role, permissions in grants.items()
+                            for permission in permissions])
+            db.execute("PRAGMA user_version = 14")

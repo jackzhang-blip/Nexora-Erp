@@ -189,6 +189,8 @@ export interface WorkOrderLine {
   material_name: string
   unit: string
   required_quantity: string
+  issued_quantity: string
+  remaining_quantity: string
 }
 // 工单组件需求在建单时固定，旧 BOM 停用也不会改变已下达工单。
 export interface WorkOrder {
@@ -213,6 +215,32 @@ export interface WorkOrder {
   released_at: string | null
   cancelled_at: string | null
   lines: WorkOrderLine[]
+}
+export interface MaterialIssueLine {
+  id: number
+  work_order_line_id: number
+  component_material_id: number
+  sku: string
+  material_name: string
+  unit: string
+  quantity: string
+}
+// 确认后的领料单生成独立负向库存流水；原单据保留供追溯。
+export interface MaterialIssue {
+  id: number
+  work_order_id: number
+  warehouse_id: number
+  warehouse_name: string
+  reference: string
+  status: 'draft' | 'posted' | 'cancelled'
+  created_by: number
+  created_by_name: string
+  posted_by: number | null
+  cancelled_by: number | null
+  created_at: string
+  posted_at: string | null
+  cancelled_at: string | null
+  lines: MaterialIssueLine[]
 }
 // 销售订单剩余量由已确认的出库单计算，草稿不会预先扣减。
 export interface SalesOrderLine extends ReceiptLine {
@@ -327,7 +355,7 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'shipment' | 'sales_return' | 'purchase_return'
+  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'shipment' | 'sales_return' | 'purchase_return' | 'material_issue'
   source_id: number
   source_line_id: number
   receipt_id: number | null
@@ -336,6 +364,7 @@ export interface Movement {
   shipment_id: number | null
   sales_return_id: number | null
   purchase_return_id: number | null
+  material_issue_id: number | null
   created_by: number | null
   created_at: string
 }
@@ -386,6 +415,10 @@ export interface ErpOperations {
   createWorkOrder: { input: { bom_id: number; warehouse_id: number; target_quantity: string; reference: string; note: string }; output: WorkOrder }
   releaseWorkOrder: { input: { orderId: number }; output: WorkOrder }
   cancelWorkOrder: { input: { orderId: number }; output: WorkOrder }
+  materialIssues: { input: undefined; output: MaterialIssue[] }
+  createMaterialIssue: { input: { work_order_id: number; warehouse_id: number; reference: string; lines: { work_order_line_id: number; quantity: string }[] }; output: MaterialIssue }
+  postMaterialIssue: { input: { issueId: number }; output: MaterialIssue }
+  cancelMaterialIssue: { input: { issueId: number }; output: MaterialIssue }
   createPurchaseReturn: { input: { receipt_id: number; reason: string; lines: { receipt_line_id: number; quantity: string }[] }; output: PurchaseReturn }
   postPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   cancelPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }

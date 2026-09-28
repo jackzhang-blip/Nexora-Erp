@@ -115,6 +115,12 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   await callBackend('releaseWorkOrder', { orderId: 13 })
   assert.equal(calls[23].path, '/api/v1/work-orders/13/release')
   await assert.rejects(callBackend('cancelWorkOrder', { orderId: '../users' }), /记录编号无效/)
+  // 领料确认同样只允许固定业务路径，不能拼接外部传入的路径片段。
+  await callBackend('materialIssues', undefined)
+  assert.equal(calls[24].path, '/api/v1/material-issues')
+  await callBackend('postMaterialIssue', { issueId: 14 })
+  assert.equal(calls[25].path, '/api/v1/material-issues/14/post')
+  await assert.rejects(callBackend('cancelMaterialIssue', { issueId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('confirmSalesOrder', { orderId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('updateRole', { code: '../users', label: '错误', permissions: [] }), /角色代码无效/)
   await assert.rejects(callBackend('postReceipt', { receiptId: '../users' }), /记录编号无效/)

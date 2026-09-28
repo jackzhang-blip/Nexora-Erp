@@ -28,6 +28,13 @@ class WorkOrderInput(BaseModel):
         return value
 
 
+def issued_quantity(db: sqlite3.Connection, work_order_line_id: int) -> Decimal:
+    # 草稿不占工单需料，只有确认领料才扣减剩余数量。
+    return sum((Decimal(row[0]) for row in db.execute("""SELECT mil.quantity
+        FROM material_issue_lines mil JOIN material_issues mi ON mi.id = mil.material_issue_id
+        WHERE mil.work_order_line_id = ? AND mi.status = 'posted'""", (work_order_line_id,))), Decimal(0))
+
+
 def work_order_data(db: sqlite3.Connection, order_id: int) -> dict:
     row = db.execute("""SELECT wo.*, b.version AS bom_version,
         b.product_material_id, m.sku AS product_sku, m.name AS product_name,
@@ -42,7 +49,12 @@ def work_order_data(db: sqlite3.Connection, order_id: int) -> dict:
         m.name AS material_name, m.unit, wol.required_quantity
         FROM work_order_lines wol JOIN materials m ON m.id = wol.component_material_id
         WHERE wol.work_order_id = ? ORDER BY wol.id""", (order_id,)).fetchall()
-    return {**dict(row), "lines": [dict(line) for line in lines]}
+    details = []
+    for line in lines:
+        issued = issued_quantity(db, line["id"])
+        details.append({**dict(line), "issued_quantity": str(issued),
+                        "remaining_quantity": str(Decimal(line["required_quantity"]) - issued)})
+    return {**dict(row), "lines": details}
 
 
 @router.get("/work-orders")
