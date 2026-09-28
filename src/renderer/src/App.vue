@@ -24,6 +24,7 @@ import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, MaterialI
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 import { canVisitRoute, closeRoute, nextExpandedGroup, openRoute, permittedOpenedRoutes, resolveWorkspaceRoute, routeByKey, visibleRouteGroups } from './workspace-routes'
 import type { WorkspaceRouteGroupKey, WorkspaceRouteKey } from './workspace-routes'
+import { visibleTabScrollLeft } from './workspace-tab-strip'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
 
@@ -35,6 +36,7 @@ const naiveThemeOverrides: GlobalThemeOverrides = {
 const screen = ref<Screen>('loading')
 const activeTab = ref<WorkspaceRouteKey>('stock')
 const openedRouteKeys = ref<WorkspaceRouteKey[]>([])
+const workspaceTabsElement = ref<HTMLElement | null>(null)
 // 日常默认全部收起，点击分类时最多展开一个。
 const expandedGroupKey = ref<WorkspaceRouteGroupKey | null>(null)
 const version = ref('')
@@ -146,6 +148,18 @@ const visibleGroups = computed(() => visibleRouteGroups(user.value?.permissions 
 })))
 const visibleTabs = computed(() => visibleGroups.value.flatMap(group => group.routes))
 const openedTabs = computed(() => openedRouteKeys.value.map(routeByKey))
+watch([openedRouteKeys, activeTab], () => {
+  const strip = workspaceTabsElement.value
+  const current = strip?.querySelector<HTMLElement>('.workspace-tab.active')
+  if (!strip || !current) return
+  // DOM 更新后计算实际位置，新标签超出右边界或切回旧标签时才跟随滚动。
+  const stripRect = strip.getBoundingClientRect()
+  const tabRect = current.getBoundingClientRect()
+  const tabLeft = tabRect.left - stripRect.left + strip.scrollLeft
+  const tabRight = tabRect.right - stripRect.left + strip.scrollLeft
+  const target = visibleTabScrollLeft(strip.scrollLeft, strip.clientWidth, tabLeft, tabRight)
+  if (target !== strip.scrollLeft) strip.scrollTo({ left: target, behavior: 'auto' })
+}, { flush: 'post' })
 watch(screen, current => {
   // 再次登录时从全部收起开始，不保留上个账号的侧栏状态。
   if (current !== 'app') {
@@ -1271,7 +1285,7 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
     </aside>
 
     <main class="content">
-      <nav v-if="screen === 'app'" class="workspace-tabs" aria-label="已打开页面">
+      <nav v-if="screen === 'app'" ref="workspaceTabsElement" class="workspace-tabs" aria-label="已打开页面">
         <div v-for="item in openedTabs" :key="item.key" class="workspace-tab" :class="{ active: activeTab === item.key }">
           <button class="workspace-tab-link" type="button" :aria-current="activeTab === item.key ? 'page' : undefined" @click="navigateToRoute(item.key)">{{ item.label }}</button>
           <button v-if="openedTabs.length > 1" class="workspace-tab-close" type="button" :aria-label="`关闭${item.label}`" @click="closeOpenedRoute(item.key)"><IconCloseLine aria-hidden="true" /></button>
