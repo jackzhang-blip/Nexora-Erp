@@ -98,6 +98,8 @@ def test_mac_install_starts_boot_service_without_changing_instance_data(monkeypa
     monkeypatch.setattr(host_service, "MAC_PLIST", plist)
     monkeypatch.setattr(host_service, "_require_admin", lambda: None)
     monkeypatch.setattr(host_service, "_run", lambda *args: commands.append(args))
+    monkeypatch.setattr(host_service, "service_running", lambda: True)
+    monkeypatch.setattr(host_service.time, "sleep", lambda _seconds: None)
 
     config = host_service.HostConfig("主机", data_dir, 8123)
     host_service.install_service(config, source)
@@ -108,6 +110,42 @@ def test_mac_install_starts_boot_service_without_changing_instance_data(monkeypa
     assert settings["KeepAlive"] is True
     assert settings["ProgramArguments"][:2] == [str(root / "service" / "nexora-server"), "serve-config"]
     assert commands == [("launchctl", "bootstrap", "system", str(plist))]
+
+
+def test_mac_install_unloads_job_when_registered_service_exits(monkeypatch, tmp_path):
+    root = tmp_path / "system"
+    plist = tmp_path / "launch-daemon.plist"
+    source = tmp_path / "packaged"
+    source.mkdir()
+    (source / "nexora-server").write_text("service-binary")
+    commands = []
+    monkeypatch.setattr(host_service.sys, "platform", "darwin")
+    monkeypatch.setattr(host_service, "system_root", lambda: root)
+    monkeypatch.setattr(host_service, "MAC_PLIST", plist)
+    monkeypatch.setattr(host_service, "_require_admin", lambda: None)
+    monkeypatch.setattr(host_service, "_run", lambda *args: commands.append(args))
+    monkeypatch.setattr(host_service, "service_running", lambda: False)
+    monkeypatch.setattr(host_service.time, "sleep", lambda _seconds: None)
+
+    # 注册成功但程序随即退出时，不应留下会在下次开机反复重启的损坏作业。
+    with pytest.raises(RuntimeError, match="macOS 服务启动后退出"):
+        host_service.install_service(host_service.HostConfig("主机", tmp_path / "data", 8123), source)
+    assert commands == [("launchctl", "bootstrap", "system", str(plist)),
+                        ("launchctl", "bootout", f"system/{host_service.MAC_LABEL}")]
+    assert not (root / "host.json").exists()
+    assert not (root / "service").exists()
+    assert not plist.exists()
+
+
+def test_mac_startup_check_waits_for_stable_running_process(monkeypatch):
+    states = iter((False, True, False, True, True))
+    monkeypatch.setattr(host_service, "service_running", lambda: next(states))
+    delays = []
+    monkeypatch.setattr(host_service.time, "sleep", delays.append)
+
+    # 启动过程可短暂未运行；只接受连续两次运行，避免把崩溃重启当成成功。
+    host_service._wait_mac_running()
+    assert delays == [0.25, 1, 0.25, 1]
 
 
 def test_windows_install_grants_system_access_to_selected_instance(monkeypatch, tmp_path):
@@ -199,12 +237,50 @@ def test_upgrade_backs_up_and_replaces_service_without_touching_instance(monkeyp
     monkeypatch.setattr(host_service, "_require_admin", lambda: None)
     monkeypatch.setattr(host_service, "_run", lambda *args: commands.append(args))
     monkeypatch.setattr(host_service, "create_backup", lambda _data, output: output.write_text("backup"))
+    monkeypatch.setattr(host_service.time, "sleep", lambda _seconds: None)
     backup = host_service.upgrade_service(source)
     assert backup.read_text() == "backup"
     assert (current / "nexora-server").read_text() == "new"
     assert (data / "nexora.db").read_text() == "unchanged"
     assert commands[0] == ("launchctl", "bootout", f"system/{host_service.MAC_LABEL}")
     assert commands[-1][0:2] == ("launchctl", "bootstrap")
+
+
+def test_mac_upgrade_unloads_failed_new_job_and_restores_old_program(monkeypatch, tmp_path):
+    root = tmp_path / "system"
+    current = root / "service"
+    current.mkdir(parents=True)
+    (current / "nexora-server").write_text("old")
+    source = tmp_path / "release"
+    source.mkdir()
+    (source / "nexora-server").write_text("new")
+    data = tmp_path / "instance"
+    data.mkdir()
+    (root / "host.json").write_text(json.dumps({
+        "name": "主机", "data_dir": str(data), "port": 8123}))
+    commands = []
+    running = {"value": True}
+    monkeypatch.setattr(host_service.sys, "platform", "darwin")
+    monkeypatch.setattr(host_service, "system_root", lambda: root)
+    monkeypatch.setattr(host_service, "_require_admin", lambda: None)
+    monkeypatch.setattr(host_service, "service_running", lambda: running["value"])
+    monkeypatch.setattr(host_service.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(host_service, "create_backup", lambda _data, output: output.write_text("backup"))
+
+    def control(*args):
+        commands.append(args)
+        if args[1] == "bootout":
+            running["value"] = False
+        elif args[1] == "bootstrap":
+            running["value"] = (current / "nexora-server").read_text() == "old"
+
+    monkeypatch.setattr(host_service, "_run", control)
+    with pytest.raises(RuntimeError, match="macOS 服务启动后退出"):
+        host_service.upgrade_service(source)
+    assert (current / "nexora-server").read_text() == "old"
+    assert running["value"] is True
+    assert [item[1] for item in commands] == ["bootout", "bootstrap", "bootout", "bootstrap"]
+    assert len(list((root / "backups").glob("upgrade-*.nexora-backup"))) == 1
 
 
 def test_windows_upgrade_limits_backup_directory_to_system_and_admin(monkeypatch, tmp_path):

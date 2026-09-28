@@ -138,6 +138,17 @@ def _wait_stopped() -> None:
     raise TimeoutError("等待 Windows 服务停止超时")
 
 
+def _wait_mac_running() -> None:
+    # launchctl bootstrap 只表示作业已注册；短暂核验进程仍在运行，避免误报安装或升级成功。
+    for _ in range(40):
+        if service_running():
+            time.sleep(1)
+            if service_running():
+                return
+        time.sleep(0.25)
+    raise RuntimeError("macOS 服务启动后退出，请检查 host.err.log")
+
+
 def _write_config(config: HostConfig, path: Path) -> None:
     descriptor, temporary_name = tempfile.mkstemp(prefix="host-", suffix=".tmp", dir=path.parent)
     temporary = Path(temporary_name)
@@ -188,6 +199,7 @@ def install_service(config: HostConfig, source_dir: Path) -> None:
         staged = Path(temporary) / "service"
         shutil.copytree(source_dir, staged)
         os.replace(staged, target)
+    mac_bootstrapped = False
     try:
         _write_config(config, config_path(root))
         if sys.platform == "darwin":
@@ -197,6 +209,8 @@ def install_service(config: HostConfig, source_dir: Path) -> None:
             os.chmod(plist_name, 0o644)
             os.replace(plist_name, MAC_PLIST)
             _run("launchctl", "bootstrap", "system", str(MAC_PLIST))
+            mac_bootstrapped = True
+            _wait_mac_running()
         elif sys.platform == "win32":
             binary = service_binary(root)
             # 服务以 LocalSystem 运行；用户选择的目录可能位于个人资料或 CI 临时目录。
@@ -217,6 +231,9 @@ def install_service(config: HostConfig, source_dir: Path) -> None:
             # 只有首次启动通过后才设为开机自启，避免失败的程序反复开机重试。
             _run("sc.exe", "config", SERVICE_NAME, "start=", "auto")
     except Exception:
+        if sys.platform == "darwin" and mac_bootstrapped:
+            # 已注册但立即退出的作业需先从 launchd 卸载，才能安全移除程序与配置。
+            _run("launchctl", "bootout", f"system/{MAC_LABEL}")
         if sys.platform == "win32":
             # 清理注册信息前保留 SCM 配置与退出码，便于定位启动权限和路径错误。
             for diagnostic in (("sc.exe", "qc", SERVICE_NAME),
@@ -274,11 +291,14 @@ def upgrade_service(source_dir: Path) -> Path:
             backup = backups / f"upgrade-{stamp}.nexora-backup"
             create_backup(config.data_dir, backup)
             os.replace(target, old)
+            new_mac_bootstrapped = False
             try:
                 os.replace(staged, target)
                 if was_running:
                     if sys.platform == "darwin":
                         _run("launchctl", "bootstrap", "system", str(MAC_PLIST))
+                        new_mac_bootstrapped = True
+                        _wait_mac_running()
                     else:
                         _run("sc.exe", "start", SERVICE_NAME)
                         # 升级也要检查新进程是否真正保持运行，否则回滚程序并重启旧版。
@@ -287,6 +307,9 @@ def upgrade_service(source_dir: Path) -> Path:
                             raise RuntimeError("新版 Windows 服务启动后退出，已恢复旧版程序")
                 return backup
             except Exception:
+                if new_mac_bootstrapped:
+                    # 新版作业虽已注册却不可用，先卸载它再回滚程序，否则旧版无法重新注册。
+                    _run("launchctl", "bootout", f"system/{MAC_LABEL}")
                 if target.exists():
                     shutil.rmtree(target)
                 os.replace(old, target)
