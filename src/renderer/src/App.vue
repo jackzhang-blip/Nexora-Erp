@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NButton, NConfigProvider, dateZhCN, zhCN } from 'naive-ui'
 import type { GlobalThemeOverrides } from 'naive-ui'
 // 应用内品牌标记与安装包图标共用第一版 Nexus + Aurora 标志。
@@ -18,11 +18,13 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
+import IconArrowDownSLine from '~icons/ri/arrow-down-s-line'
 import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, MaterialIssue, MaterialReturn, Movement, PaymentRecord, Permission, ProductionCompletion, ProductionCostReport, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse, WorkOrder } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
+import { canVisitRoute, nextExpandedGroup, resolveWorkspaceRoute, routeByKey, visibleRouteGroups } from './workspace-routes'
+import type { WorkspaceRouteGroupKey, WorkspaceRouteKey } from './workspace-routes'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
-type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'finance' | 'boms' | 'workOrders' | 'materialIssues' | 'materialReturns' | 'productionCompletions' | 'productionCosts' | 'users' | 'settings'
 
 // 让新增的 Naive UI 控件沿用工作台现有的青绿色主色。
 const naiveThemeOverrides: GlobalThemeOverrides = {
@@ -30,7 +32,9 @@ const naiveThemeOverrides: GlobalThemeOverrides = {
 }
 
 const screen = ref<Screen>('loading')
-const activeTab = ref<Tab>('stock')
+const activeTab = ref<WorkspaceRouteKey>('stock')
+// 日常默认全部收起，点击分类时最多展开一个。
+const expandedGroupKey = ref<WorkspaceRouteGroupKey | null>(null)
 const version = ref('')
 const notice = ref('')
 const error = ref('')
@@ -131,16 +135,45 @@ let checkingHealth = false
 let unsubscribeDiscovery: (() => void) | null = null
 
 const can = (permission: string): boolean => user.value?.permissions.includes(permission) ?? false
-// 导航权限仍按原规则计算；图标与文字绑定，避免图标单独承载含义。
-const visibleTabs = computed(() => [
-  ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'purchase' as const, label: '采购订单', icon: IconFileList3Line }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'purchaseReturns' as const, label: '采购退货', icon: IconHistoryLine }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }, { key: 'stocktakes' as const, label: '库存盘点', icon: IconFileList3Line }] : []),
-  ...(can('sales.view') ? [{ key: 'sales' as const, label: '销售订单', icon: IconFileList3Line }, { key: 'shipments' as const, label: '销售出库', icon: IconArchiveLine }, { key: 'salesReturns' as const, label: '销售退货', icon: IconHistoryLine }] : []),
-  ...(can('finance.view') ? [{ key: 'finance' as const, label: '应收应付', icon: IconFileList3Line }] : []),
-  ...(can('production.view') ? [{ key: 'boms' as const, label: '生产 BOM', icon: IconStackLine }, { key: 'workOrders' as const, label: '生产工单', icon: IconFileList3Line }, { key: 'materialIssues' as const, label: '生产领料', icon: IconArchiveLine }, { key: 'materialReturns' as const, label: '生产退料', icon: IconHistoryLine }, { key: 'productionCompletions' as const, label: '完工与质检', icon: IconFileList3Line }] : []),
-  ...(can('production_cost.view') ? [{ key: 'productionCosts' as const, label: '生产成本', icon: IconFileList3Line }] : []),
-  ...(can('users.manage') ? [{ key: 'users' as const, label: '用户权限', icon: IconTeamLine }] : []),
-  { key: 'settings' as const, label: '连接与服务', icon: IconSettings3Line }
-])
+const routeIcons = { stack: IconStackLine, archive: IconArchiveLine, file: IconFileList3Line,
+  history: IconHistoryLine, team: IconTeamLine, settings: IconSettings3Line }
+// 分类和权限来自同一张路由表，避免侧栏与地址访问使用两套规则。
+const visibleGroups = computed(() => visibleRouteGroups(user.value?.permissions ?? []).map(group => ({
+  ...group, routes: group.routes.map(route => ({ ...route, icon: routeIcons[route.icon] }))
+})))
+const visibleTabs = computed(() => visibleGroups.value.flatMap(group => group.routes))
+watch(screen, current => {
+  // 再次登录时从全部收起开始，不保留上个账号的侧栏状态。
+  if (current !== 'app') expandedGroupKey.value = null
+})
+watch(visibleGroups, groups => {
+  // 当前账号失去某分类的查看权限后，清除其展开状态。
+  if (expandedGroupKey.value && !groups.some(group => group.key === expandedGroupKey.value)) expandedGroupKey.value = null
+})
+// 用户切换或权限被撤销时，页面内容必须和入口使用同一条权限规则。
+const activeRouteAllowed = computed(() => user.value !== null && canVisitRoute(routeByKey(activeTab.value), user.value.permissions))
+
+function toggleRouteGroup(key: WorkspaceRouteGroupKey): void {
+  expandedGroupKey.value = nextExpandedGroup(expandedGroupKey.value, key)
+}
+
+function syncWorkspaceRoute(): void {
+  if (screen.value !== 'app' || !user.value) return
+  const route = resolveWorkspaceRoute(window.location.hash, user.value.permissions)
+  activeTab.value = route.key
+  if (window.location.hash !== `#${route.path}`) {
+    // 未授权或未知地址不留在历史记录中，也不渲染原页面。
+    window.history.replaceState(null, '', `#${route.path}`)
+  }
+}
+
+function navigateToRoute(key: WorkspaceRouteKey): void {
+  if (!user.value) return
+  const route = routeByKey(key)
+  if (!canVisitRoute(route, user.value.permissions)) return
+  activeTab.value = key
+  window.location.hash = route.path
+}
 const selectedSalesReturnShipment = computed(() => shipments.value.find(
   item => item.id === salesReturnForm.value.shipment_id))
 const selectedPurchaseReturnReceipt = computed(() => receipts.value.find(
@@ -414,7 +447,6 @@ async function authenticate(): Promise<void> {
     password.value = ''
     screen.value = 'app'
     await refreshData()
-    activeTab.value = visibleTabs.value[0]?.key ?? 'stock'
   } catch (cause) {
     error.value = displayError(cause)
   } finally {
@@ -426,7 +458,7 @@ async function refreshData(): Promise<void> {
   if (!window.nexora || !user.value) return
   // 每次写操作后重新读取服务端权限；角色变化立即反映到当前页面。
   user.value = await window.nexora.callApi('me', undefined)
-  if (!visibleTabs.value.some((item) => item.key === activeTab.value)) activeTab.value = visibleTabs.value[0]?.key ?? 'settings'
+  syncWorkspaceRoute()
   // 页面只显示当前角色可访问的入口；数据访问仍以服务端授权为准。
   if (can('inventory.view')) {
     [materials.value, suppliers.value, stock.value, receipts.value, movements.value, warehouses.value, transfers.value, purchaseOrders.value, stocktakes.value, purchaseReturns.value] = await Promise.all([
@@ -927,7 +959,7 @@ function selectIssueOrder(orderId: number): void {
     lines: order?.lines.filter(line => Number(line.remaining_quantity) > 0).map(line => ({
       work_order_line_id: line.id, quantity: line.remaining_quantity
     })) ?? [] }
-  activeTab.value = 'materialIssues'
+  navigateToRoute('materialIssues')
 }
 
 async function createMaterialIssue(): Promise<void> {
@@ -959,7 +991,7 @@ function selectReturnIssue(issueId: number): void {
     lines: issue?.lines.filter(line => Number(line.returnable_quantity) > 0).map(line => ({
       material_issue_line_id: line.id, quantity: line.returnable_quantity
     })) ?? [] }
-  activeTab.value = 'materialReturns'
+  navigateToRoute('materialReturns')
 }
 
 async function createMaterialReturn(): Promise<void> {
@@ -988,7 +1020,7 @@ function selectCompletionOrder(orderId: number): void {
   const order = workOrders.value.find(item => item.id === orderId)
   completionForm.value = { work_order_id: orderId,
     reported_quantity: order?.remaining_output_quantity ?? '1', reference: '' }
-  activeTab.value = 'productionCompletions'
+  navigateToRoute('productionCompletions')
 }
 
 async function createProductionCompletion(): Promise<void> {
@@ -1152,13 +1184,14 @@ async function monitorConnection(): Promise<void> {
 }
 
 onMounted(async () => {
+  window.addEventListener('hashchange', syncWorkspaceRoute)
   if (window.nexora) version.value = await window.nexora.getVersion().catch(() => '')
   if (window.nexora) hostForm.value.dataDir = await window.nexora.defaultDataDir().catch(() => '')
   await checkConnection()
   healthTimer = setInterval(() => { void monitorConnection() }, 5000)
 })
 
-onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer) })
+onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer); window.removeEventListener('hashchange', syncWorkspaceRoute) })
 </script>
 
 <template>
@@ -1207,9 +1240,14 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark"><img :src="nexoraLogo" alt="" /></span><div><strong>NEXORA</strong><small>联光 ERP · {{ server?.isLocal ? '本机服务' : '团队工作台' }}</small></div></div>
       <div v-if="screen === 'app'" class="side-group">
-        <p class="side-label">工作台</p>
-        <!-- 导航图标随可见标签一起生成，不改变现有权限判断。 -->
-        <button v-for="item in visibleTabs" :key="item.key" class="nav-item" :class="{ active: activeTab === item.key }" type="button" @click="activeTab = item.key"><component :is="item.icon" class="nav-icon" aria-hidden="true" />{{ item.label }}</button>
+        <div v-for="group in visibleGroups" :key="group.key" class="nav-group">
+          <button class="side-category" :class="{ current: group.routes.some(item => item.key === activeTab) }" type="button" :aria-expanded="expandedGroupKey === group.key" :aria-controls="`route-group-${group.key}`" @click="toggleRouteGroup(group.key)">{{ group.label }}<IconArrowDownSLine class="category-chevron" :class="{ expanded: expandedGroupKey === group.key }" aria-hidden="true" /></button>
+          <div :id="`route-group-${group.key}`" class="nav-panel" :class="{ expanded: expandedGroupKey === group.key }" :aria-hidden="expandedGroupKey !== group.key" :inert="expandedGroupKey !== group.key ? true : undefined">
+            <div class="nav-list">
+              <button v-for="item in group.routes" :key="item.key" class="nav-item" :class="{ active: activeTab === item.key }" type="button" :aria-current="activeTab === item.key ? 'page' : undefined" @click="navigateToRoute(item.key)"><component :is="item.icon" class="nav-icon" aria-hidden="true" />{{ item.label }}</button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="sidebar-bottom"><span class="status-dot"></span> {{ server?.name || 'Nexora ERP' }} <small v-if="version">v{{ version }}</small></div>
     </aside>
@@ -1236,7 +1274,7 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
         <button class="text-button auth-switch" type="button" @click="switchServer">切换服务端</button>
       </section>
 
-      <template v-else-if="screen === 'app'">
+      <template v-else-if="screen === 'app' && activeRouteAllowed">
         <section v-if="activeTab === 'stock'" class="stack">
           <div class="summary-grid"><div class="metric"><span>物料种类</span><strong>{{ materials.length }}</strong></div><div class="metric"><span>已确认入库单</span><strong>{{ receipts.filter(item => item.status === 'posted').length }}</strong></div><div class="metric"><span>库存流水</span><strong>{{ movements.length }}</strong></div></div>
           <div class="card">
