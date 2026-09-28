@@ -9,3 +9,15 @@ export function visibleTabScrollLeft(
   if (tabRight > scrollLeft + viewportWidth) return tabRight - viewportWidth
   return scrollLeft
 }
+
+// 把计算结果真正写入滚动容器；页面和标签必须在同一次导航后保持可见。
+export function scrollActiveTabIntoView(strip: HTMLElement): void {
+  const current = strip.querySelector<HTMLElement>('.workspace-tab.active')
+  if (!current) return
+  const stripRect = strip.getBoundingClientRect()
+  const tabRect = current.getBoundingClientRect()
+  const tabLeft = tabRect.left - stripRect.left + strip.scrollLeft
+  const tabRight = tabRect.right - stripRect.left + strip.scrollLeft
+  const target = visibleTabScrollLeft(strip.scrollLeft, strip.clientWidth, tabLeft, tabRight)
+  if (target !== strip.scrollLeft) strip.scrollTo({ left: target, behavior: 'auto' })
+}

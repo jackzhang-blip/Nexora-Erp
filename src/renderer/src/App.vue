@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NButton, NConfigProvider, dateZhCN, zhCN } from 'naive-ui'
 import type { GlobalThemeOverrides } from 'naive-ui'
 // 应用内品牌标记与安装包图标共用第一版 Nexus + Aurora 标志。
@@ -24,7 +24,7 @@ import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, MaterialI
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 import { canVisitRoute, closeRoute, nextExpandedGroup, openRoute, permittedOpenedRoutes, resolveWorkspaceRoute, routeByKey, visibleRouteGroups } from './workspace-routes'
 import type { WorkspaceRouteGroupKey, WorkspaceRouteKey } from './workspace-routes'
-import { visibleTabScrollLeft } from './workspace-tab-strip'
+import { scrollActiveTabIntoView } from './workspace-tab-strip'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
 
@@ -36,7 +36,6 @@ const naiveThemeOverrides: GlobalThemeOverrides = {
 const screen = ref<Screen>('loading')
 const activeTab = ref<WorkspaceRouteKey>('stock')
 const openedRouteKeys = ref<WorkspaceRouteKey[]>([])
-const workspaceTabsElement = ref<HTMLElement | null>(null)
 // 日常默认全部收起，点击分类时最多展开一个。
 const expandedGroupKey = ref<WorkspaceRouteGroupKey | null>(null)
 const version = ref('')
@@ -148,18 +147,13 @@ const visibleGroups = computed(() => visibleRouteGroups(user.value?.permissions 
 })))
 const visibleTabs = computed(() => visibleGroups.value.flatMap(group => group.routes))
 const openedTabs = computed(() => openedRouteKeys.value.map(routeByKey))
-watch([openedRouteKeys, activeTab], () => {
-  const strip = workspaceTabsElement.value
-  const current = strip?.querySelector<HTMLElement>('.workspace-tab.active')
-  if (!strip || !current) return
-  // DOM 更新后计算实际位置，新标签超出右边界或切回旧标签时才跟随滚动。
-  const stripRect = strip.getBoundingClientRect()
-  const tabRect = current.getBoundingClientRect()
-  const tabLeft = tabRect.left - stripRect.left + strip.scrollLeft
-  const tabRight = tabRect.right - stripRect.left + strip.scrollLeft
-  const target = visibleTabScrollLeft(strip.scrollLeft, strip.clientWidth, tabLeft, tabRight)
-  if (target !== strip.scrollLeft) strip.scrollTo({ left: target, behavior: 'auto' })
-}, { flush: 'post' })
+function revealCurrentTab(): void {
+  // 路由先更新页面和标签，再在 Vue 完成 DOM 更新后调整横向滚动位置。
+  void nextTick(() => {
+    const strip = document.querySelector<HTMLElement>('.workspace-tabs')
+    if (strip) scrollActiveTabIntoView(strip)
+  })
+}
 watch(screen, current => {
   // 再次登录时从全部收起开始，不保留上个账号的侧栏状态。
   if (current !== 'app') {
@@ -184,6 +178,7 @@ function syncWorkspaceRoute(): void {
   const route = resolveWorkspaceRoute(window.location.hash, user.value.permissions)
   openedRouteKeys.value = openRoute(permittedOpenedRoutes(openedRouteKeys.value, user.value.permissions), route.key)
   activeTab.value = route.key
+  revealCurrentTab()
   if (window.location.hash !== `#${route.path}`) {
     // 未授权或未知地址不留在历史记录中，也不渲染原页面。
     window.history.replaceState(null, '', `#${route.path}`)
@@ -196,6 +191,7 @@ function navigateToRoute(key: WorkspaceRouteKey): void {
   if (!canVisitRoute(route, user.value.permissions)) return
   openedRouteKeys.value = openRoute(openedRouteKeys.value, key)
   activeTab.value = key
+  revealCurrentTab()
   window.location.hash = route.path
 }
 
@@ -1217,13 +1213,14 @@ async function monitorConnection(): Promise<void> {
 
 onMounted(async () => {
   window.addEventListener('hashchange', syncWorkspaceRoute)
+  window.addEventListener('resize', revealCurrentTab)
   if (window.nexora) version.value = await window.nexora.getVersion().catch(() => '')
   if (window.nexora) hostForm.value.dataDir = await window.nexora.defaultDataDir().catch(() => '')
   await checkConnection()
   healthTimer = setInterval(() => { void monitorConnection() }, 5000)
 })
 
-onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer); window.removeEventListener('hashchange', syncWorkspaceRoute) })
+onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer); window.removeEventListener('hashchange', syncWorkspaceRoute); window.removeEventListener('resize', revealCurrentTab) })
 </script>
 
 <template>
@@ -1285,7 +1282,7 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
     </aside>
 
     <main class="content">
-      <nav v-if="screen === 'app'" ref="workspaceTabsElement" class="workspace-tabs" aria-label="已打开页面">
+      <nav v-if="screen === 'app'" class="workspace-tabs" aria-label="已打开页面">
         <div v-for="item in openedTabs" :key="item.key" class="workspace-tab" :class="{ active: activeTab === item.key }">
           <button class="workspace-tab-link" type="button" :aria-current="activeTab === item.key ? 'page' : undefined" @click="navigateToRoute(item.key)">{{ item.label }}</button>
           <button v-if="openedTabs.length > 1" class="workspace-tab-close" type="button" :aria-label="`关闭${item.label}`" @click="closeOpenedRoute(item.key)"><IconCloseLine aria-hidden="true" /></button>
