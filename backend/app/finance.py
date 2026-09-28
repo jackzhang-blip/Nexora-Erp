@@ -105,6 +105,16 @@ def financial_entries(db: sqlite3.Connection) -> list[dict]:
             JOIN sales_orders so ON so.id = sol.sales_order_id
             JOIN customers c ON c.id = so.customer_id
             JOIN materials m ON m.id = sol.material_id WHERE s.status = 'posted'"""),
+        ("receivable", "shipment_reversal", -1, """SELECT sl.id AS source_line_id,
+            rev.id AS source_id, so.id AS order_id, c.id AS party_id, c.name AS party_name,
+            sol.material_id, m.sku, sl.quantity, sol.unit_price,
+            rev.created_by AS posted_by, rev.created_at AS posted_at
+            FROM shipment_reversals rev JOIN shipments s ON s.id = rev.shipment_id
+            JOIN shipment_lines sl ON sl.shipment_id = s.id
+            JOIN sales_order_lines sol ON sol.id = sl.sales_order_line_id
+            JOIN sales_orders so ON so.id = sol.sales_order_id
+            JOIN customers c ON c.id = so.customer_id
+            JOIN materials m ON m.id = sol.material_id"""),
         ("receivable", "sales_return", -1, """SELECT srl.id AS source_line_id,
             sr.id AS source_id, so.id AS order_id, c.id AS party_id, c.name AS party_name,
             sol.material_id, m.sku, srl.quantity, sol.unit_price, sr.posted_by, sr.posted_at
