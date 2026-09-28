@@ -50,6 +50,16 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .sidebar-bottom small { display: block; margin: 10px 0 0 16px; color: #768eaa; }
 .status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #70d8cc; }
 .content { min-width: 0; padding: 35px clamp(25px, 4vw, 62px) 70px; }
+/* 页面栏贴合内容区顶边，数量较多时横向滚动而不压缩标签文字。 */
+.workspace-tabs { display: flex; align-items: end; gap: 5px; min-width: 0; min-height: 45px; overflow-x: auto; margin: -35px calc(0px - clamp(25px, 4vw, 62px)) 29px; padding: 7px clamp(25px, 4vw, 62px) 0; border-bottom: 1px solid #dfe6ed; background: #fff; }
+.workspace-tab { display: inline-flex; align-items: center; flex: none; height: 37px; border: 1px solid #dfe6ed; border-bottom: 0; border-radius: 8px 8px 0 0; background: #f5f7fa; color: #61718a; }
+.workspace-tab:hover { background: #eef5f6; color: #1d6c69; }
+.workspace-tab.active { border-top: 2px solid #50b8af; background: #fff; color: #17213b; font-weight: 700; }
+.workspace-tab-link, .workspace-tab-close { display: inline-flex; align-items: center; justify-content: center; height: 100%; border: 0; background: transparent; color: inherit; }
+.workspace-tab-link { max-width: 175px; overflow: hidden; padding: 0 10px 0 14px; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.workspace-tab-close { width: 27px; padding: 6px; border-radius: 5px; }
+.workspace-tab-close:hover { background: #e2eaee; }
+.workspace-tab-close svg { width: 14px; height: 14px; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 27px; }
 .topbar h1 { margin: 7px 0 0; font-size: clamp(27px, 3vw, 38px); line-height: 1.2; letter-spacing: -.035em; }
 .eyebrow { margin: 0; color: #378b89; font-size: 10px; font-weight: 800; letter-spacing: .17em; }
@@ -256,6 +266,7 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
   .nav-list { padding-left: 0; }
   .nav-item { white-space: nowrap; }
   .content { padding: 26px 17px 50px; }
+  .workspace-tabs { margin: -26px -17px 25px; padding: 7px 17px 0; }
   .topbar { align-items: flex-start; }
   .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .metric { padding: 15px; }

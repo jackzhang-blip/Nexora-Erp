@@ -71,6 +71,28 @@ export function routeByKey(key: WorkspaceRouteKey): WorkspaceRoute {
   return workspaceRoutes.find(route => route.key === key)!
 }
 
+// 页面栏保存本次登录打开过的页面顺序，同一页面只出现一次。
+export function openRoute(opened: readonly WorkspaceRouteKey[], key: WorkspaceRouteKey): WorkspaceRouteKey[] {
+  return opened.includes(key) ? [...opened] : [...opened, key]
+}
+
+// 服务端权限变化后立即清理无权访问的页面，不能让旧入口继续留在页面栏。
+export function permittedOpenedRoutes(opened: readonly WorkspaceRouteKey[], permissions: readonly string[]): WorkspaceRouteKey[] {
+  return opened.filter(key => canVisitRoute(routeByKey(key), permissions))
+}
+
+export function closeRoute(
+  opened: readonly WorkspaceRouteKey[],
+  closing: WorkspaceRouteKey,
+  active: WorkspaceRouteKey
+): { opened: WorkspaceRouteKey[]; active: WorkspaceRouteKey } {
+  const index = opened.indexOf(closing)
+  // 当前页面是唯一入口时保留它，避免出现没有可显示页面的工作台。
+  if (index < 0 || opened.length === 1) return { opened: [...opened], active }
+  const remaining = opened.filter(key => key !== closing)
+  return { opened: remaining, active: closing === active ? remaining[Math.max(0, index - 1)] : active }
+}
+
 export function resolveWorkspaceRoute(hash: string, permissions: readonly string[]): WorkspaceRoute {
   const requested = workspaceRoutes.find(route => hash === `#${route.path}`)
   if (requested && canVisitRoute(requested, permissions)) return requested
