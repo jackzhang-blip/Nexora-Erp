@@ -1,8 +1,11 @@
 name: Windows 内部安装包
 on:
   workflow_dispatch:
+  # 来自个人分叉的 PR 也必须先在 Windows 上完成测试，再进入主分支。
+  pull_request:
+    branches: [main]
   push:
-    # 需求分支先完成 Windows 打包检查，避免只在合并后发现平台问题。
+    # 本仓库需求分支和主分支的直接推送同样接受检查。
     branches: [main, 'codex/**']
 
 jobs:
