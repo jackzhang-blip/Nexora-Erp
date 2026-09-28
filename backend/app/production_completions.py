@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from .database import connection
+from .inventory import balance
 from .security import require
 from .work_orders import issued_quantity, posted_completion_totals, required_for_output
 
@@ -45,19 +46,38 @@ class InspectionInput(BaseModel):
         return value.strip()
 
 
+class ReversalInput(BaseModel):
+    reason: str = Field(min_length=1, max_length=200)
+
+    @field_validator("reason")
+    @classmethod
+    def trim_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("冲销原因不能为空")
+        return value.strip()
+
+
 def completion_data(db: sqlite3.Connection, completion_id: int) -> dict:
     row = db.execute("""SELECT pc.*, wo.warehouse_id, w.name AS warehouse_name,
         b.product_material_id, m.sku AS product_sku, m.name AS product_name, m.unit AS product_unit,
-        creator.username AS created_by_name, inspector.username AS inspected_by_name
+        creator.username AS created_by_name, inspector.username AS inspected_by_name,
+        reversal.id AS reversal_id, reversal.reason AS reversal_reason,
+        reversal.created_by AS reversed_by, reversal.created_at AS reversed_at,
+        reverser.username AS reversed_by_name
         FROM production_completions pc JOIN work_orders wo ON wo.id = pc.work_order_id
         JOIN warehouses w ON w.id = wo.warehouse_id
         JOIN boms b ON b.id = wo.bom_id JOIN materials m ON m.id = b.product_material_id
         JOIN users creator ON creator.id = pc.created_by
         LEFT JOIN users inspector ON inspector.id = pc.inspected_by
+        LEFT JOIN production_completion_reversals reversal ON reversal.production_completion_id = pc.id
+        LEFT JOIN users reverser ON reverser.id = reversal.created_by
         WHERE pc.id = ?""", (completion_id,)).fetchone()
     if not row:
         raise HTTPException(404, "生产完工单不存在")
-    return dict(row)
+    result = dict(row)
+    if result["reversal_id"] is not None:
+        result["status"] = "reversed"
+    return result
 
 
 @router.get("/production-completions")
@@ -168,4 +188,40 @@ def cancel_completion(completion_id: int,
             raise HTTPException(409, "已确认完工单不可取消，须另行更正")
         db.execute("""UPDATE production_completions SET status = 'cancelled', cancelled_by = ?,
             cancelled_at = CURRENT_TIMESTAMP WHERE id = ?""", (user["id"], completion_id))
+        return completion_data(db, completion_id)
+
+
+@router.post("/production-completions/{completion_id}/reverse")
+def reverse_completion(completion_id: int, payload: ReversalInput,
+                       user: dict = Depends(require("production_completion.reverse"))) -> dict:
+    with connection() as db:
+        # 库存核对、冲销凭据、负向流水和工单状态在同一写事务内完成。
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("""SELECT pc.*, wo.warehouse_id, b.product_material_id,
+            wo.status AS order_status FROM production_completions pc
+            JOIN work_orders wo ON wo.id = pc.work_order_id JOIN boms b ON b.id = wo.bom_id
+            WHERE pc.id = ?""", (completion_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "生产完工单不存在")
+        if row["status"] != "posted":
+            raise HTTPException(409, "只有已确认的完工单可以冲销")
+        if db.execute("""SELECT 1 FROM production_completion_reversals
+            WHERE production_completion_id = ?""", (completion_id,)).fetchone():
+            raise HTTPException(409, "此完工单已冲销")
+        accepted = Decimal(row["accepted_quantity"])
+        if accepted > 0 and balance(db, row["warehouse_id"], row["product_material_id"]) < accepted:
+            raise HTTPException(409, "目标仓库合格成品库存不足，无法冲销；请先处理后续出库或调拨")
+        cursor = db.execute("""INSERT INTO production_completion_reversals(
+            production_completion_id, reason, created_by) VALUES (?, ?, ?)""",
+            (completion_id, payload.reason, user["id"]))
+        if accepted > 0:
+            # 以冲销单为来源新增反向流水，不修改原入库流水。
+            db.execute("""INSERT INTO stock_movements(
+                warehouse_id, material_id, quantity, source_type, source_id, source_line_id, created_by)
+                VALUES (?, ?, ?, 'production_completion_reversal', ?, ?, ?)""",
+                (row["warehouse_id"], row["product_material_id"], str(-accepted),
+                 cursor.lastrowid, cursor.lastrowid, user["id"]))
+        if row["order_status"] == "completed":
+            db.execute("""UPDATE work_orders SET status = 'in_progress', completed_by = NULL,
+                completed_at = NULL WHERE id = ?""", (row["work_order_id"],))
         return completion_data(db, completion_id)

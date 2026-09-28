@@ -47,7 +47,7 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 ## 生产领料
 
-`POST /api/v1/material-issues` 对已下达或生产中的工单建立分批领料草稿，指定源仓库及本次工单组件数量；`GET /api/v1/material-issues` 查看全部记录及每条已退、可退数量。`POST /api/v1/material-issues/{id}/post` 在写事务中重新核对工单剩余需料及源仓库存，再逐行写入带领料单、明细和确认人来源的负向库存流水，工单进入“生产中”。两个草稿可以并存，但后确认的草稿若超出剩余需料或库存会返回 409，整单不扣库存。`/cancel` 仅取消草稿；已确认领料保留原单据及流水。查看要求 `production.view`；创建、确认、取消分别要求 `material_issue.create`、`material_issue.post`、`material_issue.cancel`。管理员可全部操作；计划员可创建和取消，仓库员可创建、确认和取消。当前未实现完工入库、质检及生产成本归集。
+`POST /api/v1/material-issues` 对已下达或生产中的工单建立分批领料草稿，指定源仓库及本次工单组件数量；`GET /api/v1/material-issues` 查看全部记录及每条已退、可退数量。`POST /api/v1/material-issues/{id}/post` 在写事务中重新核对工单剩余需料及源仓库存，再逐行写入带领料单、明细和确认人来源的负向库存流水，工单进入“生产中”。两个草稿可以并存，但后确认的草稿若超出剩余需料或库存会返回 409，整单不扣库存。`/cancel` 仅取消草稿；已确认领料保留原单据及流水。查看要求 `production.view`；创建、确认、取消分别要求 `material_issue.create`、`material_issue.post`、`material_issue.cancel`。管理员可全部操作；计划员可创建和取消，仓库员可创建、确认和取消。生产成本归集仍待实现。
 
 ## 生产退料更正
 
@@ -55,7 +55,9 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 ## 完工报工与基础质检
 
-`POST /api/v1/production-completions` 为生产中的工单建立分批报工草稿，保存本批报工数量及可选参考号；`GET /api/v1/production-completions` 查看记录。`POST /api/v1/production-completions/{id}/inspect` 由有质检权限的操作员填写合格数量及质检说明，不合格数量由报工数减合格数计算。`/post` 仅确认已质检单据，在同一写事务中核对累计已确认报工不超过工单目标，并按累计报工数量核对每个组件的净领料是否达到 BOM 快照比例；仅合格品生成进入工单目标仓库的正向库存流水，全部目标报工确认后工单变为“已完工”。两个草稿可并存，但后确认的草稿若超出目标会返回 409。`/cancel` 可取消草稿或已质检但未入库的单据，已确认入库不能直接取消。查看要求 `production.view`；创建、质检、确认、取消分别要求 `production_completion.create`、`production_completion.inspect`、`production_completion.post`、`production_completion.cancel`。管理员有全部权限；计划员可创建和取消，仓库员可质检与确认。目标为报工总数，包含质检不合格数；不合格品不进入可用库存，返工、已确认完工的库存冲销和成本归集仍待实现。这是记录数量与说明的基础质检，没有批次检验标准或现场实物核验。
+`POST /api/v1/production-completions` 为生产中的工单建立分批报工草稿，保存本批报工数量及可选参考号；`GET /api/v1/production-completions` 查看记录。`POST /api/v1/production-completions/{id}/inspect` 由有质检权限的操作员填写合格数量及质检说明，不合格数量由报工数减合格数计算。`/post` 仅确认已质检单据，在同一写事务中核对累计已确认报工不超过工单目标，并按累计报工数量核对每个组件的净领料是否达到 BOM 快照比例；仅合格品生成进入工单目标仓库的正向库存流水，全部目标报工确认后工单变为“已完工”。两个草稿可并存，但后确认的草稿若超出目标会返回 409。`/cancel` 可取消草稿或已质检但未入库的单据，已确认入库不能直接取消。查看要求 `production.view`；创建、质检、确认、取消分别要求 `production_completion.create`、`production_completion.inspect`、`production_completion.post`、`production_completion.cancel`。管理员有全部权限；计划员可创建和取消，仓库员可质检与确认。目标为报工总数，包含质检不合格数；不合格品不进入可用库存，返工和成本归集仍待实现。这是记录数量与说明的基础质检，没有批次检验标准或现场实物核验。
+
+`POST /api/v1/production-completions/{id}/reverse` 仅管理员可按原因冲销已确认完工单。服务端在一个写事务内检查目标仓库仍有足量合格成品，新增独立冲销记录；合格数量大于零时追加负向库存流水，原报工、质检和入库流水不被改写。冲销后的报工、合格和不合格数量不再计入工单当前累计；若工单原已完工，则恢复“生产中”并允许重新报工。库存不足或重复冲销返回 409。原单查询会展示冲销原因、操作人和时间；当前不支持部分冲销，且仍无生产成本归集。
 
 ## 多仓库库存与调拨
 

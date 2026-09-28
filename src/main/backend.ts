@@ -166,6 +166,13 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     }
     case 'postProductionCompletion': return { method: 'POST', path: `/api/v1/production-completions/${positiveId(payload, 'completionId')}/post` }
     case 'cancelProductionCompletion': return { method: 'POST', path: `/api/v1/production-completions/${positiveId(payload, 'completionId')}/cancel` }
+    case 'reverseProductionCompletion': {
+      const completionId = positiveId(payload, 'completionId')
+      const fields = payload as ErpOperations['reverseProductionCompletion']['input']
+      // 单据编号只用于受限路径，请求体只传冲销原因。
+      return { method: 'POST', path: `/api/v1/production-completions/${completionId}/reverse`,
+        body: { reason: fields.reason } }
+    }
     case 'createPurchaseReturn': return { method: 'POST', path: '/api/v1/purchase-returns', body: payload }
     case 'postPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/post` }
     case 'cancelPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/cancel` }

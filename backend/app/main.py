@@ -585,6 +585,7 @@ def list_movements(_: dict = Depends(require("inventory.view"))) -> list[dict]:
                    CASE WHEN sm.source_type = 'material_issue' THEN sm.source_id END AS material_issue_id,
                    CASE WHEN sm.source_type = 'material_return' THEN sm.source_id END AS material_return_id,
                    CASE WHEN sm.source_type = 'production_completion' THEN sm.source_id END AS production_completion_id,
+                   CASE WHEN sm.source_type = 'production_completion_reversal' THEN sm.source_id END AS production_completion_reversal_id,
                    sm.created_by, sm.created_at
             FROM stock_movements sm
             JOIN materials m ON m.id = sm.material_id
