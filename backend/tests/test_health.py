@@ -45,19 +45,39 @@ def test_server_identity_persists_and_remote_bootstrap_is_forbidden(monkeypatch,
 
 
 def test_existing_v1_database_keeps_users(monkeypatch, tmp_path):
-    # 从旧版本升级时保留账号，并为角色和账号增加管理字段。
+    # 用完整的旧版业务表升级，验证历史账号、入库和库存流水都留在主仓库。
     database = tmp_path / "existing.db"
     monkeypatch.setenv("NEXORA_DB_PATH", str(database))
     with sqlite3.connect(database) as db:
-        db.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT)")
-        db.execute("CREATE TABLE roles (code TEXT PRIMARY KEY, label TEXT NOT NULL)")
-        db.execute("INSERT INTO roles VALUES ('admin', '管理员')")
-        db.execute("INSERT INTO users VALUES (7, 'existing', 'unchanged')")
+        db.executescript("""
+            CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT);
+            CREATE TABLE roles (code TEXT PRIMARY KEY, label TEXT NOT NULL);
+            CREATE TABLE permissions (code TEXT PRIMARY KEY);
+            CREATE TABLE role_permissions (role_code TEXT, permission_code TEXT);
+            CREATE TABLE suppliers (id INTEGER PRIMARY KEY, name TEXT);
+            CREATE TABLE materials (id INTEGER PRIMARY KEY, sku TEXT, name TEXT, unit TEXT);
+            CREATE TABLE receipts (id INTEGER PRIMARY KEY, supplier_id INTEGER, reference TEXT,
+                status TEXT, created_by INTEGER, posted_by INTEGER, created_at TEXT, posted_at TEXT);
+            CREATE TABLE receipt_lines (id INTEGER PRIMARY KEY, receipt_id INTEGER,
+                material_id INTEGER, quantity TEXT);
+            CREATE TABLE stock_movements (id INTEGER PRIMARY KEY, material_id INTEGER,
+                quantity TEXT, receipt_line_id INTEGER, created_at TEXT);
+            INSERT INTO roles VALUES ('admin', '管理员');
+            INSERT INTO users VALUES (7, 'existing', 'unchanged');
+            INSERT INTO suppliers VALUES (1, '旧供应商');
+            INSERT INTO materials VALUES (1, 'OLD', '旧物料', '件');
+            INSERT INTO receipts VALUES (3, 1, 'REF', 'posted', 7, 7, '2026-01-01', '2026-01-02');
+            INSERT INTO receipt_lines VALUES (5, 3, 1, '2.125');
+            INSERT INTO stock_movements VALUES (8, 1, '2.125', 5, '2026-01-02');
+        """)
         db.execute("PRAGMA user_version = 1")
     migrate()
     with sqlite3.connect(database) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
         assert db.execute("SELECT username, password_hash, is_active FROM users WHERE id = 7").fetchone() == (
             "existing", "unchanged", 1)
         assert db.execute("SELECT COUNT(*) FROM server_identity").fetchone()[0] == 1
         assert db.execute("SELECT is_builtin FROM roles WHERE code = 'admin'").fetchone()[0] == 1
+        assert db.execute("SELECT receipt_id, warehouse_id FROM receipt_warehouses").fetchone() == (3, 1)
+        assert db.execute("SELECT id, warehouse_id, quantity, source_type, source_id, source_line_id, created_by "
+                          "FROM stock_movements").fetchone() == (8, 1, '2.125', 'receipt', 3, 5, 7)
