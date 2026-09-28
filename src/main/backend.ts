@@ -126,6 +126,11 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'receipts': return { method: 'GET', path: '/api/v1/receipts' }
     case 'createReceipt': return { method: 'POST', path: '/api/v1/receipts', body: payload }
     case 'postReceipt': return { method: 'POST', path: `/api/v1/receipts/${positiveId(payload, 'receiptId')}/post` }
+    case 'reverseReceipt': {
+      const receiptId = positiveId(payload, 'receiptId')
+      const fields = payload as ErpOperations['reverseReceipt']['input']
+      return { method: 'POST', path: `/api/v1/receipts/${receiptId}/reverse`, body: { reason: fields.reason } }
+    }
     // 采购退货单编号只能通过正整数校验后进入固定路径。
     case 'purchaseReturns': return { method: 'GET', path: '/api/v1/purchase-returns' }
     case 'receivablesPayables': return { method: 'GET', path: '/api/v1/finance/receivables-payables' }

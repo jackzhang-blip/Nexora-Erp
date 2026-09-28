@@ -66,6 +66,8 @@ def checked_return_lines(db: sqlite3.Connection, receipt_id: int,
         raise HTTPException(422, "原入库单不存在")
     if receipt["status"] != "posted":
         raise HTTPException(409, "只有已确认入库单可退货")
+    if db.execute("SELECT 1 FROM receipt_reversals WHERE receipt_id = ?", (receipt_id,)).fetchone():
+        raise HTTPException(409, "原入库单已冲销，不能退货")
     known = {row["id"]: row for row in db.execute(
         "SELECT id, material_id, quantity FROM receipt_lines WHERE receipt_id = ?", (receipt_id,))}
     result: dict[int, sqlite3.Row] = {}

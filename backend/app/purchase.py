@@ -46,7 +46,8 @@ def received_quantity(db: sqlite3.Connection, order_line_id: int) -> Decimal:
         SELECT rl.quantity FROM receipt_order_links link
         JOIN receipt_lines rl ON rl.id = link.receipt_line_id
         JOIN receipts r ON r.id = rl.receipt_id
-        WHERE link.purchase_order_line_id = ? AND r.status = 'posted'
+        LEFT JOIN receipt_reversals rev ON rev.receipt_id = r.id
+        WHERE link.purchase_order_line_id = ? AND r.status = 'posted' AND rev.id IS NULL
     """, (order_line_id,))), Decimal(0))
 
 
@@ -130,8 +131,10 @@ def validate_receipt_post(db: sqlite3.Connection, receipt_id: int, supplier_id: 
 def update_order_receipt_status(db: sqlite3.Connection, order_id: int) -> None:
     lines = db.execute("SELECT id, quantity FROM purchase_order_lines WHERE purchase_order_id = ?",
                        (order_id,)).fetchall()
-    status = "received" if all(received_quantity(db, line["id"]) == Decimal(line["quantity"])
-                               for line in lines) else "partially_received"
+    received = [received_quantity(db, line["id"]) for line in lines]
+    status = ("confirmed" if all(quantity == 0 for quantity in received) else
+              "received" if all(quantity == Decimal(line["quantity"])
+                                for quantity, line in zip(received, lines)) else "partially_received")
     db.execute("UPDATE purchase_orders SET status = ? WHERE id = ?", (status, order_id))
 
 

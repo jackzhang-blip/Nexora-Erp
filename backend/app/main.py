@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, field_validator
 from .database import connection, migrate
 from .discovery import DiscoveryPublisher
 from .finance import router as finance_router
-from .inventory import require_warehouse, router as inventory_router
+from .inventory import balance, require_warehouse, router as inventory_router
 from .purchase import (linked_order_for_receipt, order_receipt_lines,
                        router as purchase_router, update_order_receipt_status, validate_receipt_post)
 from .purchase_returns import returned_quantity as purchase_returned_quantity, router as purchase_returns_router
@@ -192,6 +192,17 @@ class ReceiptInput(BaseModel):
     lines: list[ReceiptLineInput] = Field(min_length=1, max_length=100)
 
 
+class ReceiptReverseInput(BaseModel):
+    reason: str = Field(min_length=1, max_length=200)
+
+    @field_validator("reason")
+    @classmethod
+    def trim_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("冲销原因不能为空")
+        return value.strip()
+
+
 def validate_roles(db: sqlite3.Connection, roles: list[str]) -> list[str]:
     unique = sorted(set(roles))
     known = {row[0] for row in db.execute("SELECT code FROM roles")}
@@ -238,11 +249,16 @@ def ensure_active_admin_remains(db: sqlite3.Connection, user_id: int) -> None:
 def receipt_data(db: sqlite3.Connection, receipt_id: int) -> dict:
     row = db.execute("""
         SELECT r.*, s.name AS supplier_name, u.username AS created_by_name,
-               w.id AS warehouse_id, w.name AS warehouse_name
+               w.id AS warehouse_id, w.name AS warehouse_name,
+               rev.id AS reversal_id, rev.reason AS reversal_reason,
+               rev.created_by AS reversed_by, ru.username AS reversed_by_name,
+               rev.created_at AS reversed_at
         FROM receipts r JOIN suppliers s ON s.id = r.supplier_id
         JOIN users u ON u.id = r.created_by
         JOIN receipt_warehouses rw ON rw.receipt_id = r.id
-        JOIN warehouses w ON w.id = rw.warehouse_id WHERE r.id = ?
+        JOIN warehouses w ON w.id = rw.warehouse_id
+        LEFT JOIN receipt_reversals rev ON rev.receipt_id = r.id
+        LEFT JOIN users ru ON ru.id = rev.created_by WHERE r.id = ?
     """, (receipt_id,)).fetchone()
     if not row:
         raise HTTPException(404, "入库单不存在")
@@ -256,7 +272,8 @@ def receipt_data(db: sqlite3.Connection, receipt_id: int) -> dict:
         # 同一次读取只汇总一次已退量，可退数量只由已确认单据推导。
         returned = purchase_returned_quantity(db, line["id"])
         detailed_lines.append({**dict(line), "returned_quantity": str(returned),
-                               "returnable_quantity": str(Decimal(line["quantity"]) - returned)})
+                               "returnable_quantity": str(Decimal(0) if row["reversal_id"] else
+                                                          Decimal(line["quantity"]) - returned)})
     return {**dict(row), "purchase_order_id": linked_order_for_receipt(db, receipt_id),
             "lines": detailed_lines}
 
@@ -345,7 +362,7 @@ def change_password(payload: ChangePasswordInput, user: dict = Depends(current_u
 def list_permissions(_: dict = Depends(require("users.manage"))) -> list[dict]:
     labels = {"users.manage": "管理用户与角色", "catalog.manage": "管理基础资料",
               "inventory.view": "查看库存与入库单", "receipt.create": "创建入库单",
-              "receipt.post": "确认入库", "warehouse.manage": "管理仓库",
+              "receipt.post": "确认入库", "receipt.reverse": "冲销已确认入库", "warehouse.manage": "管理仓库",
               "transfer.create": "创建调拨单", "transfer.post": "确认调拨",
               "transfer.reverse": "冲销已确认调拨单",
               "purchase_order.create": "创建采购订单", "purchase_order.confirm": "确认采购订单",
@@ -560,6 +577,44 @@ def post_receipt(receipt_id: int, user: dict = Depends(require("receipt.post")))
         return receipt_data(db, receipt_id)
 
 
+@app.post("/api/v1/receipts/{receipt_id}/reverse", status_code=201)
+def reverse_receipt(receipt_id: int, payload: ReceiptReverseInput,
+                    user: dict = Depends(require("receipt.reverse"))) -> dict:
+    with connection() as db:
+        # 写锁覆盖退货依赖、当前库存、冲销流水和订单进度，避免并发改变核对结果。
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("""SELECT r.status, rw.warehouse_id FROM receipts r
+            JOIN receipt_warehouses rw ON rw.receipt_id = r.id WHERE r.id = ?""",
+            (receipt_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "入库单不存在")
+        if row["status"] != "posted":
+            raise HTTPException(409, "只有已确认入库单可冲销")
+        if db.execute("SELECT 1 FROM receipt_reversals WHERE receipt_id = ?",
+                      (receipt_id,)).fetchone():
+            raise HTTPException(409, "此入库单已冲销")
+        lines = db.execute("SELECT id, material_id, quantity FROM receipt_lines WHERE receipt_id = ?",
+                           (receipt_id,)).fetchall()
+        for line in lines:
+            if purchase_returned_quantity(db, line["id"]) > 0:
+                raise HTTPException(409, "原入库单仍有已确认采购退货，请先冲销退货")
+            if balance(db, row["warehouse_id"], line["material_id"]) < Decimal(line["quantity"]):
+                raise HTTPException(409, f"原入库仓物料 #{line['material_id']} 库存不足，无法冲销")
+        cursor = db.execute("""INSERT INTO receipt_reversals(receipt_id, reason, created_by)
+            VALUES (?, ?, ?)""", (receipt_id, payload.reason, user["id"]))
+        for line in lines:
+            # 保留原正向入库流水，再用关联原明细的负向流水抵消误入库数量。
+            db.execute("""INSERT INTO stock_movements(
+                warehouse_id, material_id, quantity, source_type, source_id, source_line_id, created_by)
+                VALUES (?, ?, ?, 'receipt_reversal', ?, ?, ?)""",
+                (row["warehouse_id"], line["material_id"], str(-Decimal(line["quantity"])),
+                 cursor.lastrowid, line["id"], user["id"]))
+        order_id = linked_order_for_receipt(db, receipt_id)
+        if order_id is not None:
+            update_order_receipt_status(db, order_id)
+        return receipt_data(db, receipt_id)
+
+
 @app.get("/api/v1/stock")
 def list_stock(warehouse_id: int | None = None, _: dict = Depends(require("inventory.view"))) -> list[dict]:
     with connection() as db:
@@ -582,6 +637,7 @@ def list_movements(_: dict = Depends(require("inventory.view"))) -> list[dict]:
                    sm.material_id, m.sku, m.name AS material_name, m.unit,
                    sm.quantity, sm.source_type, sm.source_id, sm.source_line_id,
                    CASE WHEN sm.source_type = 'receipt' THEN sm.source_id END AS receipt_id,
+                   CASE WHEN sm.source_type = 'receipt_reversal' THEN sm.source_id END AS receipt_reversal_id,
                    CASE WHEN sm.source_type IN ('transfer_out', 'transfer_in') THEN sm.source_id END AS transfer_id,
                    CASE WHEN sm.source_type IN ('transfer_reversal_out', 'transfer_reversal_in') THEN sm.source_id END AS transfer_reversal_id,
                    CASE WHEN sm.source_type = 'stocktake' THEN sm.source_id END AS stocktake_id,
