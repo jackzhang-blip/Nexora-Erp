@@ -31,6 +31,8 @@ jobs:
         run: npm run dist:mac
       - name: 验证打包服务异常恢复
         run: python scripts/smoke-macos-launchd.py --source 'release/mac-arm64/Nexora ERP.app/Contents/Resources/backend-service'
+      - name: 验证打包服务备份与恢复
+        run: python scripts/smoke-macos-backup.py --source 'release/mac-arm64/Nexora ERP.app/Contents/Resources/backend-service'
       - uses: actions/upload-artifact@v4
         with:
           name: nexora-macos-arm64-internal
