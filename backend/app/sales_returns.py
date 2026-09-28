@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from .database import connection
-from .inventory import require_warehouse
+from .inventory import balance, require_warehouse
 from .security import require
 
 router = APIRouter(prefix="/api/v1")
@@ -40,11 +40,24 @@ class SalesReturnInput(BaseModel):
         return value.strip()
 
 
+class SalesReturnReverseInput(BaseModel):
+    reason: str = Field(min_length=1, max_length=200)
+
+    @field_validator("reason")
+    @classmethod
+    def trim_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("冲销原因不能为空")
+        return value.strip()
+
+
 def returned_quantity(db: sqlite3.Connection, shipment_line_id: int) -> Decimal:
-    # 草稿不占用可退量；只按已确认退货累计，取消单不影响历史出库。
+    # 已冲销退货仍留在历史中，但不再占用原出库的可退数量。
     return sum((Decimal(row[0]) for row in db.execute("""SELECT srl.quantity
         FROM sales_return_lines srl JOIN sales_returns sr ON sr.id = srl.sales_return_id
-        WHERE srl.shipment_line_id = ? AND sr.status = 'posted'""", (shipment_line_id,))), Decimal(0))
+        LEFT JOIN sales_return_reversals rev ON rev.sales_return_id = sr.id
+        WHERE srl.shipment_line_id = ? AND sr.status = 'posted' AND rev.id IS NULL""",
+        (shipment_line_id,))), Decimal(0))
 
 
 def checked_return_lines(db: sqlite3.Connection, shipment_id: int,
@@ -71,12 +84,17 @@ def checked_return_lines(db: sqlite3.Connection, shipment_id: int,
 
 def sales_return_data(db: sqlite3.Connection, return_id: int) -> dict:
     row = db.execute("""SELECT sr.*, s.sales_order_id, c.name AS customer_name,
-        w.name AS warehouse_name, u.username AS created_by_name
+        w.name AS warehouse_name, u.username AS created_by_name,
+        rev.id AS reversal_id, rev.reason AS reversal_reason,
+        rev.created_by AS reversed_by, ru.username AS reversed_by_name,
+        rev.created_at AS reversed_at
         FROM sales_returns sr JOIN shipments s ON s.id = sr.shipment_id
         JOIN sales_orders so ON so.id = s.sales_order_id
         JOIN customers c ON c.id = so.customer_id
         JOIN warehouses w ON w.id = sr.warehouse_id
-        JOIN users u ON u.id = sr.created_by WHERE sr.id = ?""", (return_id,)).fetchone()
+        JOIN users u ON u.id = sr.created_by
+        LEFT JOIN sales_return_reversals rev ON rev.sales_return_id = sr.id
+        LEFT JOIN users ru ON ru.id = rev.created_by WHERE sr.id = ?""", (return_id,)).fetchone()
     if not row:
         raise HTTPException(404, "销售退货单不存在")
     lines = []
@@ -159,4 +177,39 @@ def cancel_sales_return(return_id: int, user: dict = Depends(require("sales_retu
             raise HTTPException(409, "只有退货草稿可取消；已确认退货须另建更正单")
         db.execute("""UPDATE sales_returns SET status = 'cancelled', cancelled_by = ?,
             cancelled_at = CURRENT_TIMESTAMP WHERE id = ?""", (user["id"], return_id))
+        return sales_return_data(db, return_id)
+
+
+@router.post("/sales-returns/{return_id}/reverse", status_code=201)
+def reverse_sales_return(return_id: int, payload: SalesReturnReverseInput,
+                         user: dict = Depends(require("sales_return.reverse"))) -> dict:
+    with connection() as db:
+        # 写锁内一次性核对退回仓的当前库存；不足时不能生成半套冲销流水。
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("SELECT status, warehouse_id FROM sales_returns WHERE id = ?", (return_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "销售退货单不存在")
+        if row["status"] != "posted":
+            raise HTTPException(409, "只有已确认销售退货可冲销")
+        if db.execute("SELECT 1 FROM sales_return_reversals WHERE sales_return_id = ?",
+                      (return_id,)).fetchone():
+            raise HTTPException(409, "此销售退货单已冲销")
+        lines = db.execute("""SELECT srl.id, srl.quantity, sol.material_id
+            FROM sales_return_lines srl
+            JOIN shipment_lines sl ON sl.id = srl.shipment_line_id
+            JOIN sales_order_lines sol ON sol.id = sl.sales_order_line_id
+            WHERE srl.sales_return_id = ?""", (return_id,)).fetchall()
+        for line in lines:
+            if balance(db, row["warehouse_id"], line["material_id"]) < Decimal(line["quantity"]):
+                raise HTTPException(409, f"退回仓物料 #{line['material_id']} 库存不足，无法冲销")
+        cursor = db.execute("""INSERT INTO sales_return_reversals(
+            sales_return_id, reason, created_by) VALUES (?, ?, ?)""",
+            (return_id, payload.reason, user["id"]))
+        for line in lines:
+            # 负向流水以原退货明细为来源行，财务则显示同额正向更正。
+            db.execute("""INSERT INTO stock_movements(
+                warehouse_id, material_id, quantity, source_type, source_id, source_line_id, created_by)
+                VALUES (?, ?, ?, 'sales_return_reversal', ?, ?, ?)""",
+                (row["warehouse_id"], line["material_id"], str(-Decimal(line["quantity"])),
+                 cursor.lastrowid, line["id"], user["id"]))
         return sales_return_data(db, return_id)

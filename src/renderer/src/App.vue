@@ -96,6 +96,7 @@ const costReversalReasons = ref<Record<number, string>>({})
 const warehouseForm = ref({ code: '', name: '' })
 const transferForm = ref({ from_warehouse_id: 1, to_warehouse_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const transferReversalReasons = ref<Record<number, string>>({})
+const salesReturnReversalReasons = ref<Record<number, string>>({})
 const stocktakeForm = ref({ warehouse_id: 1, reference: '', lines: [{ material_id: 0, counted_quantity: '0' }] })
 const stocktakeReversalReasons = ref<Record<number, string>>({})
 const customerForm = ref({ name: '' })
@@ -168,6 +169,7 @@ function movementSource(item: Movement): string {
   if (item.stocktake_reversal_id !== null) return `盘点冲销单 #${item.stocktake_reversal_id}`
   if (item.shipment_id !== null) return `出库单 #${item.shipment_id}`
   if (item.sales_return_id !== null) return `销售退货单 #${item.sales_return_id}`
+  if (item.sales_return_reversal_id !== null) return `销售退货冲销单 #${item.sales_return_reversal_id}`
   if (item.purchase_return_id !== null) return `采购退货单 #${item.purchase_return_id}`
   if (item.material_issue_id !== null) return `生产领料单 #${item.material_issue_id}`
   if (item.material_return_id !== null) return `生产退料单 #${item.material_return_id}`
@@ -177,7 +179,7 @@ function movementSource(item: Movement): string {
 }
 
 function financialSource(item: FinancialEntry): string {
-  const names = { shipment: '销售出库', sales_return: '销售退货', receipt: '采购入库', purchase_return: '采购退货' }
+  const names = { shipment: '销售出库', sales_return: '销售退货', sales_return_reversal: '销售退货冲销', receipt: '采购入库', purchase_return: '采购退货' }
   return `${names[item.source_type]} #${item.source_id}`
 }
 
@@ -795,6 +797,16 @@ async function cancelSalesReturn(returnId: number): Promise<void> {
   if (!window.nexora) return
   await perform(() => window.nexora!.callApi('cancelSalesReturn', { returnId }),
     `销售退货单 #${returnId} 已取消。`)
+}
+
+async function reverseSalesReturn(returnId: number): Promise<void> {
+  if (!window.nexora) return
+  const reason = salesReturnReversalReasons.value[returnId]?.trim() ?? ''
+  // 页面只收集原因；库存不足和重复冲销由服务端在写事务内拦截。
+  await perform(async () => {
+    await window.nexora!.callApi('reverseSalesReturn', { returnId, reason })
+    delete salesReturnReversalReasons.value[returnId]
+  }, `销售退货单 #${returnId} 已冲销，库存与应收已追加更正记录。`)
 }
 
 async function createPaymentRecord(): Promise<void> {
@@ -1418,7 +1430,7 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
             </form>
           </div>
           <div class="card"><div class="section-heading"><div><p class="eyebrow">RETURN LOG</p><h2>退货记录</h2></div></div><div v-if="!salesReturns.length" class="muted">暂无销售退货单。</div>
-            <article v-for="item in salesReturns" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.customer_name }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 原出库单 #{{ item.shipment_id }} · {{ item.reason }} · 创建人 {{ item.created_by_name }} · 原价金额 ¥{{ item.total_amount }}</p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已退货入库' : item.status === 'cancelled' ? '已取消' : '待确认' }}</span><button v-if="item.status === 'draft' && can('sales_return.post')" class="primary small" type="button" :disabled="busy" @click="postSalesReturn(item.id)">确认退货</button><button v-if="item.status === 'draft' && can('sales_return.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelSalesReturn(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }} · ¥{{ line.line_total }}</span></div></article>
+            <article v-for="item in salesReturns" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.customer_name }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 原出库单 #{{ item.shipment_id }} · {{ item.reason }} · 创建人 {{ item.created_by_name }} · 原价金额 ¥{{ item.total_amount }}<span v-if="item.reversal_id"> · 冲销 #{{ item.reversal_id }}（{{ item.reversal_reason }} · {{ item.reversed_by_name }}）</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.reversal_id ? '已冲销' : item.status === 'posted' ? '已退货入库' : item.status === 'cancelled' ? '已取消' : '待确认' }}</span><button v-if="item.status === 'draft' && can('sales_return.post')" class="primary small" type="button" :disabled="busy" @click="postSalesReturn(item.id)">确认退货</button><button v-if="item.status === 'draft' && can('sales_return.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelSalesReturn(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }} · ¥{{ line.line_total }}</span></div><form v-if="item.status === 'posted' && !item.reversal_id && can('sales_return.reverse')" class="inline-form" @submit.prevent="reverseSalesReturn(item.id)"><label>冲销原因<input v-model.trim="salesReturnReversalReasons[item.id]" required maxlength="200" placeholder="说明原退货为何需要冲销" /></label><button class="secondary small" type="submit" :disabled="busy">冲销已确认退货</button></form></article>
           </div>
         </section>
 

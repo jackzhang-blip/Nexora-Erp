@@ -98,7 +98,7 @@ export interface FinancialEntry {
   kind: 'receivable' | 'payable'
   party_id: number
   party_name: string
-  source_type: 'shipment' | 'sales_return' | 'receipt' | 'purchase_return'
+  source_type: 'shipment' | 'sales_return' | 'sales_return_reversal' | 'receipt' | 'purchase_return'
   source_id: number
   source_line_id: number
   order_id: number | null
@@ -420,6 +420,11 @@ export interface SalesReturn {
   created_at: string
   posted_at: string | null
   cancelled_at: string | null
+  reversal_id: number | null
+  reversal_reason: string | null
+  reversed_by: number | null
+  reversed_by_name: string | null
+  reversed_at: string | null
   lines: SalesReturnLine[]
   total_amount: string
 }
@@ -475,7 +480,7 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'sales_return' | 'purchase_return' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
+  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'sales_return' | 'sales_return_reversal' | 'purchase_return' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
   source_id: number
   source_line_id: number
   receipt_id: number | null
@@ -485,6 +490,7 @@ export interface Movement {
   stocktake_reversal_id: number | null
   shipment_id: number | null
   sales_return_id: number | null
+  sales_return_reversal_id: number | null
   purchase_return_id: number | null
   material_issue_id: number | null
   material_return_id: number | null
@@ -577,6 +583,7 @@ export interface ErpOperations {
   createSalesReturn: { input: { shipment_id: number; warehouse_id: number; reason: string; lines: { shipment_line_id: number; quantity: string }[] }; output: SalesReturn }
   postSalesReturn: { input: { returnId: number }; output: SalesReturn }
   cancelSalesReturn: { input: { returnId: number }; output: SalesReturn }
+  reverseSalesReturn: { input: { returnId: number; reason: string }; output: SalesReturn }
   transfers: { input: undefined; output: Transfer[] }
   createTransfer: { input: { from_warehouse_id: number; to_warehouse_id: number; reference: string; lines: { material_id: number; quantity: string }[] }; output: Transfer }
   postTransfer: { input: { transferId: number }; output: Transfer }
