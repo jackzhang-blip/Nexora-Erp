@@ -125,6 +125,7 @@ def test_mac_install_unloads_job_when_registered_service_exits(monkeypatch, tmp_
     monkeypatch.setattr(host_service, "MAC_PLIST", plist)
     monkeypatch.setattr(host_service, "_require_admin", lambda: None)
     monkeypatch.setattr(host_service, "_run", lambda *args: commands.append(args))
+    monkeypatch.setattr(host_service, "_wait_mac_unloaded", lambda: None)
     monkeypatch.setattr(host_service, "service_running", lambda: False)
     monkeypatch.setattr(host_service.time, "sleep", lambda _seconds: None)
 
@@ -147,6 +148,30 @@ def test_mac_startup_check_waits_for_stable_running_process(monkeypatch):
     # 启动过程可短暂未运行；只接受连续两次运行，避免把崩溃重启当成成功。
     host_service._wait_mac_running()
     assert delays == [0.25, 1, 0.25, 1]
+
+
+def test_mac_bootout_waits_until_job_is_unregistered(monkeypatch):
+    calls = []
+    results = iter((0, 0, 113))
+    monkeypatch.setattr(host_service, "_run", lambda *args: calls.append(args))
+    monkeypatch.setattr(host_service.subprocess, "run", lambda *args, **_kwargs:
+                        subprocess.CompletedProcess(args, next(results), "", ""))
+    monkeypatch.setattr(host_service.time, "sleep", lambda seconds: calls.append(("sleep", seconds)))
+
+    # launchctl 已接受卸载请求不代表同名作业已消失，重启前需观察到注销。
+    host_service._bootout_mac()
+    assert calls == [("launchctl", "bootout", f"system/{host_service.MAC_LABEL}"),
+                     ("sleep", 0.25), ("sleep", 0.25)]
+
+
+def test_mac_bootout_timeout_does_not_claim_service_stopped(monkeypatch):
+    monkeypatch.setattr(host_service, "_run", lambda *_args: None)
+    monkeypatch.setattr(host_service.subprocess, "run", lambda *args, **_kwargs:
+                        subprocess.CompletedProcess(args, 0, "state = running", ""))
+    monkeypatch.setattr(host_service.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(TimeoutError, match="卸载超时"):
+        host_service._bootout_mac()
 
 
 def test_windows_install_grants_system_access_to_selected_instance(monkeypatch, tmp_path):
@@ -237,6 +262,7 @@ def test_upgrade_backs_up_and_replaces_service_without_touching_instance(monkeyp
     monkeypatch.setattr(host_service, "service_running", lambda: True)
     monkeypatch.setattr(host_service, "_require_admin", lambda: None)
     monkeypatch.setattr(host_service, "_run", lambda *args: commands.append(args))
+    monkeypatch.setattr(host_service, "_wait_mac_unloaded", lambda: None)
     monkeypatch.setattr(host_service, "create_backup", lambda _data, output: output.write_text("backup"))
     monkeypatch.setattr(host_service.time, "sleep", lambda _seconds: None)
     backup = host_service.upgrade_service(source)
@@ -276,6 +302,7 @@ def test_mac_upgrade_unloads_failed_new_job_and_restores_old_program(monkeypatch
             running["value"] = (current / "nexora-server").read_text() == "old"
 
     monkeypatch.setattr(host_service, "_run", control)
+    monkeypatch.setattr(host_service, "_wait_mac_unloaded", lambda: None)
     with pytest.raises(RuntimeError, match="macOS 服务启动后退出"):
         host_service.upgrade_service(source)
     assert (current / "nexora-server").read_text() == "old"
@@ -365,6 +392,7 @@ def test_upgrade_restores_old_program_when_restart_fails(monkeypatch, tmp_path):
             raise RuntimeError("new service failed")
 
     monkeypatch.setattr(host_service, "_run", fail_once)
+    monkeypatch.setattr(host_service, "_wait_mac_unloaded", lambda: None)
     # 测试只让首个 bootstrap 失败；先模拟运行状态以进入启动路径。
     states = iter((True, False))
     monkeypatch.setattr(host_service, "service_running", lambda: next(states))

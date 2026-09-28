@@ -20,7 +20,7 @@ def test_installed_upgrade_smoke_refuses_existing_service_and_non_ci(tmp_path):
     with pytest.raises(RuntimeError, match="拒绝覆盖"):
         require_runner(root, plist, "true")
     root.rmdir()
-    plist.write_text("已有服务")
+    plist.write_text("existing service", encoding="utf-8")
     with pytest.raises(RuntimeError, match="拒绝覆盖"):
         require_runner(root, plist, "true")
     plist.unlink()

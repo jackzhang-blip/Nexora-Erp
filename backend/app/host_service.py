@@ -149,6 +149,23 @@ def _wait_mac_running() -> None:
     raise RuntimeError("macOS 服务启动后退出，请检查 host.err.log")
 
 
+def _wait_mac_unloaded() -> None:
+    """确认 launchd 已移除作业，再替换程序或重新注册同名作业。"""
+    for _ in range(40):
+        result = subprocess.run(["launchctl", "print", f"system/{MAC_LABEL}"],
+                                capture_output=True, text=True)
+        if result.returncode != 0:
+            return
+        time.sleep(0.25)
+    raise TimeoutError("等待 macOS 服务卸载超时")
+
+
+def _bootout_mac() -> None:
+    # bootout 返回时同名作业可能仍在卸载；等待完成以免下一次 bootstrap 冲突。
+    _run("launchctl", "bootout", f"system/{MAC_LABEL}")
+    _wait_mac_unloaded()
+
+
 def _write_config(config: HostConfig, path: Path) -> None:
     descriptor, temporary_name = tempfile.mkstemp(prefix="host-", suffix=".tmp", dir=path.parent)
     temporary = Path(temporary_name)
@@ -233,7 +250,7 @@ def install_service(config: HostConfig, source_dir: Path) -> None:
     except Exception:
         if sys.platform == "darwin" and mac_bootstrapped:
             # 已注册但立即退出的作业需先从 launchd 卸载，才能安全移除程序与配置。
-            _run("launchctl", "bootout", f"system/{MAC_LABEL}")
+            _bootout_mac()
         if sys.platform == "win32":
             # 清理注册信息前保留 SCM 配置与退出码，便于定位启动权限和路径错误。
             for diagnostic in (("sc.exe", "qc", SERVICE_NAME),
@@ -272,7 +289,7 @@ def upgrade_service(source_dir: Path) -> Path:
         shutil.copytree(source_dir, staged)
         if was_running:
             if sys.platform == "darwin":
-                _run("launchctl", "bootout", f"system/{MAC_LABEL}")
+                _bootout_mac()
             else:
                 _run("sc.exe", "stop", SERVICE_NAME)
                 _wait_stopped()
@@ -309,7 +326,7 @@ def upgrade_service(source_dir: Path) -> Path:
             except Exception:
                 if new_mac_bootstrapped:
                     # 新版作业虽已注册却不可用，先卸载它再回滚程序，否则旧版无法重新注册。
-                    _run("launchctl", "bootout", f"system/{MAC_LABEL}")
+                    _bootout_mac()
                 if target.exists():
                     shutil.rmtree(target)
                 os.replace(old, target)
@@ -352,7 +369,7 @@ def stop_service() -> None:
     _require_admin()
     if sys.platform == "darwin":
         _run("launchctl", "disable", f"system/{MAC_LABEL}")
-        _run("launchctl", "bootout", f"system/{MAC_LABEL}")
+        _bootout_mac()
     else:
         _run("sc.exe", "stop", SERVICE_NAME)
         _wait_stopped()
