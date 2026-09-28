@@ -21,7 +21,7 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 管理员可通过 `/api/v1/users` 创建用户、调整角色，通过 `/api/v1/users/{id}/status` 启用或停用账号，并通过 `/api/v1/users/{id}/reset-password` 重置密码。`/api/v1/permissions` 列出固定权限代码；`/api/v1/roles` 可创建自定义角色，`/api/v1/roles/{code}` 可修改其授权范围。内置角色只读，最后一位启用的内置管理员不可停用或撤权。账号停用、管理员重置密码以及用户自行调用 `/api/v1/auth/change-password` 后，相关旧会话立即失效。角色和权限变化对现有会话立即生效。
 
-物料和供应商资料、采购订单与分批入库、入库单草稿、确认入库、多仓库库存、仓库调拨及库存流水已实现。确认入库或调拨会在单个事务中生成流水；重复确认返回冲突。所有数据由服务端 SQLite 保存，远程客户端没有离线副本或自动同步。
+物料和供应商资料、采购订单与分批入库、入库单草稿、确认入库、多仓库库存、仓库调拨、库存盘点及库存流水已实现。确认入库、调拨或盘点会在单个事务中生成差异流水；重复确认返回冲突。所有数据由服务端 SQLite 保存，远程客户端没有离线副本或自动同步。
 
 ## 采购订单
 
@@ -33,7 +33,9 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 数据库升级时自动建立 `MAIN` 主仓库，旧入库单和历史流水归入主仓库。新入库单可指定 `warehouse_id`；旧客户端省略时仍入主仓库。`GET /api/v1/warehouses` 查看仓库，`POST /api/v1/warehouses` 创建仓库。`GET /api/v1/stock` 返回所有仓库合计，添加 `warehouse_id` 查询参数可查看指定仓库；`GET /api/v1/movements` 返回带仓库、单据来源和操作者的有符号流水。
 
-`POST /api/v1/transfers` 创建调拨草稿，`POST /api/v1/transfers/{id}/post` 确认调拨。确认时在写事务内检查来源仓库库存，再生成等额出库与入库流水；库存不足、重复确认均返回 409。已确认流水不可直接编辑。仓库管理、调拨创建和确认分别要求 `warehouse.manage`、`transfer.create`、`transfer.post` 权限；查看仍要求 `inventory.view`。销售出库、盘点和退货尚未实现。
+`POST /api/v1/transfers` 创建调拨草稿，`POST /api/v1/transfers/{id}/post` 确认调拨。确认时在写事务内检查来源仓库库存，再生成等额出库与入库流水；库存不足、重复确认均返回 409。已确认流水不可直接编辑。仓库管理、调拨创建和确认分别要求 `warehouse.manage`、`transfer.create`、`transfer.post` 权限；查看仍要求 `inventory.view`。
+
+`POST /api/v1/stocktakes` 创建盘点草稿，保存指定仓库各物料的账面快照与实盘量；`GET /api/v1/stocktakes` 查看历史，`POST /api/v1/stocktakes/{id}/post` 确认差异，`/cancel` 取消草稿。确认时在写事务内重新核对账面量及最后一笔流水；若期间发生入库或调拨，即使余额相抵未变也返回 409，须取消旧草稿并重新盘点。非零差异生成带盘点单、明细和操作者来源的有符号库存流水；零差异不生成流水。已确认盘点不可取消，后续错误须另建更正单。创建、确认、取消分别要求 `stocktake.create`、`stocktake.post`、`stocktake.cancel`，查看要求 `inventory.view`。销售出库和退货尚未实现。
 
 ## 数据与证书
 
@@ -68,4 +70,4 @@ PYTHONPATH=backend python3 -m app.backup restore --archive /path/to/instance.nex
 PYTHONPATH=backend python3 -m pytest backend/tests -q
 ```
 
-测试覆盖身份持久化、远程首次管理员抢注拒绝、角色越权拒绝、账号停用与会话失效、自定义角色授权、最后管理员保护、旧数据库迁移、采购订单分批入库与超量拦截、多仓库调拨与库存不足拦截、入库只确认一次、库存流水、成组备份恢复、发现广播与系统服务安装升级回退。
+测试覆盖身份持久化、远程首次管理员抢注拒绝、角色越权拒绝、账号停用与会话失效、自定义角色授权、最后管理员保护、旧数据库迁移、采购订单分批入库与超量拦截、多仓库调拨与库存不足拦截、盘点快照与差异流水、入库只确认一次、库存流水、成组备份恢复、发现广播与系统服务安装升级回退。

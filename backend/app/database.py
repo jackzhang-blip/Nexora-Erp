@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 5:
+        if version > 6:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -244,3 +244,34 @@ def migrate() -> None:
                             for code in ("purchase_order.create", "purchase_order.confirm",
                                          "purchase_order.cancel")])
             db.execute("PRAGMA user_version = 5")
+        if version < 6:
+            # 盘点保存建单时的账面量；确认时若账面量已变化，须重新盘点，避免覆盖期间交易。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE stocktakes (
+                id INTEGER PRIMARY KEY,
+                warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+                reference TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'posted', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                posted_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                posted_at TEXT,
+                cancelled_at TEXT
+            )""")
+            db.execute("""CREATE TABLE stocktake_lines (
+                id INTEGER PRIMARY KEY,
+                stocktake_id INTEGER NOT NULL REFERENCES stocktakes(id),
+                material_id INTEGER NOT NULL REFERENCES materials(id),
+                book_quantity TEXT NOT NULL,
+                counted_quantity TEXT NOT NULL,
+                movement_id INTEGER NOT NULL,
+                UNIQUE (stocktake_id, material_id)
+            )""")
+            db.executemany("INSERT INTO permissions(code) VALUES (?)",
+                           [(code,) for code in ("stocktake.create", "stocktake.post", "stocktake.cancel")])
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, code) for role in ("admin", "warehouse")
+                            for code in ("stocktake.create", "stocktake.post", "stocktake.cancel")])
+            db.execute("PRAGMA user_version = 6")

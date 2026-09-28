@@ -18,11 +18,11 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
-import type { Material, Movement, Permission, PurchaseOrder, Receipt, Role, Stock, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
+import type { Material, Movement, Permission, PurchaseOrder, Receipt, Role, Stock, Stocktake, Supplier, Transfer, User, Warehouse } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
-type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'transfers' | 'users' | 'settings'
+type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'transfers' | 'stocktakes' | 'users' | 'settings'
 
 // 让新增的 Naive UI 控件沿用工作台现有的青绿色主色。
 const naiveThemeOverrides: GlobalThemeOverrides = {
@@ -46,6 +46,7 @@ const receipts = ref<Receipt[]>([])
 const purchaseOrders = ref<PurchaseOrder[]>([])
 const warehouses = ref<Warehouse[]>([])
 const transfers = ref<Transfer[]>([])
+const stocktakes = ref<Stocktake[]>([])
 const selectedWarehouseId = ref(0)
 const roles = ref<Role[]>([])
 const permissions = ref<Permission[]>([])
@@ -62,6 +63,7 @@ const purchaseForm = ref({ supplier_id: 0, reference: '',
   lines: [{ material_id: 0, quantity: '1', unit_price: '0' }] })
 const warehouseForm = ref({ code: '', name: '' })
 const transferForm = ref({ from_warehouse_id: 1, to_warehouse_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
+const stocktakeForm = ref({ warehouse_id: 1, reference: '', lines: [{ material_id: 0, counted_quantity: '0' }] })
 const newUser = ref({ username: '', password: '', roles: ['viewer'] as string[] })
 const newRole = ref({ code: '', label: '', permissions: ['inventory.view'] as string[] })
 const passwordChange = ref({ current_password: '', new_password: '' })
@@ -86,7 +88,7 @@ let unsubscribeDiscovery: (() => void) | null = null
 const can = (permission: string): boolean => user.value?.permissions.includes(permission) ?? false
 // 导航权限仍按原规则计算；图标与文字绑定，避免图标单独承载含义。
 const visibleTabs = computed(() => [
-  ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'purchase' as const, label: '采购订单', icon: IconFileList3Line }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }] : []),
+  ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'purchase' as const, label: '采购订单', icon: IconFileList3Line }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }, { key: 'stocktakes' as const, label: '库存盘点', icon: IconFileList3Line }] : []),
   ...(can('users.manage') ? [{ key: 'users' as const, label: '用户权限', icon: IconTeamLine }] : []),
   { key: 'settings' as const, label: '连接与服务', icon: IconSettings3Line }
 ])
@@ -342,7 +344,7 @@ async function refreshData(): Promise<void> {
   if (!visibleTabs.value.some((item) => item.key === activeTab.value)) activeTab.value = visibleTabs.value[0]?.key ?? 'settings'
   // 页面只显示当前角色可访问的入口；数据访问仍以服务端授权为准。
   if (can('inventory.view')) {
-    [materials.value, suppliers.value, stock.value, receipts.value, movements.value, warehouses.value, transfers.value, purchaseOrders.value] = await Promise.all([
+    [materials.value, suppliers.value, stock.value, receipts.value, movements.value, warehouses.value, transfers.value, purchaseOrders.value, stocktakes.value] = await Promise.all([
       window.nexora.callApi('materials', undefined),
       window.nexora.callApi('suppliers', undefined),
       window.nexora.callApi('stock', selectedWarehouseId.value ? { warehouseId: selectedWarehouseId.value } : undefined),
@@ -350,7 +352,8 @@ async function refreshData(): Promise<void> {
       window.nexora.callApi('movements', undefined),
       window.nexora.callApi('warehouses', undefined),
       window.nexora.callApi('transfers', undefined),
-      window.nexora.callApi('purchaseOrders', undefined)
+      window.nexora.callApi('purchaseOrders', undefined),
+      window.nexora.callApi('stocktakes', undefined)
     ])
   }
   if (can('users.manage')) {
@@ -495,6 +498,34 @@ async function createTransfer(): Promise<void> {
 async function postTransfer(transferId: number): Promise<void> {
   if (!window.nexora) return
   await perform(() => window.nexora!.callApi('postTransfer', { transferId }), `调拨单 #${transferId} 已确认，双向库存流水已生成。`)
+}
+
+async function createStocktake(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    // 仅传实盘量；账面快照由服务端在事务内生成，防止客户端伪造差异。
+    await window.nexora!.callApi('createStocktake', {
+      warehouse_id: stocktakeForm.value.warehouse_id,
+      reference: stocktakeForm.value.reference,
+      lines: stocktakeForm.value.lines.map(line => ({
+        material_id: line.material_id, counted_quantity: line.counted_quantity
+      }))
+    })
+    stocktakeForm.value = { warehouse_id: stocktakeForm.value.warehouse_id,
+      reference: '', lines: [{ material_id: 0, counted_quantity: '0' }] }
+  }, '盘点草稿已创建，请核对账面与实盘数量。')
+}
+
+async function postStocktake(stocktakeId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('postStocktake', { stocktakeId }),
+    `盘点单 #${stocktakeId} 已确认，差异已记入库存流水。`)
+}
+
+async function cancelStocktake(stocktakeId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('cancelStocktake', { stocktakeId }),
+    `盘点单 #${stocktakeId} 已取消。`)
 }
 
 async function createUser(): Promise<void> {
@@ -691,7 +722,7 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
             </div>
             <div class="table-wrap"><table><thead><tr><th>物料编码</th><th>物料名称</th><th>数量</th></tr></thead><tbody><tr v-for="item in stock" :key="item.id"><td class="mono">{{ item.sku }}</td><td>{{ item.name }}</td><td><strong>{{ item.quantity }}</strong> {{ item.unit }}</td></tr><tr v-if="!stock.length"><td colspan="3" class="muted">暂无物料，先到基础资料中添加。</td></tr></tbody></table></div>
           </div>
-          <div class="card"><div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2>库存流水</h2></div></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>仓库</th><th>物料</th><th>数量变动</th><th>来源</th></tr></thead><tbody><tr v-for="item in movements" :key="item.id"><td>{{ localTime(item.created_at) }}</td><td>{{ item.warehouse_name }}</td><td>{{ item.material_name }} <small class="mono">{{ item.sku }}</small></td><td>{{ item.quantity.startsWith('-') ? '' : '+' }}{{ item.quantity }} {{ item.unit }}</td><td>{{ item.receipt_id ? `入库单 #${item.receipt_id}` : `调拨单 #${item.transfer_id}` }}</td></tr><tr v-if="!movements.length"><td colspan="5" class="muted">确认入库或调拨后，这里会显示库存流水。</td></tr></tbody></table></div></div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2>库存流水</h2></div></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>仓库</th><th>物料</th><th>数量变动</th><th>来源</th></tr></thead><tbody><tr v-for="item in movements" :key="item.id"><td>{{ localTime(item.created_at) }}</td><td>{{ item.warehouse_name }}</td><td>{{ item.material_name }} <small class="mono">{{ item.sku }}</small></td><td>{{ item.quantity.startsWith('-') ? '' : '+' }}{{ item.quantity }} {{ item.unit }}</td><td>{{ item.receipt_id ? `入库单 #${item.receipt_id}` : item.transfer_id ? `调拨单 #${item.transfer_id}` : `盘点单 #${item.stocktake_id}` }}</td></tr><tr v-if="!movements.length"><td colspan="5" class="muted">确认入库、调拨或盘点后，这里会显示库存流水。</td></tr></tbody></table></div></div>
         </section>
 
         <section v-if="activeTab === 'catalog'" class="stack">
@@ -726,6 +757,21 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
             <form @submit.prevent="createTransfer"><div class="form-grid"><label>来源仓库<select v-model.number="transferForm.from_warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>目标仓库<select v-model.number="transferForm.to_warehouse_id" required><option :value="0" disabled>选择目标仓库</option><option v-for="item in warehouses.filter(entry => entry.id !== transferForm.from_warehouse_id)" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>参考单号（可选）<input v-model.trim="transferForm.reference" maxlength="100" /></label></div>
               <h3>调拨明细</h3><div v-for="(line, index) in transferForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>数量<input v-model.trim="line.quantity" type="number" min="0.001" max="1000000" step="0.001" required /></label><button class="text-button" type="button" :disabled="transferForm.lines.length === 1" @click="transferForm.lines.splice(index, 1)">移除</button></div><div class="form-actions"><button class="secondary" type="button" @click="transferForm.lines.push({ material_id: 0, quantity: '1' })">添加明细</button><button class="primary" type="submit" :disabled="busy || warehouses.length < 2 || !materials.length">保存草稿</button></div></form></div>
           <div class="card"><div class="section-heading"><div><p class="eyebrow">TRANSFER LOG</p><h2>调拨单</h2></div></div><div v-if="!transfers.length" class="muted">暂无调拨单。</div><article v-for="item in transfers" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.from_warehouse_name }} → {{ item.to_warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已调拨' : '待确认' }}</span><button v-if="item.status === 'draft' && can('transfer.post')" class="primary small" type="button" :disabled="busy" @click="postTransfer(item.id)">确认调拨</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article></div>
+        </section>
+
+        <section v-if="activeTab === 'stocktakes'" class="stack">
+          <div v-if="can('stocktake.create')" class="card">
+            <div class="section-heading"><div><p class="eyebrow">STOCKTAKE</p><h2>新建盘点单</h2></div><span class="pill">草稿</span></div>
+            <form @submit.prevent="createStocktake">
+              <div class="form-grid"><label>盘点仓库<select v-model.number="stocktakeForm.warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><label>盘点批次或备注（可选）<input v-model.trim="stocktakeForm.reference" maxlength="100" /></label></div>
+              <p class="muted">只填写实际清点数量。保存时记录账面数量；若确认前库存发生变化，系统会要求重新盘点。</p>
+              <div v-for="(line, index) in stocktakeForm.lines" :key="index" class="line-row"><label>物料<select v-model.number="line.material_id" required><option :value="0" disabled>选择物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label><label>实盘数量<input v-model.trim="line.counted_quantity" type="number" min="0" max="1000000" step="0.001" required /></label><button class="text-button" type="button" :disabled="stocktakeForm.lines.length === 1" @click="stocktakeForm.lines.splice(index, 1)">移除</button></div>
+              <div class="form-actions"><button class="secondary" type="button" @click="stocktakeForm.lines.push({ material_id: 0, counted_quantity: '0' })">添加明细</button><button class="primary" type="submit" :disabled="busy || !materials.length">保存草稿</button></div>
+            </form>
+          </div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">COUNT RECORDS</p><h2>盘点记录</h2></div></div><div v-if="!stocktakes.length" class="muted">暂无盘点单。</div>
+            <article v-for="item in stocktakes" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ item.status === 'posted' ? '已确认' : item.status === 'cancelled' ? '已取消' : '待确认' }}</span><button v-if="item.status === 'draft' && can('stocktake.post')" class="primary small" type="button" :disabled="busy" @click="postStocktake(item.id)">确认差异</button><button v-if="item.status === 'draft' && can('stocktake.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelStocktake(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} · 账面 {{ line.book_quantity }} → 实盘 {{ line.counted_quantity }} {{ line.unit }} · 差异 {{ line.difference }}</span></div></article>
+          </div>
         </section>
 
         <section v-if="activeTab === 'users' && can('users.manage')" class="stack">

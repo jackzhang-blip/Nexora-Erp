@@ -67,6 +67,32 @@ export interface Transfer extends Omit<Receipt, 'supplier_id' | 'supplier_name' 
   to_warehouse_id: number
   to_warehouse_name: string
 }
+// 盘点差异由服务端根据建单快照计算，桌面端不能自行修改账面数量。
+export interface StocktakeLine {
+  id: number
+  material_id: number
+  sku: string
+  material_name: string
+  unit: string
+  book_quantity: string
+  counted_quantity: string
+  difference: string
+}
+export interface Stocktake {
+  id: number
+  warehouse_id: number
+  warehouse_name: string
+  reference: string
+  status: 'draft' | 'posted' | 'cancelled'
+  created_by: number
+  created_by_name: string
+  posted_by: number | null
+  cancelled_by: number | null
+  created_at: string
+  posted_at: string | null
+  cancelled_at: string | null
+  lines: StocktakeLine[]
+}
 export interface Movement {
   id: number
   warehouse_id: number
@@ -76,11 +102,12 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'transfer_out' | 'transfer_in'
+  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake'
   source_id: number
   source_line_id: number
   receipt_id: number | null
   transfer_id: number | null
+  stocktake_id: number | null
   created_by: number | null
   created_at: string
 }
@@ -120,6 +147,10 @@ export interface ErpOperations {
   transfers: { input: undefined; output: Transfer[] }
   createTransfer: { input: { from_warehouse_id: number; to_warehouse_id: number; reference: string; lines: { material_id: number; quantity: string }[] }; output: Transfer }
   postTransfer: { input: { transferId: number }; output: Transfer }
+  stocktakes: { input: undefined; output: Stocktake[] }
+  createStocktake: { input: { warehouse_id: number; reference: string; lines: { material_id: number; counted_quantity: string }[] }; output: Stocktake }
+  postStocktake: { input: { stocktakeId: number }; output: Stocktake }
+  cancelStocktake: { input: { stocktakeId: number }; output: Stocktake }
   stock: { input: { warehouseId?: number } | undefined; output: Stock[] }
   movements: { input: undefined; output: Movement[] }
 }
