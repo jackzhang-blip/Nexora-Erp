@@ -1,0 +1,8 @@
+{
+  // 编辑器从仓库根目录识别两个 TypeScript 项目，Vue 文件由网页端配置接管。
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.web.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
