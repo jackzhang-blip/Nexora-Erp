@@ -151,6 +151,10 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'createMaterialIssue': return { method: 'POST', path: '/api/v1/material-issues', body: payload }
     case 'postMaterialIssue': return { method: 'POST', path: `/api/v1/material-issues/${positiveId(payload, 'issueId')}/post` }
     case 'cancelMaterialIssue': return { method: 'POST', path: `/api/v1/material-issues/${positiveId(payload, 'issueId')}/cancel` }
+    case 'materialReturns': return { method: 'GET', path: '/api/v1/material-returns' }
+    case 'createMaterialReturn': return { method: 'POST', path: '/api/v1/material-returns', body: payload }
+    case 'postMaterialReturn': return { method: 'POST', path: `/api/v1/material-returns/${positiveId(payload, 'returnId')}/post` }
+    case 'cancelMaterialReturn': return { method: 'POST', path: `/api/v1/material-returns/${positiveId(payload, 'returnId')}/cancel` }
     case 'createPurchaseReturn': return { method: 'POST', path: '/api/v1/purchase-returns', body: payload }
     case 'postPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/post` }
     case 'cancelPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/cancel` }

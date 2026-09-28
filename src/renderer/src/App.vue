@@ -18,11 +18,11 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
-import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, MaterialIssue, Movement, PaymentRecord, Permission, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse, WorkOrder } from '../../shared/erp-api'
+import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, MaterialIssue, MaterialReturn, Movement, PaymentRecord, Permission, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse, WorkOrder } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
-type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'finance' | 'boms' | 'workOrders' | 'materialIssues' | 'users' | 'settings'
+type Tab = 'stock' | 'catalog' | 'purchase' | 'receipts' | 'purchaseReturns' | 'transfers' | 'stocktakes' | 'sales' | 'shipments' | 'salesReturns' | 'finance' | 'boms' | 'workOrders' | 'materialIssues' | 'materialReturns' | 'users' | 'settings'
 
 // 让新增的 Naive UI 控件沿用工作台现有的青绿色主色。
 const naiveThemeOverrides: GlobalThemeOverrides = {
@@ -51,6 +51,7 @@ const paymentRecords = ref<PaymentRecord[]>([])
 const boms = ref<Bom[]>([])
 const workOrders = ref<WorkOrder[]>([])
 const materialIssues = ref<MaterialIssue[]>([])
+const materialReturns = ref<MaterialReturn[]>([])
 const warehouses = ref<Warehouse[]>([])
 const transfers = ref<Transfer[]>([])
 const stocktakes = ref<Stocktake[]>([])
@@ -82,6 +83,8 @@ const bomForm = ref({ product_material_id: 0, base_quantity: '1', note: '',
 const workOrderForm = ref({ bom_id: 0, warehouse_id: 1, target_quantity: '1', reference: '', note: '' })
 const materialIssueForm = ref({ work_order_id: 0, warehouse_id: 1, reference: '',
   lines: [] as { work_order_line_id: number; quantity: string }[] })
+const materialReturnForm = ref({ material_issue_id: 0, reason: '',
+  lines: [] as { material_issue_line_id: number; quantity: string }[] })
 const warehouseForm = ref({ code: '', name: '' })
 const transferForm = ref({ from_warehouse_id: 1, to_warehouse_id: 0, reference: '', lines: [{ material_id: 0, quantity: '1' }] })
 const stocktakeForm = ref({ warehouse_id: 1, reference: '', lines: [{ material_id: 0, counted_quantity: '0' }] })
@@ -119,7 +122,7 @@ const visibleTabs = computed(() => [
   ...(can('inventory.view') ? [{ key: 'stock' as const, label: '库存总览', icon: IconStackLine }, { key: 'catalog' as const, label: '基础资料', icon: IconArchiveLine }, { key: 'purchase' as const, label: '采购订单', icon: IconFileList3Line }, { key: 'receipts' as const, label: '采购入库', icon: IconFileList3Line }, { key: 'purchaseReturns' as const, label: '采购退货', icon: IconHistoryLine }, { key: 'transfers' as const, label: '仓库调拨', icon: IconStackLine }, { key: 'stocktakes' as const, label: '库存盘点', icon: IconFileList3Line }] : []),
   ...(can('sales.view') ? [{ key: 'sales' as const, label: '销售订单', icon: IconFileList3Line }, { key: 'shipments' as const, label: '销售出库', icon: IconArchiveLine }, { key: 'salesReturns' as const, label: '销售退货', icon: IconHistoryLine }] : []),
   ...(can('finance.view') ? [{ key: 'finance' as const, label: '应收应付', icon: IconFileList3Line }] : []),
-  ...(can('production.view') ? [{ key: 'boms' as const, label: '生产 BOM', icon: IconStackLine }, { key: 'workOrders' as const, label: '生产工单', icon: IconFileList3Line }, { key: 'materialIssues' as const, label: '生产领料', icon: IconArchiveLine }] : []),
+  ...(can('production.view') ? [{ key: 'boms' as const, label: '生产 BOM', icon: IconStackLine }, { key: 'workOrders' as const, label: '生产工单', icon: IconFileList3Line }, { key: 'materialIssues' as const, label: '生产领料', icon: IconArchiveLine }, { key: 'materialReturns' as const, label: '生产退料', icon: IconHistoryLine }] : []),
   ...(can('users.manage') ? [{ key: 'users' as const, label: '用户权限', icon: IconTeamLine }] : []),
   { key: 'settings' as const, label: '连接与服务', icon: IconSettings3Line }
 ])
@@ -129,6 +132,8 @@ const selectedPurchaseReturnReceipt = computed(() => receipts.value.find(
   item => item.id === purchaseReturnForm.value.receipt_id))
 const selectedIssueOrder = computed(() => workOrders.value.find(
   item => item.id === materialIssueForm.value.work_order_id))
+const selectedReturnIssue = computed(() => materialIssues.value.find(
+  item => item.id === materialReturnForm.value.material_issue_id))
 
 function displayError(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : '操作失败'
@@ -150,6 +155,7 @@ function movementSource(item: Movement): string {
   if (item.sales_return_id !== null) return `销售退货单 #${item.sales_return_id}`
   if (item.purchase_return_id !== null) return `采购退货单 #${item.purchase_return_id}`
   if (item.material_issue_id !== null) return `生产领料单 #${item.material_issue_id}`
+  if (item.material_return_id !== null) return `生产退料单 #${item.material_return_id}`
   return `流水 #${item.id}`
 }
 
@@ -431,14 +437,15 @@ async function refreshData(): Promise<void> {
     paymentRecords.value = []
   }
   if (can('production.view')) {
-    [boms.value, workOrders.value, materialIssues.value] = await Promise.all([
+    [boms.value, workOrders.value, materialIssues.value, materialReturns.value] = await Promise.all([
       window.nexora.callApi('boms', undefined), window.nexora.callApi('workOrders', undefined),
-      window.nexora.callApi('materialIssues', undefined)
+      window.nexora.callApi('materialIssues', undefined), window.nexora.callApi('materialReturns', undefined)
     ])
   } else {
     boms.value = []
     workOrders.value = []
     materialIssues.value = []
+    materialReturns.value = []
   }
   if (can('users.manage')) {
     [permissions.value, roles.value, users.value] = await Promise.all([
@@ -853,6 +860,38 @@ async function cancelMaterialIssue(issueId: number): Promise<void> {
     `生产领料单 #${issueId} 草稿已取消。`)
 }
 
+function selectReturnIssue(issueId: number): void {
+  const issue = materialIssues.value.find(item => item.id === issueId)
+  materialReturnForm.value = { material_issue_id: issueId, reason: '',
+    // 仅预填仍可退的领料明细；用户可按实际退回数量修改或移除。
+    lines: issue?.lines.filter(line => Number(line.returnable_quantity) > 0).map(line => ({
+      material_issue_line_id: line.id, quantity: line.returnable_quantity
+    })) ?? [] }
+  activeTab.value = 'materialReturns'
+}
+
+async function createMaterialReturn(): Promise<void> {
+  if (!window.nexora) return
+  await perform(async () => {
+    await window.nexora!.callApi('createMaterialReturn', {
+      ...materialReturnForm.value, lines: materialReturnForm.value.lines.map(line => ({ ...line }))
+    })
+    materialReturnForm.value = { material_issue_id: 0, reason: '', lines: [] }
+  }, '生产退料草稿已创建，确认前不会增加库存。')
+}
+
+async function postMaterialReturn(returnId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('postMaterialReturn', { returnId }),
+    `生产退料单 #${returnId} 已确认，组件已回到原领料仓库。`)
+}
+
+async function cancelMaterialReturn(returnId: number): Promise<void> {
+  if (!window.nexora) return
+  await perform(() => window.nexora!.callApi('cancelMaterialReturn', { returnId }),
+    `生产退料单 #${returnId} 草稿已取消。`)
+}
+
 async function createUser(): Promise<void> {
   if (!window.nexora) return
   await perform(async () => {
@@ -1116,7 +1155,20 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
             </form>
           </div>
           <div class="card"><div class="section-heading"><div><p class="eyebrow">ISSUE HISTORY</p><h2>领料记录</h2></div></div><div v-if="!materialIssues.length" class="muted">暂无领料单。</div>
-            <article v-for="item in materialIssues" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · 工单 #{{ item.work_order_id }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', posted: '已确认', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('material_issue.post')" class="primary small" type="button" :disabled="busy" @click="postMaterialIssue(item.id)">确认领料</button><button v-if="item.status === 'draft' && can('material_issue.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelMaterialIssue(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article>
+            <article v-for="item in materialIssues" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · 工单 #{{ item.work_order_id }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} <span v-if="item.reference">· {{ item.reference }}</span></p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', posted: '已确认', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('material_issue.post')" class="primary small" type="button" :disabled="busy" @click="postMaterialIssue(item.id)">确认领料</button><button v-if="item.status === 'draft' && can('material_issue.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelMaterialIssue(item.id)">取消</button><button v-if="item.status === 'posted' && item.lines.some(line => Number(line.returnable_quantity) > 0) && can('material_return.create')" class="secondary small" type="button" :disabled="busy" @click="selectReturnIssue(item.id)">创建退料单</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} · 已领 {{ line.quantity }} · 已退 {{ line.returned_quantity }} · 可退 {{ line.returnable_quantity }} {{ line.unit }}</span></div></article>
+          </div>
+        </section>
+
+        <section v-if="activeTab === 'materialReturns'" class="stack">
+          <div v-if="can('material_return.create')" class="card"><div class="section-heading"><div><p class="eyebrow">MATERIAL RETURN</p><h2>新建生产退料单</h2></div><span class="pill">草稿</span></div>
+            <p class="muted">只退回已确认领料的组件，确认后入原领料仓库，并恢复工单可领数量。请按实际退回数量填写。</p>
+            <form @submit.prevent="createMaterialReturn"><div class="form-grid"><label>原领料单<select v-model.number="materialReturnForm.material_issue_id" required @change="selectReturnIssue(materialReturnForm.material_issue_id)"><option :value="0" disabled>选择可退领料单</option><option v-for="item in materialIssues.filter(entry => entry.status === 'posted' && entry.lines.some(line => Number(line.returnable_quantity) > 0))" :key="item.id" :value="item.id">#{{ item.id }} · 工单 #{{ item.work_order_id }} · {{ item.warehouse_name }}</option></select></label><label>退料原因<input v-model.trim="materialReturnForm.reason" required maxlength="200" /></label></div>
+              <h3>本次退料数量</h3><div v-for="line in materialReturnForm.lines" :key="line.material_issue_line_id" class="line-row"><label>{{ selectedReturnIssue?.lines.find(item => item.id === line.material_issue_line_id)?.material_name }} · 可退 {{ selectedReturnIssue?.lines.find(item => item.id === line.material_issue_line_id)?.returnable_quantity }}<input v-model.trim="line.quantity" type="number" min="0.001" :max="selectedReturnIssue?.lines.find(item => item.id === line.material_issue_line_id)?.returnable_quantity" step="0.001" required /></label><button class="text-button" type="button" :disabled="busy" @click="materialReturnForm.lines = materialReturnForm.lines.filter(item => item.material_issue_line_id !== line.material_issue_line_id)">本次不退</button></div>
+              <button class="primary" type="submit" :disabled="busy || !materialReturnForm.lines.length">保存退料草稿</button>
+            </form>
+          </div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">RETURN HISTORY</p><h2>生产退料记录</h2></div></div><div v-if="!materialReturns.length" class="muted">暂无退料单。</div>
+            <article v-for="item in materialReturns" :key="item.id" class="receipt"><div class="receipt-head"><div><strong>#{{ item.id }} · 原领料 #{{ item.material_issue_id }} · 工单 #{{ item.work_order_id }} · {{ item.warehouse_name }}</strong><p class="muted">{{ localTime(item.created_at) }} · 创建人 {{ item.created_by_name }} · {{ item.reason }}</p></div><div class="receipt-actions"><span class="pill" :class="item.status">{{ { draft: '草稿', posted: '已确认', cancelled: '已取消' }[item.status] }}</span><button v-if="item.status === 'draft' && can('material_return.post')" class="primary small" type="button" :disabled="busy" @click="postMaterialReturn(item.id)">确认退料</button><button v-if="item.status === 'draft' && can('material_return.cancel')" class="secondary small" type="button" :disabled="busy" @click="cancelMaterialReturn(item.id)">取消</button></div></div><div class="receipt-lines"><span v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</span></div></article>
           </div>
         </section>
 
