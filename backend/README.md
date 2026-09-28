@@ -69,7 +69,7 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 数据库升级时自动建立 `MAIN` 主仓库，旧入库单和历史流水归入主仓库。新入库单可指定 `warehouse_id`；旧客户端省略时仍入主仓库。`GET /api/v1/warehouses` 查看仓库，`POST /api/v1/warehouses` 创建仓库。`GET /api/v1/stock` 返回所有仓库合计，添加 `warehouse_id` 查询参数可查看指定仓库；`GET /api/v1/movements` 返回带仓库、单据来源和操作者的有符号流水。
 
-`POST /api/v1/transfers` 创建调拨草稿，`POST /api/v1/transfers/{id}/post` 确认调拨。确认时在写事务内检查来源仓库库存，再生成等额出库与入库流水；库存不足、重复确认均返回 409。已确认流水不可直接编辑。仓库管理、调拨创建和确认分别要求 `warehouse.manage`、`transfer.create`、`transfer.post` 权限；查看仍要求 `inventory.view`。
+`POST /api/v1/transfers` 创建调拨草稿，`POST /api/v1/transfers/{id}/post` 确认调拨。确认时在写事务内检查来源仓库库存，再生成等额出库与入库流水；库存不足、重复确认均返回 409。`POST /api/v1/transfers/{id}/reverse` 由管理员按原因一次性冲销已确认调拨；写事务检查原目标仓有足量库存后，追加出库及回到原来源仓的入库流水，两侧均关联冲销单和原调拨明细。原目标仓库存不足或重复冲销返回 409，整单不动库存；原调拨单及原流水不改写。仓库管理、调拨创建、确认和冲销分别要求 `warehouse.manage`、`transfer.create`、`transfer.post`、`transfer.reverse` 权限；查看仍要求 `inventory.view`。
 
 `POST /api/v1/stocktakes` 创建盘点草稿，保存指定仓库各物料的账面快照与实盘量；`GET /api/v1/stocktakes` 查看历史，`POST /api/v1/stocktakes/{id}/post` 确认差异，`/cancel` 取消草稿。确认时在写事务内重新核对账面量及最后一笔流水；若期间发生入库、出库或调拨，即使余额相抵未变也返回 409，须取消旧草稿并重新盘点。非零差异生成带盘点单、明细和操作者来源的有符号库存流水；零差异不生成流水。已确认盘点不可取消；`POST /api/v1/stocktakes/{id}/reverse` 由管理员填写原因后一次性冲销，原盘点及流水不改写，非零差异另记反向流水并关联冲销单与原明细。盘盈差异已被消耗、当前库存不足时返回 409，整单不冲销；零差异冲销保留原因但不生成流水。创建、确认、取消分别要求 `stocktake.create`、`stocktake.post`、`stocktake.cancel`，冲销要求 `stocktake.reverse`，查看要求 `inventory.view`。
 

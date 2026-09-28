@@ -205,6 +205,12 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'transfers': return { method: 'GET', path: '/api/v1/transfers' }
     case 'createTransfer': return { method: 'POST', path: '/api/v1/transfers', body: payload }
     case 'postTransfer': return { method: 'POST', path: `/api/v1/transfers/${positiveId(payload, 'transferId')}/post` }
+    case 'reverseTransfer': {
+      const transferId = positiveId(payload, 'transferId')
+      const fields = payload as ErpOperations['reverseTransfer']['input']
+      // 调拨冲销只接收原因，目标路径固定且单据编号必须为正整数。
+      return { method: 'POST', path: `/api/v1/transfers/${transferId}/reverse`, body: { reason: fields.reason } }
+    }
     case 'stocktakes': return { method: 'GET', path: '/api/v1/stocktakes' }
     case 'createStocktake': return { method: 'POST', path: '/api/v1/stocktakes', body: payload }
     case 'postStocktake': return { method: 'POST', path: `/api/v1/stocktakes/${positiveId(payload, 'stocktakeId')}/post` }

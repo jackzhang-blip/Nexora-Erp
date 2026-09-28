@@ -429,6 +429,11 @@ export interface Transfer extends Omit<Receipt, 'supplier_id' | 'supplier_name' 
   from_warehouse_name: string
   to_warehouse_id: number
   to_warehouse_name: string
+  reversal_id: number | null
+  reversal_reason: string | null
+  reversed_by: number | null
+  reversed_by_name: string | null
+  reversed_at: string | null
 }
 // 盘点差异由服务端根据建单快照计算，桌面端不能自行修改账面数量。
 export interface StocktakeLine {
@@ -470,11 +475,12 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'sales_return' | 'purchase_return' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
+  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'sales_return' | 'purchase_return' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
   source_id: number
   source_line_id: number
   receipt_id: number | null
   transfer_id: number | null
+  transfer_reversal_id: number | null
   stocktake_id: number | null
   stocktake_reversal_id: number | null
   shipment_id: number | null
@@ -574,6 +580,7 @@ export interface ErpOperations {
   transfers: { input: undefined; output: Transfer[] }
   createTransfer: { input: { from_warehouse_id: number; to_warehouse_id: number; reference: string; lines: { material_id: number; quantity: string }[] }; output: Transfer }
   postTransfer: { input: { transferId: number }; output: Transfer }
+  reverseTransfer: { input: { transferId: number; reason: string }; output: Transfer }
   stocktakes: { input: undefined; output: Stocktake[] }
   createStocktake: { input: { warehouse_id: number; reference: string; lines: { material_id: number; counted_quantity: string }[] }; output: Stocktake }
   postStocktake: { input: { stocktakeId: number }; output: Stocktake }

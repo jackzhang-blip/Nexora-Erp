@@ -49,6 +49,17 @@ class TransferInput(BaseModel):
     lines: list[TransferLineInput] = Field(min_length=1, max_length=100)
 
 
+class TransferReverseInput(BaseModel):
+    reason: str = Field(min_length=1, max_length=200)
+
+    @field_validator("reason")
+    @classmethod
+    def valid_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("冲销原因不能为空")
+        return value.strip()
+
+
 def require_warehouse(db: sqlite3.Connection, warehouse_id: int) -> None:
     if not db.execute("SELECT 1 FROM warehouses WHERE id = ?", (warehouse_id,)).fetchone():
         raise HTTPException(422, "仓库不存在")
@@ -63,10 +74,15 @@ def balance(db: sqlite3.Connection, warehouse_id: int, material_id: int) -> Deci
 
 def transfer_data(db: sqlite3.Connection, transfer_id: int) -> dict:
     row = db.execute("""SELECT t.*, src.name AS from_warehouse_name,
-        dst.name AS to_warehouse_name, u.username AS created_by_name
+        dst.name AS to_warehouse_name, u.username AS created_by_name,
+        r.id AS reversal_id, r.reason AS reversal_reason,
+        r.created_by AS reversed_by, ru.username AS reversed_by_name,
+        r.created_at AS reversed_at
         FROM transfers t JOIN warehouses src ON src.id = t.from_warehouse_id
         JOIN warehouses dst ON dst.id = t.to_warehouse_id
-        JOIN users u ON u.id = t.created_by WHERE t.id = ?""", (transfer_id,)).fetchone()
+        JOIN users u ON u.id = t.created_by
+        LEFT JOIN transfer_reversals r ON r.transfer_id = t.id
+        LEFT JOIN users ru ON ru.id = r.created_by WHERE t.id = ?""", (transfer_id,)).fetchone()
     if not row:
         raise HTTPException(404, "调拨单不存在")
     lines = db.execute("""SELECT tl.id, tl.material_id, m.sku, m.name AS material_name,
@@ -149,4 +165,39 @@ def post_transfer(transfer_id: int, user: dict = Depends(require("transfer.post"
             ])
         db.execute("""UPDATE transfers SET status = 'posted', posted_by = ?,
             posted_at = CURRENT_TIMESTAMP WHERE id = ?""", (user["id"], transfer_id))
+        return transfer_data(db, transfer_id)
+
+
+@router.post("/transfers/{transfer_id}/reverse")
+def reverse_transfer(transfer_id: int, payload: TransferReverseInput,
+                     user: dict = Depends(require("transfer.reverse"))) -> dict:
+    with connection() as db:
+        # 写锁内一次核对目标仓剩余库存并写入双向反向流水，避免只退回部分明细。
+        db.execute("BEGIN IMMEDIATE")
+        transfer = db.execute("SELECT * FROM transfers WHERE id = ?", (transfer_id,)).fetchone()
+        if not transfer:
+            raise HTTPException(404, "调拨单不存在")
+        if transfer["status"] != "posted":
+            raise HTTPException(409, "只有已确认调拨单可冲销")
+        if db.execute("SELECT 1 FROM transfer_reversals WHERE transfer_id = ?",
+                      (transfer_id,)).fetchone():
+            raise HTTPException(409, "此调拨单已冲销")
+        lines = db.execute("SELECT id, material_id, quantity FROM transfer_lines WHERE transfer_id = ?",
+                           (transfer_id,)).fetchall()
+        for line in lines:
+            if balance(db, transfer["to_warehouse_id"], line["material_id"]) < Decimal(line["quantity"]):
+                raise HTTPException(409, f"物料 #{line['material_id']} 在原目标仓库的库存不足，请先调回后再冲销")
+        reversal_id = db.execute("""INSERT INTO transfer_reversals(transfer_id, reason, created_by)
+            VALUES (?, ?, ?)""", (transfer_id, payload.reason, user["id"])).lastrowid
+        for line in lines:
+            quantity = Decimal(line["quantity"])
+            # 来源类型区分退回的出入两侧，并用原调拨明细编号串起四笔流水。
+            db.executemany("""INSERT INTO stock_movements(
+                warehouse_id, material_id, quantity, source_type, source_id, source_line_id, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""", [
+                (transfer["to_warehouse_id"], line["material_id"], str(-quantity),
+                 "transfer_reversal_out", reversal_id, line["id"], user["id"]),
+                (transfer["from_warehouse_id"], line["material_id"], str(quantity),
+                 "transfer_reversal_in", reversal_id, line["id"], user["id"]),
+            ])
         return transfer_data(db, transfer_id)
