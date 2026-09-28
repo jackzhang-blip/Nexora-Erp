@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from app.database import connection
 from app.main import app
 
 
@@ -19,6 +20,12 @@ def test_access_management(monkeypatch, tmp_path):
             return {"Authorization": f"Bearer {response.json()['token']}"}
 
         admin = login("admin", "admin-password-123")
+        permissions = client.get(f"{base}/permissions", headers=admin).json()
+        # 已登记权限必须都有中文名称；漏配时不可退回编码或笼统的占位文案。
+        assert permissions
+        assert all(any("\u4e00" <= char <= "\u9fff" for char in item["label"])
+                   and item["label"] != item["code"]
+                   and not item["label"].startswith("未命名权限") for item in permissions)
         worker_data = client.post(f"{base}/users", headers=admin, json={
             "username": "worker", "password": "worker-password-123", "roles": ["viewer"]
         }).json()
@@ -90,3 +97,21 @@ def test_access_management(monkeypatch, tmp_path):
         assert client.get(f"{base}/users", headers=admin).status_code == 401
         assert client.put(f"{base}/users/{second['id']}/roles", headers=backup,
                           json={"roles": ["viewer"]}).status_code == 409
+
+
+def test_unknown_permission_never_displays_raw_code(monkeypatch, tmp_path):
+    monkeypatch.setenv("NEXORA_DB_PATH", str(tmp_path / "unknown-permission.db"))
+    with TestClient(app, client=("127.0.0.1", 12345)) as client:
+        client.post("/api/v1/setup/admin", json={
+            "username": "admin", "password": "admin-password-123"
+        })
+        token = client.post("/api/v1/auth/login", json={
+            "username": "admin", "password": "admin-password-123"
+        }).json()["token"]
+        with connection() as db:
+            # 模拟未来数据库迁移先登记权限、展示文案尚未更新的情况。
+            db.execute("INSERT INTO permissions(code) VALUES (?)", ("future.view",))
+        permissions = client.get("/api/v1/permissions", headers={
+            "Authorization": f"Bearer {token}"
+        }).json()
+        assert next(item["label"] for item in permissions if item["code"] == "future.view") == "未命名权限（请升级服务端）"

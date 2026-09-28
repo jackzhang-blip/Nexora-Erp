@@ -360,6 +360,7 @@ def change_password(payload: ChangePasswordInput, user: dict = Depends(current_u
 
 @app.get("/api/v1/permissions")
 def list_permissions(_: dict = Depends(require("users.manage"))) -> list[dict]:
+    # 权限代码用于授权判断，中文名称只用于界面展示；新增权限须同时补充这里与测试。
     labels = {"users.manage": "管理用户与角色", "catalog.manage": "管理基础资料",
               "inventory.view": "查看库存与入库单", "receipt.create": "创建入库单",
               "receipt.post": "确认入库", "receipt.reverse": "冲销已确认入库", "warehouse.manage": "管理仓库",
@@ -375,10 +376,32 @@ def list_permissions(_: dict = Depends(require("users.manage"))) -> list[dict]:
               "shipment.cancel": "取消出库草稿", "shipment.reverse": "冲销已确认出库",
               "sales_return.create": "创建销售退货单",
               "sales_return.post": "确认销售退货", "sales_return.cancel": "取消销售退货草稿",
-              "sales_return.reverse": "冲销已确认销售退货"}
-    labels["purchase_return.reverse"] = "冲销已确认采购退货"
+              "sales_return.reverse": "冲销已确认销售退货",
+              "bom.activate": "启用生产 BOM 版本", "bom.cancel": "取消生产 BOM 草稿",
+              "bom.create": "创建生产 BOM", "bom.retire": "停用生产 BOM 版本",
+              "finance.record": "登记收付款", "finance.reverse": "冲销收付款",
+              "finance.view": "查看应收应付",
+              "material_issue.cancel": "取消生产领料单", "material_issue.create": "创建生产领料单",
+              "material_issue.post": "确认生产领料",
+              "material_return.cancel": "取消生产退料单", "material_return.create": "创建生产退料单",
+              "material_return.post": "确认生产退料", "production.view": "查看生产业务",
+              "production_completion.cancel": "取消完工报工单",
+              "production_completion.create": "创建完工报工单",
+              "production_completion.inspect": "检验完工报工",
+              "production_completion.post": "确认完工入库",
+              "production_completion.reverse": "冲销已确认完工入库",
+              "production_cost.record": "登记生产成本",
+              "production_cost.reverse": "冲销生产成本记录",
+              "production_cost.view": "查看生产成本",
+              "purchase_return.cancel": "取消采购退货单",
+              "purchase_return.create": "创建采购退货单",
+              "purchase_return.post": "确认采购退货",
+              "purchase_return.reverse": "冲销已确认采购退货",
+              "work_order.cancel": "取消生产工单",
+              "work_order.create": "创建生产工单",
+              "work_order.release": "下达生产工单"}
     with connection() as db:
-        return [{"code": row[0], "label": labels.get(row[0], row[0])}
+        return [{"code": row[0], "label": labels.get(row[0], "未命名权限（请升级服务端）")}
                 for row in db.execute("SELECT code FROM permissions ORDER BY code")]
 
 
