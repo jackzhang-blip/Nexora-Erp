@@ -124,6 +124,10 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'receipts': return { method: 'GET', path: '/api/v1/receipts' }
     case 'createReceipt': return { method: 'POST', path: '/api/v1/receipts', body: payload }
     case 'postReceipt': return { method: 'POST', path: `/api/v1/receipts/${positiveId(payload, 'receiptId')}/post` }
+    case 'purchaseOrders': return { method: 'GET', path: '/api/v1/purchase-orders' }
+    case 'createPurchaseOrder': return { method: 'POST', path: '/api/v1/purchase-orders', body: payload }
+    case 'confirmPurchaseOrder': return { method: 'POST', path: `/api/v1/purchase-orders/${positiveId(payload, 'orderId')}/confirm` }
+    case 'cancelPurchaseOrder': return { method: 'POST', path: `/api/v1/purchase-orders/${positiveId(payload, 'orderId')}/cancel` }
     case 'transfers': return { method: 'GET', path: '/api/v1/transfers' }
     case 'createTransfer': return { method: 'POST', path: '/api/v1/transfers', body: payload }
     case 'postTransfer': return { method: 'POST', path: `/api/v1/transfers/${positiveId(payload, 'transferId')}/post` }

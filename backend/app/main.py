@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field, field_validator
 from .database import connection, migrate
 from .discovery import DiscoveryPublisher
 from .inventory import require_warehouse, router as inventory_router
+from .purchase import (linked_order_for_receipt, order_receipt_lines,
+                       router as purchase_router, update_order_receipt_status, validate_receipt_post)
 from .security import bearer, current_user, hash_password, require, token_hash, user_details, verify_password
 
 
@@ -57,6 +59,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="Nexora ERP API", version="0.1.0", lifespan=lifespan)
 app.include_router(inventory_router)
+app.include_router(purchase_router)
 
 
 class HealthResponse(BaseModel):
@@ -162,6 +165,7 @@ class ReceiptInput(BaseModel):
     supplier_id: int = Field(gt=0)
     # 老客户端省略仓库时继续入主仓库；新客户端必须让用户明确选择。
     warehouse_id: int = Field(default=1, gt=0)
+    purchase_order_id: int | None = Field(default=None, gt=0)
     reference: str = Field(default="", max_length=100)
     lines: list[ReceiptLineInput] = Field(min_length=1, max_length=100)
 
@@ -225,7 +229,8 @@ def receipt_data(db: sqlite3.Connection, receipt_id: int) -> dict:
         FROM receipt_lines rl JOIN materials m ON m.id = rl.material_id
         WHERE rl.receipt_id = ? ORDER BY rl.id
     """, (receipt_id,)).fetchall()
-    return {**dict(row), "lines": [dict(line) for line in lines]}
+    return {**dict(row), "purchase_order_id": linked_order_for_receipt(db, receipt_id),
+            "lines": [dict(line) for line in lines]}
 
 
 @app.get("/api/v1/health", response_model=HealthResponse, tags=["health"])
@@ -313,7 +318,9 @@ def list_permissions(_: dict = Depends(require("users.manage"))) -> list[dict]:
     labels = {"users.manage": "管理用户与角色", "catalog.manage": "管理基础资料",
               "inventory.view": "查看库存与入库单", "receipt.create": "创建入库单",
               "receipt.post": "确认入库", "warehouse.manage": "管理仓库",
-              "transfer.create": "创建调拨单", "transfer.post": "确认调拨"}
+              "transfer.create": "创建调拨单", "transfer.post": "确认调拨",
+              "purchase_order.create": "创建采购订单", "purchase_order.confirm": "确认采购订单",
+              "purchase_order.cancel": "取消采购订单"}
     with connection() as db:
         return [{"code": row[0], "label": labels.get(row[0], row[0])}
                 for row in db.execute("SELECT code FROM permissions ORDER BY code")]
@@ -471,14 +478,20 @@ def create_receipt(payload: ReceiptInput, user: dict = Depends(require("receipt.
         for line in payload.lines:
             if not db.execute("SELECT 1 FROM materials WHERE id = ?", (line.material_id,)).fetchone():
                 raise HTTPException(422, "物料不存在")
+        order_line_ids = (order_receipt_lines(db, payload.purchase_order_id, payload.supplier_id,
+            [(line.material_id, line.quantity) for line in payload.lines])
+            if payload.purchase_order_id is not None else {})
         cursor = db.execute("""
             INSERT INTO receipts(supplier_id, reference, created_by) VALUES (?, ?, ?)
         """, (payload.supplier_id, payload.reference.strip(), user["id"]))
         db.execute("INSERT INTO receipt_warehouses(receipt_id, warehouse_id) VALUES (?, ?)",
                    (cursor.lastrowid, payload.warehouse_id))
-        db.executemany("""
-            INSERT INTO receipt_lines(receipt_id, material_id, quantity) VALUES (?, ?, ?)
-        """, [(cursor.lastrowid, line.material_id, str(line.quantity)) for line in payload.lines])
+        for line in payload.lines:
+            line_cursor = db.execute("""INSERT INTO receipt_lines(receipt_id, material_id, quantity)
+                VALUES (?, ?, ?)""", (cursor.lastrowid, line.material_id, str(line.quantity)))
+            if payload.purchase_order_id is not None:
+                db.execute("INSERT INTO receipt_order_links(receipt_line_id, purchase_order_line_id) VALUES (?, ?)",
+                           (line_cursor.lastrowid, order_line_ids[line.material_id]))
         return receipt_data(db, cursor.lastrowid)
 
 
@@ -487,11 +500,12 @@ def post_receipt(receipt_id: int, user: dict = Depends(require("receipt.post")))
     with connection() as db:
         # 状态变更和库存流水写入使用同一个写事务，重复确认会返回冲突。
         db.execute("BEGIN IMMEDIATE")
-        row = db.execute("SELECT status FROM receipts WHERE id = ?", (receipt_id,)).fetchone()
+        row = db.execute("SELECT status, supplier_id FROM receipts WHERE id = ?", (receipt_id,)).fetchone()
         if not row:
             raise HTTPException(404, "入库单不存在")
         if row["status"] != "draft":
             raise HTTPException(409, "此入库单已经确认")
+        order_id = validate_receipt_post(db, receipt_id, row["supplier_id"])
         db.execute("""
             INSERT INTO stock_movements(warehouse_id, material_id, quantity, source_type,
                                         source_id, source_line_id, created_by)
@@ -503,6 +517,8 @@ def post_receipt(receipt_id: int, user: dict = Depends(require("receipt.post")))
             UPDATE receipts SET status = 'posted', posted_by = ?, posted_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (user["id"], receipt_id))
+        if order_id is not None:
+            update_order_receipt_status(db, order_id)
         return receipt_data(db, receipt_id)
 
 

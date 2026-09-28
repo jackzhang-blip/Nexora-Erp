@@ -25,6 +25,7 @@ export interface Receipt {
   id: number
   supplier_id: number
   supplier_name: string
+  purchase_order_id: number | null
   warehouse_id: number
   warehouse_name: string
   reference: string
@@ -35,6 +36,29 @@ export interface Receipt {
   created_at: string
   posted_at: string | null
   lines: ReceiptLine[]
+}
+// 已入库数量由服务端按确认单据汇总，前端只展示而不自行累计。
+export interface PurchaseOrderLine extends ReceiptLine {
+  unit_price: string
+  received_quantity: string
+  remaining_quantity: string
+  line_total: string
+}
+export interface PurchaseOrder {
+  id: number
+  supplier_id: number
+  supplier_name: string
+  reference: string
+  status: 'draft' | 'confirmed' | 'partially_received' | 'received' | 'cancelled'
+  created_by: number
+  created_by_name: string
+  confirmed_by: number | null
+  cancelled_by: number | null
+  created_at: string
+  confirmed_at: string | null
+  cancelled_at: string | null
+  lines: PurchaseOrderLine[]
+  total_amount: string
 }
 // 调拨单沿用单据的状态与明细结构，同时明确记录两个仓库。
 export interface Transfer extends Omit<Receipt, 'supplier_id' | 'supplier_name' | 'warehouse_id' | 'warehouse_name'> {
@@ -85,10 +109,14 @@ export interface ErpOperations {
   createWarehouse: { input: { code: string; name: string }; output: Warehouse }
   receipts: { input: undefined; output: Receipt[] }
   createReceipt: {
-    input: { supplier_id: number; warehouse_id: number; reference: string; lines: { material_id: number; quantity: string }[] }
+    input: { supplier_id: number; warehouse_id: number; purchase_order_id: number | null; reference: string; lines: { material_id: number; quantity: string }[] }
     output: Receipt
   }
   postReceipt: { input: { receiptId: number }; output: Receipt }
+  purchaseOrders: { input: undefined; output: PurchaseOrder[] }
+  createPurchaseOrder: { input: { supplier_id: number; reference: string; lines: { material_id: number; quantity: string; unit_price: string }[] }; output: PurchaseOrder }
+  confirmPurchaseOrder: { input: { orderId: number }; output: PurchaseOrder }
+  cancelPurchaseOrder: { input: { orderId: number }; output: PurchaseOrder }
   transfers: { input: undefined; output: Transfer[] }
   createTransfer: { input: { from_warehouse_id: number; to_warehouse_id: number; reference: string; lines: { material_id: number; quantity: string }[] }; output: Transfer }
   postTransfer: { input: { transferId: number }; output: Transfer }
