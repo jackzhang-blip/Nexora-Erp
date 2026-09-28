@@ -119,6 +119,39 @@ export interface ReceivablesPayables {
   unpriced_count: number
   entries: FinancialEntry[]
 }
+export interface FinanceAccount {
+  kind: 'receivable' | 'payable'
+  order_id: number
+  party_id: number
+  party_name: string
+  currency: 'CNY'
+  business_amount: string
+  settled_amount: string
+  outstanding_amount: string
+  source_keys: string[]
+}
+// 原收付款和冲销均为独立、不可编辑的记录，负金额表示退款或反向冲销。
+export interface PaymentRecord {
+  id: number
+  kind: 'receivable' | 'payable'
+  order_id: number
+  action: 'settlement' | 'refund' | 'reversal'
+  amount: string
+  reference: string
+  note: string
+  reverses_id: number | null
+  created_by: number
+  created_by_name: string
+  created_at: string
+  party_id: number
+  party_name: string
+  currency: 'CNY'
+}
+export interface FinanceOverview {
+  report: ReceivablesPayables
+  accounts: FinanceAccount[]
+  payments: PaymentRecord[]
+}
 // 销售订单剩余量由已确认的出库单计算，草稿不会预先扣减。
 export interface SalesOrderLine extends ReceiptLine {
   unit_price: string
@@ -277,6 +310,11 @@ export interface ErpOperations {
   postReceipt: { input: { receiptId: number }; output: Receipt }
   purchaseReturns: { input: undefined; output: PurchaseReturn[] }
   receivablesPayables: { input: undefined; output: ReceivablesPayables }
+  financeOverview: { input: undefined; output: FinanceOverview }
+  financeAccounts: { input: undefined; output: FinanceAccount[] }
+  paymentRecords: { input: undefined; output: PaymentRecord[] }
+  createPaymentRecord: { input: { kind: 'receivable' | 'payable'; order_id: number; action: 'settlement' | 'refund'; amount: string; reference: string; note: string }; output: PaymentRecord }
+  reversePaymentRecord: { input: { paymentId: number; reason: string }; output: PaymentRecord }
   createPurchaseReturn: { input: { receipt_id: number; reason: string; lines: { receipt_line_id: number; quantity: string }[] }; output: PurchaseReturn }
   postPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   cancelPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }

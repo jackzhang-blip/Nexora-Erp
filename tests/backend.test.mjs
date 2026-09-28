@@ -93,6 +93,16 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   // 财务只读查询同样通过主进程的固定路径，不能由页面拼装任意后端地址。
   await callBackend('receivablesPayables', undefined)
   assert.equal(calls[15].path, '/api/v1/finance/receivables-payables')
+  await callBackend('financeOverview', undefined)
+  assert.equal(calls[16].path, '/api/v1/finance/overview')
+  // 收付款与冲销只能调用固定接口，冲销编号在进入路径前校验。
+  await callBackend('financeAccounts', undefined)
+  assert.equal(calls[17].path, '/api/v1/finance/accounts')
+  await callBackend('paymentRecords', undefined)
+  assert.equal(calls[18].path, '/api/v1/finance/payment-records')
+  await callBackend('reversePaymentRecord', { paymentId: 11, reason: '误录' })
+  assert.equal(calls[19].path, '/api/v1/finance/payment-records/11/reverse')
+  await assert.rejects(callBackend('reversePaymentRecord', { paymentId: '../users', reason: '误录' }), /记录编号无效/)
   await assert.rejects(callBackend('confirmSalesOrder', { orderId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('updateRole', { code: '../users', label: '错误', permissions: [] }), /角色代码无效/)
   await assert.rejects(callBackend('postReceipt', { receiptId: '../users' }), /记录编号无效/)
