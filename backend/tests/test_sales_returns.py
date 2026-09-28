@@ -42,6 +42,7 @@ def test_sales_returns_partial_and_over_return(monkeypatch, tmp_path):
         payload = {"shipment_id": shipment_id, "warehouse_id": second, "reason": "客户退回",
                    "lines": [{"shipment_line_id": line_id, "quantity": "1.125"}]}
         assert client.post(f"{base}/sales-returns", headers=seller, json=payload).status_code == 409
+
         client.post(f"{base}/shipments/{shipment_id}/post", headers=warehouse)
         assert client.post(f"{base}/sales-returns", headers=viewer, json=payload).status_code == 403
         assert client.post(f"{base}/sales-returns", headers=seller, json={
@@ -85,3 +86,36 @@ def test_sales_returns_partial_and_over_return(monkeypatch, tmp_path):
         assert client.post(f"{base}/sales-returns/{rest}/post", headers=warehouse).status_code == 200
         assert client.get(f"{base}/shipments", headers=seller).json()[0]["lines"][0]["returnable_quantity"] == "0.000"
         assert client.post(f"{base}/sales-returns", headers=seller, json=payload).status_code == 409
+
+        # 已确认退货冲销保留原单与应收负向来源；库存不足时整笔失败。
+        reverse_url = f"{base}/sales-returns/{first_id}/reverse"
+        assert client.post(reverse_url, headers=seller, json={"reason": "录错"}).status_code == 403
+        assert client.post(reverse_url, headers=admin, json={"reason": "   "}).status_code == 422
+        transfer = client.post(f"{base}/transfers", headers=admin, json={
+            "from_warehouse_id": second, "to_warehouse_id": 1,
+            "lines": [{"material_id": material, "quantity": "2.125"}]}).json()["id"]
+        assert client.post(f"{base}/transfers/{transfer}/post", headers=admin).status_code == 200
+        assert client.post(reverse_url, headers=admin, json={"reason": "误退"}).status_code == 409
+        assert next(item for item in client.get(f"{base}/sales-returns", headers=admin).json()
+                    if item["id"] == first_id)["reversal_id"] is None
+        assert client.post(f"{base}/transfers/{transfer}/reverse", headers=admin,
+                           json={"reason": "恢复退回仓库存"}).status_code == 200
+        reversed_result = client.post(reverse_url, headers=admin, json={"reason": "误退"})
+        assert reversed_result.status_code == 201
+        assert reversed_result.json()["reversal_reason"] == "误退"
+        assert reversed_result.json()["reversed_by_name"] == "admin"
+        assert client.post(reverse_url, headers=admin, json={"reason": "重复"}).status_code == 409
+        assert client.get(f"{base}/stock?warehouse_id={second}", headers=admin).json()[0]["quantity"] == "1.000"
+        assert client.get(f"{base}/shipments", headers=seller).json()[0]["lines"][0]["returnable_quantity"] == "1.125"
+        entries = client.get(f"{base}/finance/receivables-payables", headers=admin).json()["entries"]
+        assert {item["source_type"] for item in entries} == {
+            "receipt", "shipment", "sales_return", "sales_return_reversal"}
+        assert sum(float(item["amount"]) for item in entries if item["kind"] == "receivable") == 11.25
+        movements = client.get(f"{base}/movements", headers=admin).json()
+        assert movements[0]["source_type"] == "sales_return_reversal"
+        assert movements[0]["sales_return_reversal_id"] == reversed_result.json()["reversal_id"]
+        corrected = client.post(f"{base}/sales-returns", headers=seller, json=payload)
+        assert corrected.status_code == 201
+        assert client.post(f"{base}/sales-returns/{corrected.json()['id']}/post",
+                           headers=warehouse).status_code == 200
+        assert client.get(f"{base}/shipments", headers=seller).json()[0]["lines"][0]["returnable_quantity"] == "0.000"

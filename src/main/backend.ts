@@ -202,6 +202,11 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'createSalesReturn': return { method: 'POST', path: '/api/v1/sales-returns', body: payload }
     case 'postSalesReturn': return { method: 'POST', path: `/api/v1/sales-returns/${positiveId(payload, 'returnId')}/post` }
     case 'cancelSalesReturn': return { method: 'POST', path: `/api/v1/sales-returns/${positiveId(payload, 'returnId')}/cancel` }
+    case 'reverseSalesReturn': {
+      const returnId = positiveId(payload, 'returnId')
+      const fields = payload as ErpOperations['reverseSalesReturn']['input']
+      return { method: 'POST', path: `/api/v1/sales-returns/${returnId}/reverse`, body: { reason: fields.reason } }
+    }
     case 'transfers': return { method: 'GET', path: '/api/v1/transfers' }
     case 'createTransfer': return { method: 'POST', path: '/api/v1/transfers', body: payload }
     case 'postTransfer': return { method: 'POST', path: `/api/v1/transfers/${positiveId(payload, 'transferId')}/post` }
