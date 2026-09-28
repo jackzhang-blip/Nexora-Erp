@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 7:
+        if version > 8:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -340,3 +340,37 @@ def migrate() -> None:
                            [(role, permission) for role, permissions in grants.items()
                             for permission in permissions])
             db.execute("PRAGMA user_version = 7")
+        if version < 8:
+            # 退货单关联原出库明细；保留原负库存流水，确认退货时另记正向流水。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE sales_returns (
+                id INTEGER PRIMARY KEY,
+                shipment_id INTEGER NOT NULL REFERENCES shipments(id),
+                warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+                reason TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'posted', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                posted_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                posted_at TEXT,
+                cancelled_at TEXT
+            )""")
+            db.execute("""CREATE TABLE sales_return_lines (
+                id INTEGER PRIMARY KEY,
+                sales_return_id INTEGER NOT NULL REFERENCES sales_returns(id),
+                shipment_line_id INTEGER NOT NULL REFERENCES shipment_lines(id),
+                quantity TEXT NOT NULL,
+                UNIQUE (sales_return_id, shipment_line_id)
+            )""")
+            db.execute("CREATE INDEX sales_return_lines_shipment ON sales_return_lines(shipment_line_id)")
+            db.executemany("INSERT INTO permissions(code) VALUES (?)", [(code,) for code in (
+                "sales_return.create", "sales_return.post", "sales_return.cancel")])
+            grants = {"admin": ("sales_return.create", "sales_return.post", "sales_return.cancel"),
+                      "seller": ("sales_return.create", "sales_return.cancel"),
+                      "warehouse": ("sales_return.create", "sales_return.post", "sales_return.cancel")}
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, permission) for role, permissions in grants.items()
+                            for permission in permissions])
+            db.execute("PRAGMA user_version = 8")

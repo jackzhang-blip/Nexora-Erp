@@ -138,6 +138,11 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'createShipment': return { method: 'POST', path: '/api/v1/shipments', body: payload }
     case 'postShipment': return { method: 'POST', path: `/api/v1/shipments/${positiveId(payload, 'shipmentId')}/post` }
     case 'cancelShipment': return { method: 'POST', path: `/api/v1/shipments/${positiveId(payload, 'shipmentId')}/cancel` }
+    // 退货只能调用固定路径，单据编号先校验再拼接，避免渲染层指定任意 URL。
+    case 'salesReturns': return { method: 'GET', path: '/api/v1/sales-returns' }
+    case 'createSalesReturn': return { method: 'POST', path: '/api/v1/sales-returns', body: payload }
+    case 'postSalesReturn': return { method: 'POST', path: `/api/v1/sales-returns/${positiveId(payload, 'returnId')}/post` }
+    case 'cancelSalesReturn': return { method: 'POST', path: `/api/v1/sales-returns/${positiveId(payload, 'returnId')}/cancel` }
     case 'transfers': return { method: 'GET', path: '/api/v1/transfers' }
     case 'createTransfer': return { method: 'POST', path: '/api/v1/transfers', body: payload }
     case 'postTransfer': return { method: 'POST', path: `/api/v1/transfers/${positiveId(payload, 'transferId')}/post` }

@@ -65,6 +65,8 @@ export interface PurchaseOrder {
 export interface SalesOrderLine extends ReceiptLine {
   unit_price: string
   shipped_quantity: string
+  returned_quantity: string
+  net_delivered_quantity: string
   remaining_quantity: string
   line_total: string
 }
@@ -99,7 +101,36 @@ export interface Shipment {
   created_at: string
   posted_at: string | null
   cancelled_at: string | null
-  lines: ReceiptLine[]
+  lines: ShipmentLine[]
+}
+export interface ShipmentLine extends ReceiptLine {
+  returned_quantity: string
+  returnable_quantity: string
+}
+// 退货明细固定关联原出库行，金额沿用原销售单价，由服务端计算。
+export interface SalesReturnLine extends ReceiptLine {
+  shipment_line_id: number
+  unit_price: string
+  line_total: string
+}
+export interface SalesReturn {
+  id: number
+  shipment_id: number
+  sales_order_id: number
+  warehouse_id: number
+  warehouse_name: string
+  customer_name: string
+  reason: string
+  status: 'draft' | 'posted' | 'cancelled'
+  created_by: number
+  created_by_name: string
+  posted_by: number | null
+  cancelled_by: number | null
+  created_at: string
+  posted_at: string | null
+  cancelled_at: string | null
+  lines: SalesReturnLine[]
+  total_amount: string
 }
 // 调拨单沿用单据的状态与明细结构，同时明确记录两个仓库。
 export interface Transfer extends Omit<Receipt, 'supplier_id' | 'supplier_name' | 'warehouse_id' | 'warehouse_name'> {
@@ -143,13 +174,14 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'shipment'
+  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'shipment' | 'sales_return'
   source_id: number
   source_line_id: number
   receipt_id: number | null
   transfer_id: number | null
   stocktake_id: number | null
   shipment_id: number | null
+  sales_return_id: number | null
   created_by: number | null
   created_at: string
 }
@@ -196,6 +228,10 @@ export interface ErpOperations {
   createShipment: { input: { sales_order_id: number; warehouse_id: number; reference: string; lines: { material_id: number; quantity: string }[] }; output: Shipment }
   postShipment: { input: { shipmentId: number }; output: Shipment }
   cancelShipment: { input: { shipmentId: number }; output: Shipment }
+  salesReturns: { input: undefined; output: SalesReturn[] }
+  createSalesReturn: { input: { shipment_id: number; warehouse_id: number; reason: string; lines: { shipment_line_id: number; quantity: string }[] }; output: SalesReturn }
+  postSalesReturn: { input: { returnId: number }; output: SalesReturn }
+  cancelSalesReturn: { input: { returnId: number }; output: SalesReturn }
   transfers: { input: undefined; output: Transfer[] }
   createTransfer: { input: { from_warehouse_id: number; to_warehouse_id: number; reference: string; lines: { material_id: number; quantity: string }[] }; output: Transfer }
   postTransfer: { input: { transferId: number }; output: Transfer }
