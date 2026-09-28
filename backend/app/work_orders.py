@@ -40,6 +40,23 @@ def issued_quantity(db: sqlite3.Connection, work_order_line_id: int) -> Decimal:
     return issued - returned
 
 
+def posted_completion_totals(db: sqlite3.Connection, order_id: int) -> tuple[Decimal, Decimal, Decimal]:
+    rows = db.execute("""SELECT reported_quantity, accepted_quantity, rejected_quantity
+        FROM production_completions WHERE work_order_id = ? AND status = 'posted'""", (order_id,))
+    totals = [Decimal(0), Decimal(0), Decimal(0)]
+    for row in rows:
+        for index in range(3):
+            totals[index] += Decimal(row[index])
+    return totals[0], totals[1], totals[2]
+
+
+def required_for_output(required_quantity: Decimal, target_quantity: Decimal,
+                        reported_quantity: Decimal) -> Decimal:
+    # 分批报工按累计产出向上取整需料，最后一批不会突破工单原需料快照。
+    return (required_quantity * reported_quantity / target_quantity).quantize(
+        Decimal("0.001"), rounding=ROUND_CEILING)
+
+
 def work_order_data(db: sqlite3.Connection, order_id: int) -> dict:
     row = db.execute("""SELECT wo.*, b.version AS bom_version,
         b.product_material_id, m.sku AS product_sku, m.name AS product_name,
@@ -59,7 +76,10 @@ def work_order_data(db: sqlite3.Connection, order_id: int) -> dict:
         issued = issued_quantity(db, line["id"])
         details.append({**dict(line), "issued_quantity": str(issued),
                         "remaining_quantity": str(Decimal(line["required_quantity"]) - issued)})
-    return {**dict(row), "lines": details}
+    reported, accepted, rejected = posted_completion_totals(db, order_id)
+    return {**dict(row), "lines": details, "reported_quantity": str(reported),
+            "accepted_quantity": str(accepted), "rejected_quantity": str(rejected),
+            "remaining_output_quantity": str(Decimal(row["target_quantity"]) - reported)}
 
 
 @router.get("/work-orders")

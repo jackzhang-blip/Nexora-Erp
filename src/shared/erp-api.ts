@@ -204,15 +204,21 @@ export interface WorkOrder {
   warehouse_id: number
   warehouse_name: string
   target_quantity: string
+  reported_quantity: string
+  accepted_quantity: string
+  rejected_quantity: string
+  remaining_output_quantity: string
   reference: string
   note: string
   status: 'draft' | 'released' | 'in_progress' | 'completed' | 'cancelled'
   created_by: number
   created_by_name: string
   released_by: number | null
+  completed_by: number | null
   cancelled_by: number | null
   created_at: string
   released_at: string | null
+  completed_at: string | null
   cancelled_at: string | null
   lines: WorkOrderLine[]
 }
@@ -271,6 +277,33 @@ export interface MaterialReturn {
   posted_at: string | null
   cancelled_at: string | null
   lines: MaterialReturnLine[]
+}
+// 完工单记录报工与质检结果；确认时只有合格数量进入成品仓库。
+export interface ProductionCompletion {
+  id: number
+  work_order_id: number
+  warehouse_id: number
+  warehouse_name: string
+  product_material_id: number
+  product_sku: string
+  product_name: string
+  product_unit: string
+  reported_quantity: string
+  accepted_quantity: string | null
+  rejected_quantity: string | null
+  reference: string
+  qc_note: string
+  status: 'draft' | 'inspected' | 'posted' | 'cancelled'
+  created_by: number
+  created_by_name: string
+  inspected_by: number | null
+  inspected_by_name: string | null
+  posted_by: number | null
+  cancelled_by: number | null
+  created_at: string
+  inspected_at: string | null
+  posted_at: string | null
+  cancelled_at: string | null
 }
 // 销售订单剩余量由已确认的出库单计算，草稿不会预先扣减。
 export interface SalesOrderLine extends ReceiptLine {
@@ -385,7 +418,7 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'shipment' | 'sales_return' | 'purchase_return' | 'material_issue' | 'material_return'
+  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'stocktake' | 'shipment' | 'sales_return' | 'purchase_return' | 'material_issue' | 'material_return' | 'production_completion'
   source_id: number
   source_line_id: number
   receipt_id: number | null
@@ -396,6 +429,7 @@ export interface Movement {
   purchase_return_id: number | null
   material_issue_id: number | null
   material_return_id: number | null
+  production_completion_id: number | null
   created_by: number | null
   created_at: string
 }
@@ -454,6 +488,11 @@ export interface ErpOperations {
   createMaterialReturn: { input: { material_issue_id: number; reason: string; lines: { material_issue_line_id: number; quantity: string }[] }; output: MaterialReturn }
   postMaterialReturn: { input: { returnId: number }; output: MaterialReturn }
   cancelMaterialReturn: { input: { returnId: number }; output: MaterialReturn }
+  productionCompletions: { input: undefined; output: ProductionCompletion[] }
+  createProductionCompletion: { input: { work_order_id: number; reported_quantity: string; reference: string }; output: ProductionCompletion }
+  inspectProductionCompletion: { input: { completionId: number; accepted_quantity: string; qc_note: string }; output: ProductionCompletion }
+  postProductionCompletion: { input: { completionId: number }; output: ProductionCompletion }
+  cancelProductionCompletion: { input: { completionId: number }; output: ProductionCompletion }
   createPurchaseReturn: { input: { receipt_id: number; reason: string; lines: { receipt_line_id: number; quantity: string }[] }; output: PurchaseReturn }
   postPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   cancelPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }

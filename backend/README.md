@@ -43,7 +43,7 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 ## 生产工单
 
-`POST /api/v1/work-orders` 使用启用的 BOM、目标产量及目标仓库创建草稿。服务端在写事务内固定 BOM 版本引用，并按目标产量与 BOM 基准产量计算每个组件的需求，向上取整到库存的三位精度。`GET /api/v1/work-orders` 返回全部工单、需料快照、已领及剩余数量；`POST /api/v1/work-orders/{id}/release` 下达草稿，BOM 已停用时拒绝下达，须取消草稿并按新版本建单；`/cancel` 可取消未发料的草稿或已下达工单。旧工单在 BOM 换版后仍保留原组件和数量。查看要求 `production.view`，创建、下达、取消分别要求 `work_order.create`、`work_order.release`、`work_order.cancel`；管理员与生产计划员默认拥有，仓库员可查看。工单创建和下达不锁定库存；目标仓库供后续完工入库使用。
+`POST /api/v1/work-orders` 使用启用的 BOM、目标报工数量及目标仓库创建草稿。服务端在写事务内固定 BOM 版本引用，并按目标数量与 BOM 基准产量计算每个组件的需求，向上取整到库存的三位精度。`GET /api/v1/work-orders` 返回工单、需料快照、净领料与剩余数量，以及已报工、合格、不合格和待报工数量；`POST /api/v1/work-orders/{id}/release` 下达草稿，BOM 已停用时拒绝下达，须取消草稿并按新版本建单；`/cancel` 可取消未发料的草稿或已下达工单。旧工单在 BOM 换版后仍保留原组件和数量。查看要求 `production.view`，创建、下达、取消分别要求 `work_order.create`、`work_order.release`、`work_order.cancel`；管理员与生产计划员默认拥有，仓库员可查看。工单创建和下达不锁定库存；目标仓库用于合格成品入库。
 
 ## 生产领料
 
@@ -51,7 +51,11 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 ## 生产退料更正
 
-`POST /api/v1/material-returns` 指定生产中工单的已确认领料单、退料原因及原领料明细数量建立草稿；`GET /api/v1/material-returns` 查看记录。`POST /api/v1/material-returns/{id}/post` 在写事务中重新核对累计可退数量和工单状态，向原领料仓库写入带退料单、明细和确认人来源的正向库存流水。工单“已领”和“剩余”按已确认领料减已确认退料计算，退回后可重新领用。多张草稿可以并存，但后确认的草稿若超量会返回 409，整单不入库。`/cancel` 仅取消草稿，已确认退料保留记录。查看要求 `production.view`；创建、确认、取消分别要求 `material_return.create`、`material_return.post`、`material_return.cancel`。管理员可全部操作；计划员可创建和取消，仓库员可创建、确认和取消。退料由操作员按实际退回事实登记，当前不含生产现场实物核验。
+`POST /api/v1/material-returns` 指定生产中工单的已确认领料单、退料原因及原领料明细数量建立草稿；`GET /api/v1/material-returns` 查看记录。`POST /api/v1/material-returns/{id}/post` 在写事务中重新核对累计可退数量和工单状态，向原领料仓库写入带退料单、明细和确认人来源的正向库存流水。工单“已领”和“剩余”按已确认领料减已确认退料计算，退回后可重新领用；已用于确认报工的最低组件数量不能退回。多张草稿可以并存，但后确认的草稿若超量会返回 409，整单不入库。`/cancel` 仅取消草稿，已确认退料保留记录。查看要求 `production.view`；创建、确认、取消分别要求 `material_return.create`、`material_return.post`、`material_return.cancel`。管理员可全部操作；计划员可创建和取消，仓库员可创建、确认和取消。退料由操作员按实际退回事实登记，当前不含生产现场实物核验。
+
+## 完工报工与基础质检
+
+`POST /api/v1/production-completions` 为生产中的工单建立分批报工草稿，保存本批报工数量及可选参考号；`GET /api/v1/production-completions` 查看记录。`POST /api/v1/production-completions/{id}/inspect` 由有质检权限的操作员填写合格数量及质检说明，不合格数量由报工数减合格数计算。`/post` 仅确认已质检单据，在同一写事务中核对累计已确认报工不超过工单目标，并按累计报工数量核对每个组件的净领料是否达到 BOM 快照比例；仅合格品生成进入工单目标仓库的正向库存流水，全部目标报工确认后工单变为“已完工”。两个草稿可并存，但后确认的草稿若超出目标会返回 409。`/cancel` 可取消草稿或已质检但未入库的单据，已确认入库不能直接取消。查看要求 `production.view`；创建、质检、确认、取消分别要求 `production_completion.create`、`production_completion.inspect`、`production_completion.post`、`production_completion.cancel`。管理员有全部权限；计划员可创建和取消，仓库员可质检与确认。目标为报工总数，包含质检不合格数；不合格品不进入可用库存，返工、已确认完工的库存冲销和成本归集仍待实现。这是记录数量与说明的基础质检，没有批次检验标准或现场实物核验。
 
 ## 多仓库库存与调拨
 
@@ -102,4 +106,4 @@ PYTHONPATH=backend python3 -m app.backup restore --archive /path/to/instance.nex
 PYTHONPATH=backend python3 -m pytest backend/tests -q
 ```
 
-测试覆盖身份持久化、远程首次管理员抢注拒绝、角色越权拒绝、账号停用与会话失效、自定义角色授权、最后管理员保护、旧数据库迁移、采购订单分批入库与超量拦截、采购退货累计数量与库存不足回滚、销售订单分批出库与库存不足拦截、销售退货累计数量与权限、应收应付来源和角色授权、收付款限额与冲销及退货退款、BOM 版本与循环引用、工单需料快照与下达状态、领料超量及库存不足回滚、退料累计上限及再次领用、多仓库调拨与库存不足拦截、盘点快照与差异流水、入库只确认一次、库存流水、成组备份恢复、发现广播与系统服务安装升级回退。
+测试覆盖身份持久化、远程首次管理员抢注拒绝、角色越权拒绝、账号停用与会话失效、自定义角色授权、最后管理员保护、旧数据库迁移、采购订单分批入库与超量拦截、采购退货累计数量与库存不足回滚、销售订单分批出库与库存不足拦截、销售退货累计数量与权限、应收应付来源和角色授权、收付款限额与冲销及退货退款、BOM 版本与循环引用、工单需料快照与下达状态、领料超量及库存不足回滚、退料累计上限及再次领用、分批报工的质检门槛、需料下限与成品入库来源、多仓库调拨与库存不足拦截、盘点快照与差异流水、入库只确认一次、库存流水、成组备份恢复、发现广播与系统服务安装升级回退。
