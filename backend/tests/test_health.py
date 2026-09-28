@@ -73,7 +73,7 @@ def test_existing_v1_database_keeps_users(monkeypatch, tmp_path):
         db.execute("PRAGMA user_version = 1")
     migrate()
     with sqlite3.connect(database) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 10
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 11
         assert db.execute("SELECT username, password_hash, is_active FROM users WHERE id = 7").fetchone() == (
             "existing", "unchanged", 1)
         assert db.execute("SELECT COUNT(*) FROM server_identity").fetchone()[0] == 1

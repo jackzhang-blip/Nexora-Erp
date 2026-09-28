@@ -37,7 +37,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 10:
+        if version > 11:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -416,3 +416,27 @@ def migrate() -> None:
             db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
                            [(role, "finance.view") for role in ("admin", "finance")])
             db.execute("PRAGMA user_version = 10")
+        if version < 11:
+            # 收付款只追加记录；冲销另记反向行，不能删除或改写原付款。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE payment_records (
+                id INTEGER PRIMARY KEY,
+                kind TEXT NOT NULL CHECK (kind IN ('receivable', 'payable')),
+                order_id INTEGER NOT NULL,
+                action TEXT NOT NULL CHECK (action IN ('settlement', 'refund', 'reversal')),
+                amount TEXT NOT NULL,
+                reference TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                reverses_id INTEGER UNIQUE REFERENCES payment_records(id),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.execute("""CREATE UNIQUE INDEX payment_records_reference
+                ON payment_records(kind, order_id, action, reference) WHERE action <> 'reversal'""")
+            db.executemany("INSERT INTO permissions(code) VALUES (?)", [(code,) for code in (
+                "finance.record", "finance.reverse")])
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, permission) for role in ("admin", "finance")
+                            for permission in ("finance.record", "finance.reverse")])
+            db.execute("PRAGMA user_version = 11")
