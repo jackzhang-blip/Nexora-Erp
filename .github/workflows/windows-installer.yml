@@ -1,8 +1,11 @@
 name: Windows 内部安装包
 on:
   workflow_dispatch:
+  # 来自个人分叉的 PR 也必须先在 Windows 上完成测试，再进入主分支。
+  pull_request:
+    branches: [main]
   push:
-    # 需求分支先完成 Windows 打包检查，避免只在合并后发现平台问题。
+    # 本仓库需求分支和主分支的直接推送同样接受检查。
     branches: [main, 'codex/**']
 
 jobs:
@@ -25,8 +28,12 @@ jobs:
         run: |
           $env:PYTHONPATH = 'backend'
           python -m pytest backend/tests -q
-          node --experimental-strip-types --test tests/backend.test.mjs
-          node --test tests/branding.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # PowerShell 不替原生命令展开通配符，显式枚举全部桌面测试，覆盖发现和重连行为。
+          $desktopTests = @(Get-ChildItem tests -Filter '*.test.mjs' -File | ForEach-Object { $_.FullName })
+          if ($desktopTests.Count -eq 0) { throw '未找到桌面单元测试' }
+          node --experimental-strip-types --test $desktopTests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         shell: pwsh
       - name: 生成 Windows 安装包
         run: npm run dist:win
