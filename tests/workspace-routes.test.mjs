@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import {
-  canVisitRoute, resolveWorkspaceRoute, routeByKey, visibleRouteGroups, workspaceRoutes
+  canVisitRoute, nextExpandedGroup, resolveWorkspaceRoute, routeByKey, visibleRouteGroups, workspaceRoutes
 } from '../src/renderer/src/workspace-routes.ts'
 
 test('每个工作台页面只有一个路由，且都对应实际页面', () => {
@@ -39,4 +39,14 @@ test('权限被撤销后，当前地址也必须重新核对', () => {
   assert.equal(canVisitRoute(route, ['finance.view']), true)
   assert.equal(canVisitRoute(route, []), false)
   assert.equal(resolveWorkspaceRoute('#/workspace/finance', []).key, 'settings')
+})
+
+test('分类默认收起，同一时间只能展开一个分类', () => {
+  let expanded = null
+  expanded = nextExpandedGroup(expanded, 'warehouse')
+  assert.equal(expanded, 'warehouse')
+  expanded = nextExpandedGroup(expanded, 'finance')
+  assert.equal(expanded, 'finance')
+  expanded = nextExpandedGroup(expanded, 'finance')
+  assert.equal(expanded, null)
 })

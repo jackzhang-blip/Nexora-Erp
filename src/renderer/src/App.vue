@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NButton, NConfigProvider, dateZhCN, zhCN } from 'naive-ui'
 import type { GlobalThemeOverrides } from 'naive-ui'
 // 应用内品牌标记与安装包图标共用第一版 Nexus + Aurora 标志。
@@ -18,10 +18,11 @@ import IconArchiveLine from '~icons/ri/archive-line'
 import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
+import IconArrowDownSLine from '~icons/ri/arrow-down-s-line'
 import type { Bom, Customer, FinanceAccount, FinancialEntry, Material, MaterialIssue, MaterialReturn, Movement, PaymentRecord, Permission, ProductionCompletion, ProductionCostReport, PurchaseOrder, PurchaseReturn, ReceivablesPayables, Receipt, Role, SalesOrder, SalesReturn, Shipment, Stock, Stocktake, Supplier, Transfer, User, Warehouse, WorkOrder } from '../../shared/erp-api'
 import type { ConnectionCandidate, DiscoveryResult, HostStatus, ServerProfile } from '../../shared/desktop-api'
-import { canVisitRoute, resolveWorkspaceRoute, routeByKey, visibleRouteGroups } from './workspace-routes'
-import type { WorkspaceRouteKey } from './workspace-routes'
+import { canVisitRoute, nextExpandedGroup, resolveWorkspaceRoute, routeByKey, visibleRouteGroups } from './workspace-routes'
+import type { WorkspaceRouteGroupKey, WorkspaceRouteKey } from './workspace-routes'
 
 type Screen = 'loading' | 'welcome' | 'manual' | 'scan' | 'results' | 'create' | 'trust' | 'ready' | 'offline' | 'setup' | 'login' | 'app'
 
@@ -32,6 +33,8 @@ const naiveThemeOverrides: GlobalThemeOverrides = {
 
 const screen = ref<Screen>('loading')
 const activeTab = ref<WorkspaceRouteKey>('stock')
+// 日常默认全部收起，点击分类时最多展开一个。
+const expandedGroupKey = ref<WorkspaceRouteGroupKey | null>(null)
 const version = ref('')
 const notice = ref('')
 const error = ref('')
@@ -139,8 +142,20 @@ const visibleGroups = computed(() => visibleRouteGroups(user.value?.permissions 
   ...group, routes: group.routes.map(route => ({ ...route, icon: routeIcons[route.icon] }))
 })))
 const visibleTabs = computed(() => visibleGroups.value.flatMap(group => group.routes))
+watch(screen, current => {
+  // 再次登录时从全部收起开始，不保留上个账号的侧栏状态。
+  if (current !== 'app') expandedGroupKey.value = null
+})
+watch(visibleGroups, groups => {
+  // 当前账号失去某分类的查看权限后，清除其展开状态。
+  if (expandedGroupKey.value && !groups.some(group => group.key === expandedGroupKey.value)) expandedGroupKey.value = null
+})
 // 用户切换或权限被撤销时，页面内容必须和入口使用同一条权限规则。
 const activeRouteAllowed = computed(() => user.value !== null && canVisitRoute(routeByKey(activeTab.value), user.value.permissions))
+
+function toggleRouteGroup(key: WorkspaceRouteGroupKey): void {
+  expandedGroupKey.value = nextExpandedGroup(expandedGroupKey.value, key)
+}
 
 function syncWorkspaceRoute(): void {
   if (screen.value !== 'app' || !user.value) return
@@ -1226,8 +1241,10 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
       <div class="brand"><span class="brand-mark"><img :src="nexoraLogo" alt="" /></span><div><strong>NEXORA</strong><small>联光 ERP · {{ server?.isLocal ? '本机服务' : '团队工作台' }}</small></div></div>
       <div v-if="screen === 'app'" class="side-group">
         <div v-for="group in visibleGroups" :key="group.key" class="nav-group">
-          <p class="side-label">{{ group.label }}</p>
-          <button v-for="item in group.routes" :key="item.key" class="nav-item" :class="{ active: activeTab === item.key }" type="button" :aria-current="activeTab === item.key ? 'page' : undefined" @click="navigateToRoute(item.key)"><component :is="item.icon" class="nav-icon" aria-hidden="true" />{{ item.label }}</button>
+          <button class="side-category" :class="{ current: group.routes.some(item => item.key === activeTab) }" type="button" :aria-expanded="expandedGroupKey === group.key" :aria-controls="`route-group-${group.key}`" @click="toggleRouteGroup(group.key)">{{ group.label }}<IconArrowDownSLine class="category-chevron" :class="{ expanded: expandedGroupKey === group.key }" aria-hidden="true" /></button>
+          <div v-show="expandedGroupKey === group.key" :id="`route-group-${group.key}`" class="nav-list">
+            <button v-for="item in group.routes" :key="item.key" class="nav-item" :class="{ active: activeTab === item.key }" type="button" :aria-current="activeTab === item.key ? 'page' : undefined" @click="navigateToRoute(item.key)"><component :is="item.icon" class="nav-icon" aria-hidden="true" />{{ item.label }}</button>
+          </div>
         </div>
       </div>
       <div class="sidebar-bottom"><span class="status-dot"></span> {{ server?.name || 'Nexora ERP' }} <small v-if="version">v{{ version }}</small></div>

@@ -53,7 +53,13 @@ export const workspaceRouteGroups = [
 
 export type WorkspaceRoute = (typeof workspaceRouteGroups)[number]['routes'][number]
 export type WorkspaceRouteKey = WorkspaceRoute['key']
+export type WorkspaceRouteGroupKey = (typeof workspaceRouteGroups)[number]['key']
 export const workspaceRoutes: readonly WorkspaceRoute[] = workspaceRouteGroups.flatMap<WorkspaceRoute>(group => group.routes)
+
+export function nextExpandedGroup(current: WorkspaceRouteGroupKey | null, selected: WorkspaceRouteGroupKey): WorkspaceRouteGroupKey | null {
+  // 只保存一个展开项；再次选择同一分类时恢复全部收起状态。
+  return current === selected ? null : selected
+}
 
 export function canVisitRoute(route: WorkspaceRoute, permissions: readonly string[]): boolean {
   return route.permission === null || permissions.includes(route.permission)

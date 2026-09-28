@@ -29,8 +29,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .brand strong { display: block; font-size: 17px; }
 .brand small { display: block; margin-top: 4px; color: #aebfd5; letter-spacing: .03em; font-size: 11px; }
 .side-group { min-height: 0; flex: 1; margin-top: 28px; overflow-y: auto; }
-.nav-group + .nav-group { margin-top: 20px; }
-.side-label { padding: 0 15px; color: #8da1bb; font-size: 11px; font-weight: 700; letter-spacing: .14em; }
+.nav-group + .nav-group { margin-top: 7px; }
+/* 分类按钮和页面按钮分层，收起时仍能辨认当前页面所属模块。 */
+.side-category { display: flex; align-items: center; justify-content: space-between; width: 100%; border: 0; border-radius: 9px; padding: 11px 13px; background: none; color: #aabbd2; text-align: left; font-size: 13px; font-weight: 700; }
+.side-category:hover, .side-category[aria-expanded="true"] { background: #1d304f; color: #fff; }
+.side-category.current { color: #8de2d8; }
+.category-chevron { width: 18px; height: 18px; flex: none; transition: transform .18s ease; }
+.category-chevron.expanded { transform: rotate(180deg); }
+.nav-list { padding-left: 8px; }
 /* 导航图标只辅助文字，固定尺寸以免不同 SVG 改变侧栏行高。 */
 .nav-item { display: flex; align-items: center; gap: 11px; width: 100%; margin: 5px 0; border: 0; border-radius: 9px; padding: 13px 15px; background: none; color: #b8c6d9; text-align: left; font-size: 14px; }
 .nav-icon { width: 18px; height: 18px; flex: none; }
@@ -236,10 +242,12 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
   .sidebar { position: static; height: auto; padding: 15px 18px; }
   .brand { padding: 0; }
   .side-group { display: flex; flex: none; gap: 12px; margin-top: 16px; overflow-x: auto; }
-  .nav-group { display: flex; gap: 5px; }
+  .nav-group { flex: none; }
   .nav-group + .nav-group { margin-top: 0; }
-  .side-label, .sidebar-bottom { display: none; }
-  .nav-item { width: auto; margin: 0; white-space: nowrap; }
+  .side-category { white-space: nowrap; }
+  .sidebar-bottom { display: none; }
+  .nav-list { padding-left: 0; }
+  .nav-item { white-space: nowrap; }
   .content { padding: 26px 17px 50px; }
   .topbar { align-items: flex-start; }
   .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
