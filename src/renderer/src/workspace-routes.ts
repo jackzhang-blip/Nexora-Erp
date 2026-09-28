@@ -46,7 +46,9 @@ export const workspaceRouteGroups = [
     { key: 'productionCosts', path: '/workspace/production-costs', label: '生产成本', permission: 'production_cost.view', icon: 'file' }
   ] },
   { key: 'system', label: '系统管理', routes: [
-    { key: 'users', path: '/workspace/users', label: '用户权限', permission: 'users.manage', icon: 'team' },
+    // 两个入口沿用同一服务端管理权限，页面操作仍由服务端逐项校验。
+    { key: 'users', path: '/workspace/users', label: '用户管理', permission: 'users.manage', icon: 'team' },
+    { key: 'roles', path: '/workspace/roles', label: '权限管理', permission: 'users.manage', icon: 'settings' },
     { key: 'settings', path: '/workspace/settings', label: '连接与服务', permission: null, icon: 'settings' }
   ] }
 ] as const satisfies readonly RouteGroup[]

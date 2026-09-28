@@ -10,7 +10,7 @@ test('每个工作台页面只有一个路由，且都对应实际页面', () =>
   const pageKeys = [...app.matchAll(/<section v-if="activeTab === '([^']+)'/g)].map(match => match[1])
 
   // 路由登记与页面必须同步，避免出现可以点击却无法打开的入口。
-  assert.equal(workspaceRoutes.length, 19)
+  assert.equal(workspaceRoutes.length, 20)
   assert.deepEqual(new Set(workspaceRoutes.map(route => route.key)), new Set(pageKeys))
   assert.equal(new Set(workspaceRoutes.map(route => route.path)).size, workspaceRoutes.length)
   assert.ok(workspaceRoutes.every(route => route.path.startsWith('/workspace/')))
@@ -30,8 +30,27 @@ test('直接访问未授权或未知地址时回退到可访问页面', () => {
   const permissions = ['sales.view']
   assert.equal(resolveWorkspaceRoute('#/workspace/shipments', permissions).key, 'shipments')
   assert.equal(resolveWorkspaceRoute('#/workspace/users', permissions).key, 'sales')
+  assert.equal(resolveWorkspaceRoute('#/workspace/roles', permissions).key, 'sales')
   assert.equal(resolveWorkspaceRoute('#/workspace/missing', permissions).key, 'sales')
   assert.equal(resolveWorkspaceRoute('#/workspace/stock', []).key, 'settings')
+})
+
+test('用户管理与权限管理有独立入口，且都要求用户管理权限', () => {
+  const routes = visibleRouteGroups(['users.manage']).flatMap(group => group.routes)
+  assert.deepEqual(routes.filter(route => ['users', 'roles'].includes(route.key)).map(route => route.label),
+    ['用户管理', '权限管理'])
+  assert.equal(resolveWorkspaceRoute('#/workspace/roles', ['users.manage']).key, 'roles')
+
+  const app = readFileSync(new URL('../src/renderer/src/App.vue', import.meta.url), 'utf8')
+  const userPage = app.match(/<section v-if="activeTab === 'users'[^>]*>([\s\S]*?)<\/section>/)?.[1]
+  const rolePage = app.match(/<section v-if="activeTab === 'roles'[^>]*>([\s\S]*?)<\/section>/)?.[1]
+  // 表单分属两页，防止后续修改又把角色授权塞回用户列表。
+  assert.match(userPage ?? '', /@submit\.prevent="createUser"/)
+  assert.doesNotMatch(userPage ?? '', /@submit\.prevent="createRole"/)
+  assert.match(rolePage ?? '', /@submit\.prevent="createRole"/)
+  assert.doesNotMatch(rolePage ?? '', /@submit\.prevent="createUser"/)
+  // 新建角色不能在管理员勾选前就带有默认业务权限。
+  assert.match(app, /const newRole = ref\(\{ label: '', permissions: \[\] as string\[\] \}\)/)
 })
 
 test('权限被撤销后，当前地址也必须重新核对', () => {

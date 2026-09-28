@@ -114,7 +114,8 @@ const shipmentForm = ref({ sales_order_id: 0, warehouse_id: 1, reference: '',
 const salesReturnForm = ref({ shipment_id: 0, warehouse_id: 1, reason: '',
   lines: [] as { shipment_line_id: number; quantity: string }[] })
 const newUser = ref({ username: '', password: '', roles: ['viewer'] as string[] })
-const newRole = ref({ code: '', label: '', permissions: ['inventory.view'] as string[] })
+// 新角色默认不授予任何权限，必须由管理员明确勾选授权范围。
+const newRole = ref({ label: '', permissions: [] as string[] })
 const passwordChange = ref({ current_password: '', new_password: '' })
 const server = ref<ServerProfile | null>(null)
 const candidate = ref<ConnectionCandidate | null>(null)
@@ -1107,9 +1108,11 @@ async function saveRoles(userId: number): Promise<void> {
 async function createRole(): Promise<void> {
   if (!window.nexora) return
   await perform(async () => {
-    await window.nexora!.callApi('createRole', { code: newRole.value.code, label: newRole.value.label,
+    // 角色代码只是内部稳定标识，自动生成以免要求管理员理解英文编码。
+    const code = `role_${crypto.randomUUID().replaceAll('-', '')}`
+    await window.nexora!.callApi('createRole', { code, label: newRole.value.label,
       permissions: [...newRole.value.permissions] })
-    newRole.value = { code: '', label: '', permissions: ['inventory.view'] }
+    newRole.value = { label: '', permissions: [] }
   }, '自定义角色已创建。')
 }
 
@@ -1524,9 +1527,9 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
         </section>
 
         <section v-if="activeTab === 'users' && can('users.manage')" class="stack">
-          <div class="card"><div class="section-heading"><div><p class="eyebrow">ACCESS</p><h2>创建用户</h2></div></div><form class="inline-form" @submit.prevent="createUser"><label>用户名<input v-model.trim="newUser.username" required minlength="3" maxlength="40" placeholder="英文、数字或下划线" /></label><label>初始密码<input v-model="newUser.password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位" /></label><fieldset><legend>角色</legend><label v-for="role in roles" :key="role.code" class="check"><input v-model="newUser.roles" type="checkbox" :value="role.code" />{{ role.label }}</label></fieldset><button class="primary" type="submit" :disabled="busy || !newUser.roles.length">创建用户</button></form></div>
+          <div class="card"><div class="section-heading"><div><p class="eyebrow">用户管理</p><h2>创建用户</h2></div></div><form class="inline-form" @submit.prevent="createUser"><label>用户名<input v-model.trim="newUser.username" required minlength="3" maxlength="40" placeholder="英文、数字或下划线" /></label><label>初始密码<input v-model="newUser.password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位" /></label><fieldset><legend>角色</legend><label v-for="role in roles" :key="role.code" class="check"><input v-model="newUser.roles" type="checkbox" :value="role.code" />{{ role.label }}</label></fieldset><button class="primary" type="submit" :disabled="busy || !newUser.roles.length">创建用户</button></form></div>
           <div class="card">
-            <div class="section-heading"><div><p class="eyebrow">TEAM</p><h2>用户与角色</h2></div></div>
+            <div class="section-heading"><div><p class="eyebrow">账号与角色</p><h2>用户与角色</h2></div></div>
             <div v-for="entry in users" :key="entry.id" class="user-row">
               <div><strong>{{ entry.username }}</strong><small>#{{ entry.id }} · {{ entry.is_active ? '已启用' : '已停用' }}</small></div>
               <div class="user-access">
@@ -1540,16 +1543,22 @@ onUnmounted(() => { void stopScan(); if (healthTimer) clearInterval(healthTimer)
               </div>
             </div>
           </div>
+        </section>
+
+        <section v-if="activeTab === 'roles' && can('users.manage')" class="stack">
           <div class="card">
-            <div class="section-heading"><div><p class="eyebrow">ROLE SETTINGS</p><h2>角色与权限</h2></div></div>
+            <div class="section-heading"><div><p class="eyebrow">权限管理</p><h2>创建角色并分配权限</h2></div></div>
             <form class="inline-form" @submit.prevent="createRole">
-              <div class="form-grid"><label>角色代码<input v-model.trim="newRole.code" required minlength="3" maxlength="40" pattern="[a-z][a-z0-9_]*" placeholder="例如 stock_clerk" /></label><label>角色名称<input v-model.trim="newRole.label" required maxlength="40" placeholder="例如 库存专员" /></label></div>
+              <label>角色名称<input v-model.trim="newRole.label" required maxlength="40" placeholder="例如 库存专员" /></label>
               <fieldset><legend>授权范围</legend><label v-for="permission in permissions" :key="permission.code" class="check"><input v-model="newRole.permissions" type="checkbox" :value="permission.code" />{{ permission.label }}</label></fieldset>
-              <button class="primary" type="submit" :disabled="busy">创建自定义角色</button>
+              <button class="primary" type="submit" :disabled="busy">创建角色</button>
             </form>
+          </div>
+          <div class="card">
+            <div class="section-heading"><div><p class="eyebrow">角色授权</p><h2>角色权限</h2></div></div>
             <div v-for="role in roles" :key="role.code" class="role-row">
-              <div><strong>{{ role.label }}</strong><small>{{ role.code }} · {{ role.is_builtin ? '内置角色' : '自定义角色' }}</small></div>
-              <div v-if="role.is_builtin" class="muted">{{ role.permissions.map(code => permissions.find(item => item.code === code)?.label ?? code).join(' · ') }}</div>
+              <div><strong>{{ role.label }}</strong><small>{{ role.is_builtin ? '内置角色 · 只读' : '自定义角色' }}</small></div>
+              <div v-if="role.is_builtin" class="muted">{{ role.permissions.map(code => permissions.find(item => item.code === code)?.label ?? '未命名权限（请升级服务端）').join(' · ') }}</div>
               <div v-else class="role-editor"><label>名称<input v-model.trim="roleLabelDrafts[role.code]" maxlength="40" /></label><fieldset><legend>权限</legend><label v-for="permission in permissions" :key="permission.code" class="check"><input v-model="rolePermissionDrafts[role.code]" type="checkbox" :value="permission.code" />{{ permission.label }}</label></fieldset><button class="secondary small" type="button" :disabled="busy || !roleLabelDrafts[role.code]" @click="saveRole(role.code)">保存权限</button></div>
             </div>
           </div>
