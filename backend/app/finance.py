@@ -146,6 +146,19 @@ def financial_entries(db: sqlite3.Connection) -> list[dict]:
             LEFT JOIN receipt_order_links link ON link.receipt_line_id = rl.id
             LEFT JOIN purchase_order_lines pol ON pol.id = link.purchase_order_line_id
             WHERE pr.status = 'posted'"""),
+        ("payable", "purchase_return_reversal", 1, """SELECT prl.id AS source_line_id,
+            rev.id AS source_id, pol.purchase_order_id AS order_id,
+            sup.id AS party_id, sup.name AS party_name, rl.material_id, m.sku,
+            prl.quantity, pol.unit_price, rev.created_by AS posted_by, rev.created_at AS posted_at
+            FROM purchase_return_reversals rev
+            JOIN purchase_returns pr ON pr.id = rev.purchase_return_id
+            JOIN purchase_return_lines prl ON prl.purchase_return_id = pr.id
+            JOIN receipt_lines rl ON rl.id = prl.receipt_line_id
+            JOIN receipts r ON r.id = rl.receipt_id
+            JOIN suppliers sup ON sup.id = r.supplier_id
+            JOIN materials m ON m.id = rl.material_id
+            LEFT JOIN receipt_order_links link ON link.receipt_line_id = rl.id
+            LEFT JOIN purchase_order_lines pol ON pol.id = link.purchase_order_line_id"""),
     )
     result = [entry(row, kind, source_type, sign)
               for kind, source_type, sign, query in groups for row in db.execute(query)]

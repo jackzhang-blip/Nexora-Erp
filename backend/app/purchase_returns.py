@@ -39,11 +39,24 @@ class PurchaseReturnInput(BaseModel):
         return value.strip()
 
 
+class PurchaseReturnReverseInput(BaseModel):
+    reason: str = Field(min_length=1, max_length=200)
+
+    @field_validator("reason")
+    @classmethod
+    def trim_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("冲销原因不能为空")
+        return value.strip()
+
+
 def returned_quantity(db: sqlite3.Connection, receipt_line_id: int) -> Decimal:
-    # 草稿不占用可退量；只有已确认单据改变原入库的净收货数量。
+    # 已冲销退货保留历史，但不再减少原入库的净收货数量。
     return sum((Decimal(row[0]) for row in db.execute("""SELECT prl.quantity
         FROM purchase_return_lines prl JOIN purchase_returns pr ON pr.id = prl.purchase_return_id
-        WHERE prl.receipt_line_id = ? AND pr.status = 'posted'""", (receipt_line_id,))), Decimal(0))
+        LEFT JOIN purchase_return_reversals rev ON rev.purchase_return_id = pr.id
+        WHERE prl.receipt_line_id = ? AND pr.status = 'posted' AND rev.id IS NULL""",
+        (receipt_line_id,))), Decimal(0))
 
 
 def checked_return_lines(db: sqlite3.Connection, receipt_id: int,
@@ -68,12 +81,17 @@ def checked_return_lines(db: sqlite3.Connection, receipt_id: int,
 
 def purchase_return_data(db: sqlite3.Connection, return_id: int) -> dict:
     row = db.execute("""SELECT pr.*, r.supplier_id, s.name AS supplier_name,
-        rw.warehouse_id, w.name AS warehouse_name, u.username AS created_by_name
+        rw.warehouse_id, w.name AS warehouse_name, u.username AS created_by_name,
+        rev.id AS reversal_id, rev.reason AS reversal_reason,
+        rev.created_by AS reversed_by, ru.username AS reversed_by_name,
+        rev.created_at AS reversed_at
         FROM purchase_returns pr JOIN receipts r ON r.id = pr.receipt_id
         JOIN suppliers s ON s.id = r.supplier_id
         JOIN receipt_warehouses rw ON rw.receipt_id = r.id
         JOIN warehouses w ON w.id = rw.warehouse_id
-        JOIN users u ON u.id = pr.created_by WHERE pr.id = ?""", (return_id,)).fetchone()
+        JOIN users u ON u.id = pr.created_by
+        LEFT JOIN purchase_return_reversals rev ON rev.purchase_return_id = pr.id
+        LEFT JOIN users ru ON ru.id = rev.created_by WHERE pr.id = ?""", (return_id,)).fetchone()
     if not row:
         raise HTTPException(404, "采购退货单不存在")
     lines = []
@@ -167,4 +185,36 @@ def cancel_purchase_return(return_id: int, user: dict = Depends(require("purchas
             raise HTTPException(409, "只有退货草稿可取消；已确认退货须另建更正单")
         db.execute("""UPDATE purchase_returns SET status = 'cancelled', cancelled_by = ?,
             cancelled_at = CURRENT_TIMESTAMP WHERE id = ?""", (user["id"], return_id))
+        return purchase_return_data(db, return_id)
+
+
+@router.post("/purchase-returns/{return_id}/reverse", status_code=201)
+def reverse_purchase_return(return_id: int, payload: PurchaseReturnReverseInput,
+                            user: dict = Depends(require("purchase_return.reverse"))) -> dict:
+    with connection() as db:
+        # 一张已确认退货仅允许一次全量冲销；正向流水与冲销记录同事务提交。
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("""SELECT pr.status, rw.warehouse_id FROM purchase_returns pr
+            JOIN receipt_warehouses rw ON rw.receipt_id = pr.receipt_id
+            WHERE pr.id = ?""", (return_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "采购退货单不存在")
+        if row["status"] != "posted":
+            raise HTTPException(409, "只有已确认采购退货可冲销")
+        if db.execute("SELECT 1 FROM purchase_return_reversals WHERE purchase_return_id = ?",
+                      (return_id,)).fetchone():
+            raise HTTPException(409, "此采购退货单已冲销")
+        lines = db.execute("""SELECT prl.id, prl.quantity, rl.material_id
+            FROM purchase_return_lines prl JOIN receipt_lines rl ON rl.id = prl.receipt_line_id
+            WHERE prl.purchase_return_id = ?""", (return_id,)).fetchall()
+        cursor = db.execute("""INSERT INTO purchase_return_reversals(
+            purchase_return_id, reason, created_by) VALUES (?, ?, ?)""",
+            (return_id, payload.reason, user["id"]))
+        for line in lines:
+            # 采购退货的反向实物回到原入库仓库，来源行仍指向原退货明细。
+            db.execute("""INSERT INTO stock_movements(
+                warehouse_id, material_id, quantity, source_type, source_id, source_line_id, created_by)
+                VALUES (?, ?, ?, 'purchase_return_reversal', ?, ?, ?)""",
+                (row["warehouse_id"], line["material_id"], line["quantity"],
+                 cursor.lastrowid, line["id"], user["id"]))
         return purchase_return_data(db, return_id)

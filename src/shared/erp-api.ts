@@ -89,6 +89,11 @@ export interface PurchaseReturn {
   created_at: string
   posted_at: string | null
   cancelled_at: string | null
+  reversal_id: number | null
+  reversal_reason: string | null
+  reversed_by: number | null
+  reversed_by_name: string | null
+  reversed_at: string | null
   lines: PurchaseReturnLine[]
   total_amount: string | null
 }
@@ -98,7 +103,7 @@ export interface FinancialEntry {
   kind: 'receivable' | 'payable'
   party_id: number
   party_name: string
-  source_type: 'shipment' | 'sales_return' | 'sales_return_reversal' | 'receipt' | 'purchase_return'
+  source_type: 'shipment' | 'sales_return' | 'sales_return_reversal' | 'receipt' | 'purchase_return' | 'purchase_return_reversal'
   source_id: number
   source_line_id: number
   order_id: number | null
@@ -480,7 +485,7 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'sales_return' | 'sales_return_reversal' | 'purchase_return' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
+  source_type: 'receipt' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'sales_return' | 'sales_return_reversal' | 'purchase_return' | 'purchase_return_reversal' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
   source_id: number
   source_line_id: number
   receipt_id: number | null
@@ -492,6 +497,7 @@ export interface Movement {
   sales_return_id: number | null
   sales_return_reversal_id: number | null
   purchase_return_id: number | null
+  purchase_return_reversal_id: number | null
   material_issue_id: number | null
   material_return_id: number | null
   production_completion_id: number | null
@@ -567,6 +573,7 @@ export interface ErpOperations {
   createPurchaseReturn: { input: { receipt_id: number; reason: string; lines: { receipt_line_id: number; quantity: string }[] }; output: PurchaseReturn }
   postPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   cancelPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
+  reversePurchaseReturn: { input: { returnId: number; reason: string }; output: PurchaseReturn }
   purchaseOrders: { input: undefined; output: PurchaseOrder[] }
   createPurchaseOrder: { input: { supplier_id: number; reference: string; lines: { material_id: number; quantity: string; unit_price: string }[] }; output: PurchaseOrder }
   confirmPurchaseOrder: { input: { orderId: number }; output: PurchaseOrder }
