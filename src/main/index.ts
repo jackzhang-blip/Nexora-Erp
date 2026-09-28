@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs'
 import { callBackend, getBackendHealth } from './backend'
 import type { ErpOperations } from '../shared/erp-api'
 import type { HostInput } from '../shared/desktop-api'
+import { keepDesktopInTray, trayServiceLabel } from './tray-state'
 import { activateSaved, approveConnection, createHost, disconnect, finishHostSetup, hostFingerprint, hostStatus,
   loadConnections, prepareConnection, recentProfiles, restartHost, resume, shutdownConnections,
   startDiscovery, stopDiscovery, stopHost, upgradeHost } from './connections'
@@ -28,25 +29,33 @@ function ensureTray(): void {
   // 托盘仅提供入口；打包版固定主机的生命周期由操作系统管理。
   tray = new Tray(nativeImage.createFromPath(join(__dirname, '../../resources/tray.png')))
   tray.setToolTip('Nexora ERP')
-  tray.on('double-click', () => {
-    if (!mainWindow) createWindow()
-    else mainWindow.show()
-  })
+  tray.on('double-click', openMainWindow)
   void updateTray()
+}
+
+function openMainWindow(): void {
+  if (!mainWindow) createWindow()
+  else {
+    mainWindow.show()
+    mainWindow.focus()
+  }
 }
 
 async function updateTray(): Promise<void> {
   if (!tray) return
-  const status = await hostStatus().catch(() => ({ configured: false, running: false }))
+  const status = await hostStatus().catch(() => null)
+  if (!tray) return
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: '打开 Nexora ERP', click: () => { if (!mainWindow) createWindow(); else mainWindow.show() } },
-    { label: '停止本机服务', enabled: status.running, click: () => {
+    { label: '打开 Nexora ERP', click: openMainWindow },
+    { label: trayServiceLabel(status), enabled: false },
+    { label: '刷新服务状态', click: () => { void updateTray() } },
+    { label: '停止本机服务', enabled: status?.running ?? false, click: () => {
       void stopHost().then(updateTray).catch((error: unknown) => {
         dialog.showErrorBox('停止本机服务失败', error instanceof Error ? error.message : '请检查系统服务状态')
       })
     } },
     { type: 'separator' },
-    { label: '退出', click: () => app.quit() }
+    { label: '退出桌面应用', click: () => app.quit() }
   ]))
 }
 
@@ -68,7 +77,11 @@ function createWindow(): void {
 
   mainWindow = window
   window.on('closed', () => {
-    if (mainWindow === window) mainWindow = null
+    if (mainWindow === window) {
+      mainWindow = null
+      // 窗口关闭后托盘仍常驻，主动结束仅供该窗口使用的局域网扫描。
+      stopDiscovery()
+    }
   })
 
   // 当前页面不需要弹出新窗口，先阻止页面内容自行打开外部地址。
@@ -168,10 +181,15 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  // 打包版即使退出桌面进程，固定主机仍继续运行；开发版保留旧托盘行为。
-  if (process.platform === 'darwin') return
+  // 两种受支持的桌面系统均保留托盘；明确退出桌面应用仍不停止系统服务。
+  if (keepDesktopInTray(process.platform)) return
   if (app.isPackaged) { app.quit(); return }
   void hostStatus().then((status) => { if (!status.running) app.quit() })
 })
 
-app.on('before-quit', () => shutdownConnections())
+app.on('before-quit', () => {
+  // 显式退出时销毁托盘，避免仍在进行的状态查询更新已释放的图标。
+  tray?.destroy()
+  tray = null
+  shutdownConnections()
+})
