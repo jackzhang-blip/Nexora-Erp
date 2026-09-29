@@ -1,3 +1,4 @@
+import type { Warehouse } from '../../../../shared/erp-api'
 import type { AppState } from '../state'
 
 // 仓库与盘点操作独立维护；写入后由统一入口刷新服务端快照。
@@ -107,7 +108,25 @@ export function createWarehouseActions(
     }, `盘点单 #${stocktakeId} 已冲销，反向差异已记入库存流水。`)
   }
 
+  async function saveWarehouse(data: Omit<Warehouse, 'id'>, id?: number): Promise<boolean> {
+    if (!window.nexora) return false
+    let saved = false
+    await perform(async () => {
+      if (id) await window.nexora!.callApi('updateWarehouse', { ...data, id })
+      else await window.nexora!.callApi('createWarehouse', { ...data })
+      saved = true
+    }, '仓库已保存。')
+    return saved
+  }
+
+  async function deleteWarehouse(id: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('deleteWarehouse', { id }), '仓库已删除。')
+  }
+
   return {
+    saveWarehouse,
+    deleteWarehouse,
     createWarehouse,
     createTransfer,
     postTransfer,

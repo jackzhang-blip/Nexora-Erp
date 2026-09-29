@@ -63,7 +63,21 @@ export const workspaceRouteGroups = [
       {
         key: 'catalog',
         path: '/workspace/catalog',
-        label: '物料与供应商',
+        label: '物料管理',
+        permission: 'inventory.view',
+        icon: 'archive'
+      },
+      {
+        key: 'suppliers',
+        path: '/workspace/suppliers',
+        label: '供应商管理',
+        permission: 'inventory.view',
+        icon: 'archive'
+      },
+      {
+        key: 'warehouses',
+        path: '/workspace/warehouses',
+        label: '仓库管理',
         permission: 'inventory.view',
         icon: 'archive'
       }

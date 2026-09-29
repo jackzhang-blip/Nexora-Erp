@@ -10,6 +10,7 @@ export function createDataLoader(
     user,
     materials,
     suppliers,
+    supplierMaterials,
     stock,
     movements,
     receipts,
@@ -51,6 +52,7 @@ export function createDataLoader(
       ;[
         materials.value,
         suppliers.value,
+        supplierMaterials.value,
         stock.value,
         receipts.value,
         movements.value,
@@ -62,6 +64,7 @@ export function createDataLoader(
       ] = await Promise.all([
         window.nexora.callApi('materials', undefined),
         window.nexora.callApi('suppliers', undefined),
+        window.nexora.callApi('supplierMaterials', undefined),
         window.nexora.callApi(
           'stock',
           selectedWarehouseId.value

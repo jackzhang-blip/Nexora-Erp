@@ -203,3 +203,32 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   await assert.rejects(callBackend('logout', undefined), /无法连接服务端/)
   await assert.rejects(callBackend('me', undefined), /请先登录/)
 })
+
+
+test('基础资料接口限定路径和正整数编号', async (t) => {
+  const originalUrl = process.env.NEXORA_API_URL
+  t.after(() => {
+    if (originalUrl === undefined) delete process.env.NEXORA_API_URL
+    else process.env.NEXORA_API_URL = originalUrl
+  })
+  process.env.NEXORA_API_URL = 'http://127.0.0.1:8000'
+  const calls = []
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push([new URL(url).pathname, init.method])
+    return new Response(JSON.stringify({ token: 'test-token', user: { id: 1 } }), { status: 200 })
+  })
+  await callBackend('login', {})
+  for (const [entity, resource] of [['Material', 'materials'], ['Supplier', 'suppliers'], ['Warehouse', 'warehouses']]) {
+    for (const [verb, method] of [['update', 'PUT'], ['delete', 'DELETE']]) {
+      await callBackend(verb + entity, { id: 2 })
+      assert.deepEqual(calls.at(-1), [`/api/v1/${resource}/2`, method])
+      await assert.rejects(callBackend(verb + entity, { id: '../users' }), /记录编号无效/)
+    }
+  }
+  await callBackend('bindSupplierMaterial', { supplierId: 3, materialId: 4 })
+  assert.deepEqual(calls.at(-1), ['/api/v1/suppliers/3/materials/4', 'PUT'])
+  await callBackend('unbindSupplierMaterial', { supplierId: 3, materialId: 4 })
+  assert.deepEqual(calls.at(-1), ['/api/v1/suppliers/3/materials/4', 'DELETE'])
+  await assert.rejects(callBackend('bindSupplierMaterial', { supplierId: 3, materialId: '../users' }), /记录编号无效/)
+  await assert.rejects(callBackend('unbindSupplierMaterial', { supplierId: 0, materialId: 4 }), /记录编号无效/)
+})

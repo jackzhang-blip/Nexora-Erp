@@ -9,6 +9,7 @@ export interface User {
 
 export interface Permission { code: string; label: string }
 export interface Role { code: string; label: string; is_builtin: boolean; permissions: string[] }
+export interface SupplierMaterial { supplier_id: number; material_id: number }
 export interface Supplier { id: number; name: string }
 export interface Customer { id: number; name: string }
 export interface Material { id: number; sku: string; name: string; unit: string }
@@ -537,6 +538,15 @@ export interface ErpOperations {
   setUserStatus: { input: { userId: number; is_active: boolean }; output: User }
   resetUserPassword: { input: { userId: number; password: string }; output: void }
   suppliers: { input: undefined; output: Supplier[] }
+  updateMaterial: { input: { id: number; sku: string; name: string; unit: string }; output: Material }
+  deleteMaterial: { input: { id: number }; output: void }
+  updateSupplier: { input: { id: number; name: string }; output: Supplier }
+  deleteSupplier: { input: { id: number }; output: void }
+  updateWarehouse: { input: { id: number; code: string; name: string }; output: Warehouse }
+  deleteWarehouse: { input: { id: number }; output: void }
+  supplierMaterials: { input: undefined; output: SupplierMaterial[] }
+  bindSupplierMaterial: { input: { supplierId: number; materialId: number }; output: void }
+  unbindSupplierMaterial: { input: { supplierId: number; materialId: number }; output: void }
   createSupplier: { input: { name: string }; output: Supplier }
   customers: { input: undefined; output: Customer[] }
   createCustomer: { input: { name: string }; output: Customer }

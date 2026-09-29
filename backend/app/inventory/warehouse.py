@@ -201,3 +201,31 @@ def reverse_transfer(transfer_id: int, payload: TransferReverseInput,
                  "transfer_reversal_in", reversal_id, line["id"], user["id"]),
             ])
         return transfer_data(db, transfer_id)
+
+
+@router.put("/warehouses/{warehouse_id}")
+def update_warehouse(warehouse_id: int, payload: WarehouseInput,
+                     _: dict = Depends(require("warehouse.manage"))) -> dict:
+    with connection() as db:
+        try:
+            cursor = db.execute("UPDATE warehouses SET code = ?, name = ? WHERE id = ?",
+                                (payload.code, payload.name, warehouse_id))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, "仓库编码或名称已存在") from None
+        if not cursor.rowcount:
+            raise HTTPException(404, "仓库不存在")
+        return {"id": warehouse_id, **payload.model_dump()}
+
+
+@router.delete("/warehouses/{warehouse_id}", status_code=204)
+def delete_warehouse(warehouse_id: int, _: dict = Depends(require("warehouse.manage"))) -> None:
+    # 旧客户端建单默认引用 1 号主仓库，不能删除该兼容入口。
+    if warehouse_id == 1:
+        raise HTTPException(409, "默认主仓库不能删除")
+    with connection() as db:
+        try:
+            cursor = db.execute("DELETE FROM warehouses WHERE id = ?", (warehouse_id,))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, "仓库已被业务单据或库存记录引用，不能删除") from None
+        if not cursor.rowcount:
+            raise HTTPException(404, "仓库不存在")

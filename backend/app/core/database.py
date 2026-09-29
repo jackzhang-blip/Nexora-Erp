@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 26:
+        if version > 27:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -785,3 +785,15 @@ def migrate() -> None:
                 [(label, code) for code, label in DEFAULT_PERMISSION_LABELS.items()],
             )
             db.execute("PRAGMA user_version = 26")
+
+        if version < 27:
+            # 同一物料可由多家供应商供货，绑定关系不复制物料档案。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE supplier_materials (
+                supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+                material_id INTEGER NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+                PRIMARY KEY (supplier_id, material_id)
+            )""")
+            db.execute("CREATE INDEX supplier_materials_material ON supplier_materials(material_id)")
+            db.execute("PRAGMA user_version = 27")

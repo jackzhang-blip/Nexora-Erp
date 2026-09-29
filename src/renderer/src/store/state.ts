@@ -23,6 +23,7 @@ import type {
   Stock,
   Stocktake,
   Supplier,
+  SupplierMaterial,
   Transfer,
   User,
   Warehouse,
@@ -54,6 +55,7 @@ export function createAppState() {
   const username = ref('')
   const password = ref('')
   const materials = ref<Material[]>([])
+  const supplierMaterials = ref<SupplierMaterial[]>([])
   const suppliers = ref<Supplier[]>([])
   const stock = ref<Stock[]>([])
   const movements = ref<Movement[]>([])
@@ -270,6 +272,7 @@ export function createAppState() {
     password,
     materials,
     suppliers,
+    supplierMaterials,
     stock,
     movements,
     receipts,

@@ -81,3 +81,7 @@ npm run build
 ## English summary
 
 Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, user and role administration, purchase orders with partial receipts and linked returns, sales orders with partial shipments and linked returns, versioned production BOMs, work orders with partial material issues and linked returns, partial production completion reports with basic quality inspection, accepted-goods receipts, and audited reversals, manual work-order cost collection, a source-linked receivables/payables list, multi-warehouse stock, transfers, stocktakes, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Packaged hosts use an OS service; remote clients require a live connection. Payment records are entered manually and reconciled to orders. Posted material returns restore stock to the original issue warehouse and adjust net issued quantity. Material costs require an entered unit cost; automatic inventory valuation, finished-goods batch costing, cost of goods sold, and rework remain future work. Offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Cross-platform device acceptance remains pending.
+
+### 基础资料管理
+
+基础资料已拆分为物料管理、供应商管理和仓库管理，分别提供列表搜索及增删改。供应商页可绑定、解绑现有物料，同一物料可由多家供应商供应；物料列表展示关联供应商。被业务记录引用的资料和默认主仓库不能删除。供货关系暂不包含报价、历史采购价格计算或采购选料限制；使用前需要同时升级并重启服务端。
