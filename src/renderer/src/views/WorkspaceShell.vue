@@ -108,7 +108,8 @@ const authConnectionMessage = computed(() => {
             </h1>
           </div>
           <div v-if="user" class="account">
-            <span
+            <!-- 窄窗口隐藏侧栏时，右上角继续提供账号身份。 -->
+            <span class="account-identity"
               >{{ user.username
               }}<small>{{ user.roles.join(' · ') }}</small></span
             ><button class="text-button" type="button" @click="logout">

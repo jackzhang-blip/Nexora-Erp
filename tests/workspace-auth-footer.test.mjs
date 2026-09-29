@@ -45,3 +45,18 @@ test('登录页左下角保留服务端名称和版本，但连接状态只在�
   assert.match(sidebar, /<small v-if="version">v\{\{ version \}\}<\/small>/)
   assert.match(css, /\.sidebar-bottom\.auth-server-details small \{ margin-left: 0; \}/)
 })
+
+test('工作台左下角展示当前账号和角色，窄窗口仍可看到账号与退出入口', () => {
+  const sidebar = readFileSync(new URL('../src/renderer/src/components/WorkspaceSidebar.vue', import.meta.url), 'utf8')
+  const shell = readFileSync(new URL('../src/renderer/src/views/WorkspaceShell.vue', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
+
+  // 登录页和退出后都不应展示上一次会话的账号；窄窗口隐藏侧栏时保留右上角入口。
+  assert.match(sidebar, /v-if="screen === 'app' && user" class="sidebar-account"/)
+  assert.match(sidebar, /class="sidebar-account-name">\{\{ user\.username \}\}/)
+  assert.match(sidebar, /class="sidebar-account-roles">\{\{ user\.roles\.join\(' · '\) \}\}/)
+  assert.match(shell, /class="account-identity"[\s\S]*?user\.username[\s\S]*?user\.roles\.join\(' · '\)/)
+  assert.match(shell, /v-if="user" class="account"[\s\S]*?@click="logout"/)
+  assert.match(css, /\.account-identity \{ display: none; \}/)
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.account-identity \{ display: block; \}/)
+})
