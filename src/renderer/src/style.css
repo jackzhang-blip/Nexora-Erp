@@ -138,7 +138,9 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: lef
 th { padding: 11px 12px; background: #f5f7f9; color: #718097; font-size: 11px; font-weight: 700; white-space: nowrap; }
 th:first-child { border-radius: 7px 0 0 7px; }
 th:last-child { border-radius: 0 7px 7px 0; }
-td { border-bottom: 1px solid #edf0f3; padding: 14px 12px; vertical-align: top; }
+/* 所有表格的文字与操作控件在单元格内垂直居中，避免不同行高时内容贴顶。 */
+th, td { vertical-align: middle; }
+td { border-bottom: 1px solid #edf0f3; padding: 14px 12px; }
 td small { margin-left: 5px; color: #8c99ac; }
 tbody tr:last-child td { border-bottom: 0; }
 .mono { font-family: "SFMono-Regular", Consolas, monospace; }

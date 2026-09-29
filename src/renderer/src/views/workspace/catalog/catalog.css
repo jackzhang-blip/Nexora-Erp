@@ -11,7 +11,7 @@
 }
 /* 工作台的原生 table/th/td 通用样式会把 vxe 行高撑大，此处只撤销冲突项。 */
 .catalog-page .catalog-vxe-table table { border-collapse: separate; border-spacing: 0; }
-.catalog-page .catalog-vxe-table :is(th, td) { padding: 0; border-bottom: 0; }
+.catalog-page .catalog-vxe-table :is(th, td) { padding: 0; border-bottom: 0; vertical-align: middle; }
 :root[data-theme='dark'] .catalog-page .catalog-vxe-table {
   --vxe-ui-font-color: #e6edf8;
   --vxe-ui-font-primary-color: #7dd8cf;
