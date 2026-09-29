@@ -34,17 +34,21 @@ test('启动页的长内容在中间滚动，底部说明保留在窗口内', ()
   assert.match(rule('.onboard-footer'), /\bflex: none;/)
 })
 
-test('连接成功提示位于始终可见的底栏，错误仍在内容区显示', () => {
+test('连接成功和失败提示都位于底栏右端，失败优先且保留告警语义', () => {
   const shell = readFileSync(new URL('../src/renderer/src/views/OnboardingView.vue', import.meta.url), 'utf8')
   const css = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
   const [main, footer] = shell.split('<footer class="onboard-footer">')
 
-  // 成功反馈不应再次占据卡片上方的整行空间，错误则继续紧邻当前操作显示。
-  assert.match(main, /v-if="error"[^>]*role="alert"/)
-  assert.doesNotMatch(main, /v-if="notice"/)
-  assert.match(footer, /v-if="notice"[^>]*role="status"/)
-  assert.match(css, /\.onboard-footer-status \{[^}]*grid-column: 2;/)
-  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.onboard-footer-status \{ order: -1; \}/)
+  // 连接超时不能再推挤表单；错误和成功共用右端位置，错误消息优先。
+  assert.doesNotMatch(main, /v-if="(?:error|notice)"/)
+  assert.match(footer, /v-if="error \|\| notice"/)
+  assert.match(footer, /:class="\{ 'is-error': !!error \}"/)
+  assert.match(footer, /:role="error \? 'alert' : 'status'"/)
+  assert.match(footer, /\{\{ error \|\| notice \}\}/)
+  assert.match(footer, /<span v-else class="onboard-footer-copy">局域网内连接/)
+  assert.match(css, /\.onboard-footer-status \{[^}]*grid-column: 2 \/ 4;[^}]*justify-content: flex-end;/)
+  assert.match(css, /\.onboard-footer-status\.is-error \{[^}]*color: #a9473d;/)
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.onboard-footer-status \{ flex: 1; \}/)
 })
 
 test('服务端就绪页左右卡片等宽，窄窗口仍改为单列', () => {

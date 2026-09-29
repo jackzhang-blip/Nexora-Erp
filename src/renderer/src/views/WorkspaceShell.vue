@@ -79,6 +79,13 @@ const {
 
 // 登录与管理员初始化共用底部状态栏，切换到工作台后恢复原有页面提示。
 const isAuthScreen = computed(() => screen.value === 'setup' || screen.value === 'login')
+// 登录页始终在右下角交代连接状态；断线优先于旧的成功消息。
+const authConnectionMessage = computed(() => {
+  if (connectionLost.value) return '服务端连接已中断，正在重试。恢复连接前无法保存更改。'
+  if (notice.value) return notice.value
+  if (!server.value) return '等待连接服务端'
+  return `已连接 · ${server.value.name}${version.value ? ` · v${version.value}` : ''}`
+})
 </script>
 
 <template>
@@ -111,7 +118,7 @@ const isAuthScreen = computed(() => screen.value === 'setup' || screen.value ===
         </header>
 
         <div v-if="error" class="message error" role="alert">{{ error }}</div>
-        <div v-if="connectionLost" class="message error" role="alert">
+        <div v-if="connectionLost && !isAuthScreen" class="message error" role="alert">
           服务端连接已中断，正在重试。恢复连接前无法保存更改。
         </div>
         <div v-if="notice && !isAuthScreen" class="message success" role="status">
@@ -126,11 +133,15 @@ const isAuthScreen = computed(() => screen.value === 'setup' || screen.value ===
       </div>
       <footer v-if="isAuthScreen" class="onboard-footer auth-footer">
         <span class="onboard-footer-copy">联光 ERP · 团队工作台</span>
-        <!-- 登录页的成功反馈放进固定底栏，表单区只保留需要立即处理的错误。 -->
-        <span v-if="notice" class="onboard-footer-status" role="status">{{ notice }}</span>
-        <span class="onboard-footer-copy"
-          >{{ server?.name || '当前服务端' }}<span v-if="version"> · v{{ version }}</span></span
+        <!-- 连接结果固定在右端；账号与密码错误仍在表单上方方便处理。 -->
+        <span
+          class="onboard-footer-status"
+          :class="{ 'is-error': connectionLost }"
+          :role="connectionLost ? 'alert' : 'status'"
+          :title="authConnectionMessage"
         >
+          <span class="onboard-footer-status-text">{{ authConnectionMessage }}</span>
+        </span>
       </footer>
     </main>
   </div>

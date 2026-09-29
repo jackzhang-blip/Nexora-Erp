@@ -73,7 +73,8 @@ const {
         </div>
       </div>
     </div>
-    <div class="sidebar-bottom">
+    <!-- 登录阶段的连接状态只在右下角显示，避免侧栏绿点与断线告警互相矛盾。 -->
+    <div v-if="screen === 'app'" class="sidebar-bottom">
       <span class="status-dot"></span> {{ server?.name || 'Nexora ERP' }}
       <small v-if="version">v{{ version }}</small>
     </div>

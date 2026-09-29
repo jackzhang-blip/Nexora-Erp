@@ -2,15 +2,21 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-test('登录页成功状态进入底栏，工作台和错误提示保留原有位置', () => {
+test('登录页连接状态持续位于底栏右侧，工作台与账号错误保留原有提示', () => {
   const shell = readFileSync(new URL('../src/renderer/src/views/WorkspaceShell.vue', import.meta.url), 'utf8')
 
-  // 同一条消息只在当前页面对应的位置出现，避免登录页重新产生整行成功提示。
+  // 断线优先于旧成功消息，正常状态也要明确显示而不只写服务端名称。
   assert.match(shell, /screen\.value === 'setup' \|\| screen\.value === 'login'/)
+  assert.match(shell, /if \(connectionLost\.value\) return '服务端连接已中断/)
+  assert.match(shell, /if \(notice\.value\) return notice\.value/)
+  assert.match(shell, /return `已连接 · \$\{server\.value\.name\}/)
   assert.match(shell, /v-if="notice && !isAuthScreen" class="message success" role="status"/)
-  assert.match(shell, /<footer v-if="isAuthScreen" class="onboard-footer auth-footer">[\s\S]*?v-if="notice" class="onboard-footer-status" role="status"/)
   assert.match(shell, /v-if="error" class="message error" role="alert"/)
-  assert.match(shell, /v-if="connectionLost" class="message error" role="alert"/)
+  assert.match(shell, /v-if="connectionLost && !isAuthScreen" class="message error" role="alert"/)
+  const footer = shell.split('<footer v-if="isAuthScreen" class="onboard-footer auth-footer">')[1]
+  assert.match(footer, /:class="\{ 'is-error': connectionLost \}"/)
+  assert.match(footer, /:role="connectionLost \? 'alert' : 'status'"/)
+  assert.match(footer, /class="onboard-footer-status-text">\{\{ authConnectionMessage \}\}/)
 })
 
 test('登录内容独立滚动，底栏在宽窄窗口内都保留可见', () => {
@@ -23,5 +29,15 @@ test('登录内容独立滚动，底栏在宽窄窗口内都保留可见', () =>
   assert.match(rule('.onboard-footer'), /flex: none;/)
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.app-shell\.auth-shell \{ height: 100vh; display: flex; flex-direction: column; overflow: hidden; \}/)
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.content\.auth-content \{ height: auto; min-height: 0; flex: 1; \}/)
+  assert.match(rule('.onboard-footer-status'), /grid-column: 2 \/ 4;[^}]*justify-content: flex-end;/)
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.auth-footer \{ justify-content: flex-end; padding: 10px 17px; \}/)
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.auth-footer \.onboard-footer-copy:first-child \{ display: none; \}/)
+})
+
+test('登录页隐藏侧栏里带绿点的重复服务端状态', () => {
+  const sidebar = readFileSync(new URL('../src/renderer/src/components/WorkspaceSidebar.vue', import.meta.url), 'utf8')
+
+  // 连接中断时不能同时在左侧显示绿点、在右下角显示红色告警。
+  assert.match(sidebar, /<div v-if="screen === 'app'" class="sidebar-bottom">/)
+  assert.match(sidebar, /<span class="status-dot"><\/span> \{\{ server\?\.name/)
 })
