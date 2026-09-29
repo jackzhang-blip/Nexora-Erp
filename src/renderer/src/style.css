@@ -252,8 +252,6 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
 .onboard-footer-status-text { max-height: 3em; overflow-y: auto; overflow-wrap: anywhere; }
 .onboard-footer-status.is-error { color: #a9473d; }
 .onboard-footer-status.is-error::before { background: #e66a5d; }
-/* 登录页沿用居中的恢复提示，避免这次引导页调整改变既有登录布局。 */
-.auth-footer .onboard-footer-status { grid-column: 2; justify-content: center; text-align: center; }
 .auth-switch { margin-top: 22px; padding: 0; }
 @keyframes scan-turn { to { transform: rotate(360deg); } }
 /* 按本页需求保留卡片的明确交互动画；扫描装饰仍遵循系统减少动态效果设置。 */
@@ -301,11 +299,9 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
   /* 窄窗口仍把连接反馈贴在底栏右端，避免在内容区重现横幅。 */
   .onboard-footer { display: flex; justify-content: space-between; gap: 12px; }
   .onboard-footer-status { flex: 1; }
-  /* 登录页只保留状态和服务端信息，缩小窄窗口底栏高度。 */
-  .auth-footer { flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 10px 17px; text-align: center; }
-  .auth-footer .onboard-footer-status { order: -1; flex: none; }
+  /* 登录页在窄窗口只保留右端连接状态，避免底栏占两行。 */
+  .auth-footer { justify-content: flex-end; padding: 10px 17px; }
   .auth-footer .onboard-footer-copy:first-child { display: none; }
-  .auth-footer .onboard-footer-copy:last-child { text-align: center; }
 }
 @media (max-width: 560px) {
   /* 窄窗口优先完整显示放大后的品牌标识，避免右侧说明与它重叠。 */
