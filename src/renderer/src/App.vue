@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { NConfigProvider, dateZhCN, zhCN } from 'naive-ui'
+import { NConfigProvider, darkTheme, dateZhCN, zhCN } from 'naive-ui'
 import type { GlobalThemeOverrides } from 'naive-ui'
 import { provideAppStore } from './store/app-store'
+import { isDarkTheme } from './store/theme-store'
 import OnboardingView from './views/OnboardingView.vue'
 import WorkspaceShell from './views/WorkspaceShell.vue'
 
@@ -20,6 +21,7 @@ const naiveThemeOverrides: GlobalThemeOverrides = {
   <NConfigProvider
     :locale="zhCN"
     :date-locale="dateZhCN"
+    :theme="isDarkTheme ? darkTheme : null"
     :theme-overrides="naiveThemeOverrides"
   >
     <OnboardingView

@@ -1,0 +1,53 @@
+/* 主题切换只过渡颜色相关属性，保留导航展开和卡片悬停各自的位移动画。 */
+:root[data-theme],
+:root[data-theme] :where(
+  .sidebar, .brand, .brand small, .side-category, .nav-item, .sidebar-bottom,
+  .sidebar-account-card, .sidebar-account-identity small, .theme-toggle,
+  .n-button, .n-input, .n-base-selection,
+  .sidebar-account-menu, .sidebar-account-menu button, .content,
+  .workspace-tabs, .workspace-tab, .workspace-tab-close, .eyebrow,
+  .account small, .text-button, .card, .metric, .metric span,
+  th, td, label, legend, input, select, .primary, .secondary,
+  .empty-state button, .receipt-lines span, .pill, .message,
+  .onboard-footer, .app-footer-server, .onboard-footer-status,
+  .onboarding, .onboard-top, .onboard-logo small, .onboard-kicker,
+  .onboard-top-note, .onboard-hero p, .onboard-panel, .choice-card,
+  .panel-heading p, .trust-panel p, .ready-primary p, .offline-panel p,
+  .summary-note, .fingerprint, .trust-icon, .panel-icon, .choice-symbol
+) {
+  transition-property: background-color, color, border-color, box-shadow;
+  transition-duration: .38s;
+  transition-timing-function: ease-in-out;
+}
+
+/* 入场和悬停使用的变形过渡与主题颜色过渡并存。 */
+:root[data-theme] .choice-card {
+  transition-property: background-color, color, border-color, box-shadow, transform;
+  transition-duration: .38s, .38s, .38s, .38s, .3s;
+}
+
+/* 侧栏进入工作台的水平位移动画不能被主题颜色过渡覆盖。 */
+:root[data-theme] .sidebar {
+  transition-property: transform, background-color, color, border-color, box-shadow;
+  transition-duration: .36s, .38s, .38s, .38s, .38s;
+  transition-timing-function: cubic-bezier(.22, 1, .36, 1), ease-in-out, ease-in-out, ease-in-out, ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme],
+  :root[data-theme] :where(
+    .sidebar, .brand, .brand small, .side-category, .nav-item, .sidebar-bottom,
+    .sidebar-account-card, .sidebar-account-identity small, .theme-toggle,
+    .n-button, .n-input, .n-base-selection,
+    .sidebar-account-menu, .sidebar-account-menu button, .content,
+    .workspace-tabs, .workspace-tab, .workspace-tab-close, .eyebrow,
+    .account small, .text-button, .card, .metric, .metric span,
+    th, td, label, legend, input, select, .primary, .secondary,
+    .empty-state button, .receipt-lines span, .pill, .message,
+    .onboard-footer, .app-footer-server, .onboard-footer-status,
+    .onboarding, .onboard-top, .onboard-logo small, .onboard-kicker,
+    .onboard-top-note, .onboard-hero p, .onboard-panel, .choice-card,
+    .summary-note, .fingerprint, .trust-icon, .panel-icon, .choice-symbol
+  ),
+  :root[data-theme] .sidebar { transition: none; }
+}
