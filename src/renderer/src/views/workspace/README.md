@@ -1,6 +1,6 @@
 # 工作台页面目录
 
-`WorkspaceShell.vue` 根据路由键选择下列页面。目录表示业务领域，文件名表示实际页面；新增入口时同步更新 `router/workspace-routes.ts`、`WorkspaceShell.vue` 和路由测试。
+`router/index.ts` 根据路由键装载下列页面，`WorkspaceShell.vue` 通过 `RouterView` 显示当前页面。目录表示业务领域，文件名表示实际页面；新增入口时同步更新 `router/workspace-routes.ts`、`router/index.ts` 和路由测试。
 
 | 目录 | 页面组件 | 页面用途 |
 | --- | --- | --- |

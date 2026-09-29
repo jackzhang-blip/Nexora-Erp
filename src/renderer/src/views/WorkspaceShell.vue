@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAppStore } from '../store/app-store'
-import type { Component } from 'vue'
 // 工作台专属导航与跨页面公共组件分目录，避免应用外壳继续依赖平铺组件路径。
 import WorkspaceSidebar from '../components/workspace/WorkspaceSidebar.vue'
 import ThemeToggle from '../components/app/ThemeToggle.vue'
@@ -9,54 +8,7 @@ import WorkspaceTabs from '../components/workspace/WorkspaceTabs.vue'
 import AppStatusFooter from '../components/app/AppStatusFooter.vue'
 import AuthView from './AuthView.vue'
 import { nexoraLogo } from '../assets/brand'
-import type { WorkspaceRouteKey } from '../router/workspace-routes'
 import { accountRoleText } from '../utils/account-role'
-import InventoryOverviewView from './workspace/warehouse/InventoryOverviewView.vue'
-import WarehouseTransfersView from './workspace/warehouse/WarehouseTransfersView.vue'
-import InventoryStocktakesView from './workspace/warehouse/InventoryStocktakesView.vue'
-import MaterialsSuppliersView from './workspace/catalog/MaterialsSuppliersView.vue'
-import PurchaseOrdersView from './workspace/purchase/PurchaseOrdersView.vue'
-import PurchaseReceiptsView from './workspace/purchase/PurchaseReceiptsView.vue'
-import PurchaseReturnsView from './workspace/purchase/PurchaseReturnsView.vue'
-import SalesOrdersView from './workspace/sales/SalesOrdersView.vue'
-import SalesShipmentsView from './workspace/sales/SalesShipmentsView.vue'
-import SalesReturnsView from './workspace/sales/SalesReturnsView.vue'
-import ReceivablesPayablesView from './workspace/finance/ReceivablesPayablesView.vue'
-import ProductionBomsView from './workspace/production/ProductionBomsView.vue'
-import ProductionWorkOrdersView from './workspace/production/ProductionWorkOrdersView.vue'
-import MaterialIssuesView from './workspace/production/MaterialIssuesView.vue'
-import MaterialReturnsView from './workspace/production/MaterialReturnsView.vue'
-import ProductionCompletionsView from './workspace/production/ProductionCompletionsView.vue'
-import ProductionCostsView from './workspace/production/ProductionCostsView.vue'
-import UserManagementView from './workspace/system/UserManagementView.vue'
-import RolePermissionsView from './workspace/system/RolePermissionsView.vue'
-import ConnectionSettingsView from './workspace/system/ConnectionSettingsView.vue'
-import HomeDashboardView from './workspace/home/HomeDashboardView.vue'
-
-// 路由键与视图一一对应，避免页面再次回到 App.vue 的条件分支。
-const workspaceViews: Record<WorkspaceRouteKey, Component> = {
-  home: HomeDashboardView,
-  stock: InventoryOverviewView,
-  transfers: WarehouseTransfersView,
-  stocktakes: InventoryStocktakesView,
-  catalog: MaterialsSuppliersView,
-  purchase: PurchaseOrdersView,
-  receipts: PurchaseReceiptsView,
-  purchaseReturns: PurchaseReturnsView,
-  sales: SalesOrdersView,
-  shipments: SalesShipmentsView,
-  salesReturns: SalesReturnsView,
-  finance: ReceivablesPayablesView,
-  boms: ProductionBomsView,
-  workOrders: ProductionWorkOrdersView,
-  materialIssues: MaterialIssuesView,
-  materialReturns: MaterialReturnsView,
-  productionCompletions: ProductionCompletionsView,
-  productionCosts: ProductionCostsView,
-  users: UserManagementView,
-  roles: RolePermissionsView,
-  settings: ConnectionSettingsView
-}
 
 const {
   screen,
@@ -124,8 +76,8 @@ const accountRole = computed(() => accountRoleText(user.value?.roles ?? [], role
 
         <AuthView v-if="isAuthScreen" />
         <template v-else-if="screen === 'app' && activeRouteAllowed">
-          <!-- 页面映射由路由键决定，新增页面须同时登记路由与视图。 -->
-          <component :is="workspaceViews[activeTab]" />
+          <!-- 工作台页面由 Vue Router 装载；权限守卫和服务端鉴权共同约束访问。 -->
+          <RouterView />
         </template>
       </div>
       <AppStatusFooter />

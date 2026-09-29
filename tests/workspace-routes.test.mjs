@@ -1,28 +1,22 @@
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
+import { createMemoryHistory } from 'vue-router'
+import { createWorkspaceRouter, installWorkspaceAccessGuard } from '../src/renderer/src/router/index.ts'
 import {
-  canVisitRoute, nextExpandedGroup, resolveWorkspaceRoute, routeByKey, visibleRouteGroups, workspaceRouteGroups, workspaceRoutes
+  canVisitRoute, nextExpandedGroup, resolveWorkspaceRoute, routeByKey, visibleRouteGroups, workspaceRoutes
 } from '../src/renderer/src/router/workspace-routes.ts'
 
 test('每个工作台页面只有一个路由，且都对应实际页面', () => {
   const shell = readFileSync(new URL('../src/renderer/src/views/WorkspaceShell.vue', import.meta.url), 'utf8')
-  const viewImports = new Map([...shell.matchAll(/^import (\w+) from '\.\/workspace\/([^']+\.vue)'$/gm)]
-    .map(([, name, path]) => [name, path]))
-  const pageEntries = [...shell.matchAll(/^  (\w+): (\w+View),?$/gm)]
-  const pageKeys = pageEntries.map(([, key]) => key)
+  const router = createWorkspaceRouter(createMemoryHistory())
+  const registered = router.getRoutes().filter((route) => route.name)
 
-  // 路由、组件映射和实际文件必须同步，避免侧栏出现空白页面。
+  // 路由记录由同一张业务表生成，组件由 Vue Router 装载，避免侧栏出现空白页面。
   assert.equal(workspaceRoutes.length, 21)
-  assert.deepEqual(new Set(workspaceRoutes.map(route => route.key)), new Set(pageKeys))
-  assert.match(shell, /<component :is="workspaceViews\[activeTab\]" \/>/)
-  assert.equal(viewImports.size, workspaceRoutes.length)
-  for (const [, key, component] of pageEntries) {
-    const path = viewImports.get(component)
-    const group = workspaceRouteGroups.find(entry => entry.routes.some(route => route.key === key))
-    assert.ok(path?.startsWith(`${group?.key}/`), `${key} 应放在 ${group?.key} 页面目录`)
-    assert.ok(existsSync(new URL(`../src/renderer/src/views/workspace/${path}`, import.meta.url)))
-  }
+  assert.deepEqual(new Set(registered.map(route => route.name)), new Set(workspaceRoutes.map(route => route.key)))
+  assert.ok(registered.every((route) => route.components?.default))
+  assert.match(shell, /<RouterView \/>/)
   assert.equal(new Set(workspaceRoutes.map(route => route.path)).size, workspaceRoutes.length)
   assert.ok(workspaceRoutes.every(route => route.path.startsWith('/workspace/')))
 })
@@ -40,26 +34,26 @@ test('侧栏按查看权限分类，隐藏空分类及未授权页面', () => {
 
 test('首页是登录账号均可见的固定入口与默认页面', () => {
   const sidebar = readFileSync(new URL('../src/renderer/src/components/workspace/WorkspaceSidebar.vue', import.meta.url), 'utf8')
-  const state = readFileSync(new URL('../src/renderer/src/store/state.ts', import.meta.url), 'utf8')
   assert.equal(routeByKey('home').path, '/workspace/home')
   assert.match(sidebar, /v-if="group\.key === 'home'"[\s\S]*?@click="navigateToRoute\('home'\)"/)
-  assert.match(state, /const activeTab = ref<WorkspaceRouteKey>\('home'\)/)
+  const store = readFileSync(new URL('../src/renderer/src/store/app-store.ts', import.meta.url), 'utf8')
+  assert.match(store, /const activeTab = computed<WorkspaceRouteKey>/)
 })
 
 test('直接访问未授权或未知地址时回退到可访问页面', () => {
   const permissions = ['sales.view']
-  assert.equal(resolveWorkspaceRoute('#/workspace/shipments', permissions).key, 'shipments')
-  assert.equal(resolveWorkspaceRoute('#/workspace/users', permissions).key, 'home')
-  assert.equal(resolveWorkspaceRoute('#/workspace/roles', permissions).key, 'home')
-  assert.equal(resolveWorkspaceRoute('#/workspace/missing', permissions).key, 'home')
-  assert.equal(resolveWorkspaceRoute('#/workspace/stock', []).key, 'home')
+  assert.equal(resolveWorkspaceRoute('/workspace/shipments', permissions).key, 'shipments')
+  assert.equal(resolveWorkspaceRoute('/workspace/users', permissions).key, 'home')
+  assert.equal(resolveWorkspaceRoute('/workspace/roles', permissions).key, 'home')
+  assert.equal(resolveWorkspaceRoute('/workspace/missing', permissions).key, 'home')
+  assert.equal(resolveWorkspaceRoute('/workspace/stock', []).key, 'home')
 })
 
 test('用户管理与权限管理有独立入口，且都要求用户管理权限', () => {
   const routes = visibleRouteGroups(['users.manage']).flatMap(group => group.routes)
   assert.deepEqual(routes.filter(route => ['users', 'roles'].includes(route.key)).map(route => route.label),
     ['用户管理', '权限管理'])
-  assert.equal(resolveWorkspaceRoute('#/workspace/roles', ['users.manage']).key, 'roles')
+  assert.equal(resolveWorkspaceRoute('/workspace/roles', ['users.manage']).key, 'roles')
 
   const userPage = readFileSync(new URL('../src/renderer/src/views/workspace/system/UserManagementView.vue', import.meta.url), 'utf8')
   const rolePage = readFileSync(new URL('../src/renderer/src/views/workspace/system/RolePermissionsView.vue', import.meta.url), 'utf8')
@@ -77,7 +71,53 @@ test('权限被撤销后，当前地址也必须重新核对', () => {
   const route = routeByKey('finance')
   assert.equal(canVisitRoute(route, ['finance.view']), true)
   assert.equal(canVisitRoute(route, []), false)
-  assert.equal(resolveWorkspaceRoute('#/workspace/finance', []).key, 'home')
+  assert.equal(resolveWorkspaceRoute('/workspace/finance', []).key, 'home')
+})
+
+test('Vue Router 保留登录前深链接，登录后拦截无权限页面和未知地址', async () => {
+  // 测试替换真实页面组件，使内存路由验证权限与地址时无需加载 Vue 单文件组件。
+  const component = { render: () => null }
+  const overrides = Object.fromEntries(workspaceRoutes.map((route) => [route.key, component]))
+  const router = createWorkspaceRouter(createMemoryHistory(), overrides)
+  let permissions = null
+  installWorkspaceAccessGuard(router, () => permissions)
+
+  await router.push('/workspace/stock')
+  await router.isReady()
+  assert.equal(router.currentRoute.value.path, '/workspace/stock')
+
+  permissions = []
+  await router.push('/workspace/roles')
+  assert.equal(router.currentRoute.value.path, '/workspace/home')
+  await router.push('/workspace/missing')
+  assert.equal(router.currentRoute.value.path, '/workspace/home')
+
+  permissions = ['users.manage']
+  await router.push('/workspace/roles')
+  assert.equal(router.currentRoute.value.path, '/workspace/roles')
+})
+
+test('工作台地址切换进入 Vue Router 历史，后退能恢复上一页面', async () => {
+  const component = { render: () => null }
+  const overrides = Object.fromEntries(workspaceRoutes.map((route) => [route.key, component]))
+  const router = createWorkspaceRouter(createMemoryHistory(), overrides)
+  installWorkspaceAccessGuard(router, () => ['inventory.view'])
+  await router.push('/workspace/home')
+  await router.isReady()
+  await router.push('/workspace/stock')
+
+  const restored = new Promise((resolve) => {
+    // 历史移动没有返回 Promise，以路由完成钩子核对最终页面。
+    const remove = router.afterEach((to) => {
+      if (to.path === '/workspace/home') {
+        remove()
+        resolve(to.path)
+      }
+    })
+  })
+  router.back()
+  assert.equal(await restored, '/workspace/home')
+  assert.equal(router.currentRoute.value.path, '/workspace/home')
 })
 
 test('分类默认收起，同一时间只能展开一个分类', () => {

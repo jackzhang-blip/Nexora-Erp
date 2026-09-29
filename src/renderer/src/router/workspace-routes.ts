@@ -273,10 +273,10 @@ export function closeRoute(
 }
 
 export function resolveWorkspaceRoute(
-  hash: string,
+  path: string,
   permissions: readonly string[]
 ): WorkspaceRoute {
-  const requested = workspaceRoutes.find((route) => hash === `#${route.path}`)
+  const requested = workspaceRoutes.find((route) => path === route.path)
   if (requested && canVisitRoute(requested, permissions)) return requested
   // 首页不依赖业务查看权限，未知地址或权限变化时都能安全回到工作台。
   return workspaceRoutes.find((route) => canVisitRoute(route, permissions))!

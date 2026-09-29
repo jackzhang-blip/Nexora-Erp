@@ -52,13 +52,13 @@
 | `src/renderer/src/components/workspace/` | 工作台专属的侧栏、账号卡片和已打开页面标签栏。新增共享组件按使用范围放入对应分类，不直接平铺在 `components/` 根目录。 |
 | `src/renderer/src/composables/` | 封装 Vue 组合式逻辑和组件级复用行为，当前包括 `use-app-message.ts`；不保存跨页面业务状态。 |
 | `src/renderer/src/i18n/` | 管理已抽离的界面文案，当前 `zh-CN.ts` 保存引导页中文文案；目录存在不代表已实现多语言。 |
-| `src/renderer/src/router/` | 维护工作台的页面键、地址、分组、图标与查看权限规则；目前由 `workspace-routes.ts` 提供路由表，应用状态通过 URL hash 同步页面，不使用 Vue Router。 |
+| `src/renderer/src/router/` | `workspace-routes.ts` 维护页面键、地址、分组和查看权限；`index.ts` 将页面注册到 Vue Router 并安装权限守卫，`browser-router.ts` 使用 Hash 模式保留桌面安装包的页面地址。 |
 | `src/renderer/src/store/` | 用 Pinia 管理应用会话、主题、服务端快照和跨页面操作；通用状态、连接操作、数据加载放在本层，业务写操作放在 `modules/` 并按业务域拆分。 |
 | `src/renderer/src/utils/` | 放不持有跨页面业务状态的辅助逻辑，如格式化、角色文案、主题偏好、底栏状态和标签滚动；需要 Vue 监听的消息反馈辅助函数也在此处。 |
 | `src/renderer/src/views/` | 放页面级视图与应用外壳：根层有登录页、引导页和工作台外壳；`onboarding/` 放引导阶段页面，`workspace/` 按 `home`、`warehouse`、`catalog`、`purchase`、`sales`、`finance`、`production`、`system` 业务域放工作台页面。 |
 
 - 新增页面时先放到对应业务域；仅服务于该页面的数据或样式与页面放在同一目录，跨页面复用后再移到 `components/`、`composables/`、`store/` 或 `utils/`。
-- 工作台新增入口时同步维护 `router/workspace-routes.ts`、`views/WorkspaceShell.vue`、对应页面目录说明和路由测试；页面地址与查看权限以路由表为准。
+- 工作台新增入口时同步维护 `router/workspace-routes.ts`、`router/index.ts` 的页面组件映射、对应页面目录说明和路由测试；页面地址与查看权限以路由表为准。
 - 页面只负责展示和表单交互；跨页面状态与业务操作遵循现有 Pinia 结构。现有 `useAppStore()` 兼容入口保留，不为新功能另建 `provide/inject` 状态容器。
 
 ## Electron 安全

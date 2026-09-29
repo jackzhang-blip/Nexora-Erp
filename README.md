@@ -28,7 +28,7 @@ Windows 可把 `python3` 改为 `python`。如果 Python 不在默认路径，�
 
 渲染层的应用会话和主题状态由 Pinia 管理，每个桌面窗口有独立的 store 实例。现有页面通过 `useAppStore()` 取得响应式 `ref` 与业务操作；根组件负责启动和清理连接检查、发现订阅及窗口监听器，渲染层仍只通过预加载接口调用桌面能力。
 
-前端目录按职责组织：`views/` 放引导、登录及按业务分组的工作台页面，`components/` 按 `app/` 公共区域、`feedback/` 消息反馈和 `workspace/` 工作台组件分类，`composables/` 放组件级组合式逻辑，`store/` 放 Pinia 会话状态、数据刷新和各业务操作，`router/` 放工作台地址与查看权限规则，`utils/` 放辅助函数，`assets/` 引用窗口品牌资源，`i18n/` 保存当前引导页的中文文案。当前界面只提供中文；增加其他语言时需补齐所有页面文案，不能仅凭目录存在宣称已支持多语言。目录职责和新增文件放置规则见 [前端项目树规范](AGENTS.md#前端项目树规范)，各页面的位置和用途见 [启动引导页面目录](src/renderer/src/views/onboarding/README.md)与[工作台页面目录](src/renderer/src/views/workspace/README.md)。
+前端目录按职责组织：`views/` 放引导、登录及按业务分组的工作台页面，`components/` 按 `app/` 公共区域、`feedback/` 消息反馈和 `workspace/` 工作台组件分类，`composables/` 放组件级组合式逻辑，`store/` 放 Pinia 会话状态、数据刷新和各业务操作，`router/` 用 Vue Router Hash 模式管理工作台地址、页面组件与查看权限，`utils/` 放辅助函数，`assets/` 引用窗口品牌资源，`i18n/` 保存当前引导页的中文文案。当前界面只提供中文；增加其他语言时需补齐所有页面文案，不能仅凭目录存在宣称已支持多语言。目录职责和新增文件放置规则见 [前端项目树规范](AGENTS.md#前端项目树规范)，各页面的位置和用途见 [启动引导页面目录](src/renderer/src/views/onboarding/README.md)与[工作台页面目录](src/renderer/src/views/workspace/README.md)。
 
 仓库根目录的 `tsconfig.json` 为编辑器关联网页端和 Electron 端类型项目；命令行仍由 `npm run typecheck` 分别检查。页面重命名后，编辑器里仍打开的“已删除”旧标签可能继续显示 TS2307，应关闭旧标签并从文件树打开现用页面；现用页面的相对导入会在测试中检查。
 
