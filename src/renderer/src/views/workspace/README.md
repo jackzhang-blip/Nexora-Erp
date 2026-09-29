@@ -31,7 +31,7 @@
 
 页面组件处理展示与表单绑定；跨页面草稿和服务端快照放在 `store/state.ts`，业务写操作放在 `store/modules/`。权限与地址规则只在 `router/workspace-routes.ts` 维护。
 
-需要“上方功能区、下方列表”的业务页可复用 `components/workspace/WorkspaceTable.vue`：页面传入标题、列头和结果数量，按业务填充 `actions`、`filters`、`rows`、`empty` 与 `footer` 插槽；组件统一处理表格结构、加载和空状态。权限管理的职务列表是首个使用处，职务仍沿用现有角色与操作权限数据，内置角色只读；授权树由 `components/workspace/PermissionTreePicker.vue` 提供。权限目录在系统管理下使用单独路由，避免职务列表下方再展开很长的名称维护区域。
+需要“上方功能区、下方列表”的业务页可复用 `components/workspace/WorkspaceTable.vue`：页面传入标题、列头和结果数量，按业务填充 `actions`、`filters`、`rows`、`empty` 与 `footer` 插槽；组件统一处理表格结构、加载和空状态。权限管理的职务列表是首个使用处，职务仍沿用现有角色与操作权限数据，内置角色只读；授权树由 `components/workspace/PermissionTreePicker.vue` 提供。权限目录在系统管理下使用单独路由，避免职务列表下方再展开很长的名称维护区域。权限目录可独立重试读取服务端数据，其他业务列表加载失败时不会使目录一直空白。
 
 应用业务状态和主题状态由 Pinia 管理。`store/app-store.ts` 的 `useAppStore()` 保留页面现有的响应式 `ref` 取值接口；应用启动与监听器清理由根组件负责。
 
