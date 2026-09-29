@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAppStore } from '../store/app-store'
 import IconUser3Line from '~icons/ri/user-3-line'
-import IconArrowDownSLine from '~icons/ri/arrow-down-s-line'
 import IconLogoutBoxRLine from '~icons/ri/logout-box-r-line'
 import { accountRoleText } from '../utils/account-role'
+import ThemeToggle from './ThemeToggle.vue'
 
 const { user, roles, logout } = useAppStore()
 const card = ref<HTMLElement | null>(null)
@@ -17,17 +17,19 @@ function closeWhenFocusLeaves(event: FocusEvent): void {
     menuOpen.value = false
 }
 
-function closeWhenPointerLeaves(): void {
-  // 只为可见的键盘焦点保留菜单；鼠标点击后的普通焦点不阻止悬停菜单收起。
-  if (!card.value?.contains(document.activeElement) || !document.activeElement?.matches(':focus-visible'))
-    menuOpen.value = false
+function closeWhenClickOutside(event: PointerEvent): void {
+  // 点击卡片外关闭菜单；账号按钮本身负责切换，避免悬停时意外弹出退出操作。
+  if (event.target instanceof Node && !card.value?.contains(event.target)) menuOpen.value = false
 }
 
 function closeOnEscape(): void {
   menuOpen.value = false
-  // 释放焦点，避免后续 focusin 把刚关闭的菜单再次打开。
+  // 释放焦点，避免关闭后按钮仍保留菜单操作的视觉焦点。
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
 }
+
+onMounted(() => document.addEventListener('pointerdown', closeWhenClickOutside))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', closeWhenClickOutside))
 </script>
 
 <template>
@@ -35,30 +37,32 @@ function closeOnEscape(): void {
     v-if="user"
     ref="card"
     class="sidebar-account"
-    @mouseenter="menuOpen = true"
-    @mouseleave="closeWhenPointerLeaves"
-    @focusin="menuOpen = true"
     @focusout="closeWhenFocusLeaves"
     @keydown.esc.stop="closeOnEscape"
   >
-    <button
-      class="sidebar-account-card"
-      type="button"
-      :aria-expanded="menuOpen"
-      aria-controls="sidebar-account-menu"
-      @click="menuOpen = true"
-    >
-      <span class="sidebar-account-avatar" aria-hidden="true"><IconUser3Line /></span>
-      <span class="sidebar-account-identity">
-        <strong :title="user.username">{{ user.username }}</strong>
-        <small :title="roleText">{{ roleText }}</small>
-      </span>
-      <IconArrowDownSLine class="sidebar-account-chevron" aria-hidden="true" />
-    </button>
-    <div v-show="menuOpen" id="sidebar-account-menu" class="sidebar-account-menu">
-      <button type="button" @click="logout">
-        <IconLogoutBoxRLine aria-hidden="true" />退出登录
+    <div class="sidebar-account-row">
+      <button
+        class="sidebar-account-card"
+        type="button"
+        :aria-expanded="menuOpen"
+        aria-controls="sidebar-account-menu"
+        @click="menuOpen = !menuOpen"
+      >
+        <span class="sidebar-account-avatar" aria-hidden="true"><IconUser3Line /></span>
+        <span class="sidebar-account-identity">
+          <strong :title="user.username">{{ user.username }}</strong>
+          <small :title="roleText">{{ roleText }}</small>
+        </span>
       </button>
+      <!-- 主题图标独立于账号菜单，可直接操作且不影响退出登录入口。 -->
+      <ThemeToggle />
     </div>
+    <Transition name="account-menu">
+      <div v-if="menuOpen" id="sidebar-account-menu" class="sidebar-account-menu">
+        <button type="button" @click="logout">
+          <IconLogoutBoxRLine aria-hidden="true" />退出登录
+        </button>
+      </div>
+    </Transition>
   </div>
 </template>

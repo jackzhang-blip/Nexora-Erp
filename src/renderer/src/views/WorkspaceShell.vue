@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useAppStore } from '../store/app-store'
 import type { Component } from 'vue'
 import WorkspaceSidebar from '../components/WorkspaceSidebar.vue'
+import ThemeToggle from '../components/ThemeToggle.vue'
 import WorkspaceTabs from '../components/WorkspaceTabs.vue'
 import AppStatusFooter from '../components/AppStatusFooter.vue'
 import AuthView from './AuthView.vue'
@@ -114,7 +115,7 @@ const accountRole = computed(() => accountRoleText(user.value?.roles ?? [], role
             <span class="account-identity"
               >{{ user.username
               }}<small>{{ accountRole }}</small></span
-            ><button class="text-button" type="button" @click="logout">
+            ><ThemeToggle /><button class="text-button" type="button" @click="logout">
               退出登录
             </button>
           </div>
