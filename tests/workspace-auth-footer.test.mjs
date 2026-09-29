@@ -33,3 +33,11 @@ test('登录内容独立滚动，底栏在宽窄窗口内都保留可见', () =>
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.auth-footer \{ justify-content: flex-end; padding: 10px 17px; \}/)
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.auth-footer \.onboard-footer-copy:first-child \{ display: none; \}/)
 })
+
+test('登录页隐藏侧栏里带绿点的重复服务端状态', () => {
+  const sidebar = readFileSync(new URL('../src/renderer/src/components/WorkspaceSidebar.vue', import.meta.url), 'utf8')
+
+  // 连接中断时不能同时在左侧显示绿点、在右下角显示红色告警。
+  assert.match(sidebar, /<div v-if="screen === 'app'" class="sidebar-bottom">/)
+  assert.match(sidebar, /<span class="status-dot"><\/span> \{\{ server\?\.name/)
+})
