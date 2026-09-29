@@ -8,13 +8,15 @@ export interface WorkspaceTableColumn {
 withDefaults(defineProps<{
   title: string
   description?: string
-  columns: readonly WorkspaceTableColumn[]
-  rowCount: number
+  columns?: readonly WorkspaceTableColumn[]
+  rowCount?: number
   emptyText?: string
   loading?: boolean
   minTableWidth?: number
 }>(), {
   description: '',
+  columns: () => [],
+  rowCount: 0,
   emptyText: '暂无数据',
   loading: false,
   minTableWidth: 580
@@ -44,7 +46,9 @@ withDefaults(defineProps<{
       <slot name="beforeTable" />
     </div>
     <div class="table-wrap">
-      <table :aria-label="title" :style="{ minWidth: `${minTableWidth}px` }">
+      <!-- 试用第三方表格时只替换表格本体，标题、筛选和表单布局仍复用公共外壳。 -->
+      <slot v-if="$slots.table" name="table" />
+      <table v-else :aria-label="title" :style="{ minWidth: `${minTableWidth}px` }">
         <thead>
           <tr>
             <th v-for="column in columns" :key="column.key" scope="col" :style="{ width: column.width }">
