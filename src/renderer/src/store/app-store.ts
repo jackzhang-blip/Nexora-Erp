@@ -1,13 +1,10 @@
 import {
   computed,
-  inject,
   nextTick,
-  onMounted,
-  onUnmounted,
-  provide,
   ref,
   watch
 } from 'vue'
+import { defineStore } from 'pinia'
 // 从 Remix Icon 的 ri 图标集按需导入，构建时会把 SVG 打包进应用。
 import IconStackLine from '~icons/ri/stack-line'
 import IconArchiveLine from '~icons/ri/archive-line'
@@ -57,8 +54,9 @@ import {
 } from '../utils/formatters'
 
 import type { Screen } from './types'
+import { storeBindings } from './store-bindings'
 
-// 每个窗口创建独立 store，业务页面通过注入共享同一份会话状态。
+// Pinia 为每个渲染窗口创建独立会话，所有业务页面共用同一份响应式状态。
 function createAppStore() {
   const state = createAppState()
   const {
@@ -211,7 +209,11 @@ function createAppStore() {
 
   const accessActions = createAccessActions(state, perform)
 
-  onMounted(async () => {
+  let initialized = false
+  async function initialize(): Promise<void> {
+    // 启动资源仍由根组件控制，避免 Pinia store 在首次读取时自行注册窗口监听。
+    if (initialized) return
+    initialized = true
     window.addEventListener('hashchange', syncWorkspaceRoute)
     window.addEventListener('resize', revealCurrentTab)
     if (window.nexora)
@@ -220,18 +222,23 @@ function createAppStore() {
       hostForm.value.dataDir = await window.nexora
         .defaultDataDir()
         .catch(() => '')
+    if (!initialized) return
     await checkConnection()
-    healthTimer = setInterval(() => {
-      void monitorConnection()
-    }, 5000)
-  })
+    // 窗口可能在异步连接检查期间关闭，关闭后不再启动轮询。
+    if (initialized)
+      healthTimer = setInterval(() => {
+        void monitorConnection()
+      }, 5000)
+  }
 
-  onUnmounted(() => {
+  function dispose(): void {
+    initialized = false
     void stopScan()
     if (healthTimer) clearInterval(healthTimer)
+    healthTimer = null
     window.removeEventListener('hashchange', syncWorkspaceRoute)
     window.removeEventListener('resize', revealCurrentTab)
-  })
+  }
   return {
     ...state,
     ...connectionActions,
@@ -258,21 +265,17 @@ function createAppStore() {
     financialSource,
     refreshData,
     perform,
-    paymentActionLabel
+    paymentActionLabel,
+    initialize,
+    dispose
   }
 }
 
-export type AppStore = ReturnType<typeof createAppStore>
-const appStoreKey = Symbol('nexora-app-store')
+export const usePiniaAppStore = defineStore('app', createAppStore)
 
-export function provideAppStore(): AppStore {
-  const store = createAppStore()
-  provide(appStoreKey, store)
-  return store
+// 现有页面解构 ref 的写法由此统一兼容；状态与计算值来自 Pinia，操作仍取自同一个 store。
+export function useAppStore() {
+  return storeBindings(usePiniaAppStore())
 }
 
-export function useAppStore(): AppStore {
-  const store = inject<AppStore>(appStoreKey)
-  if (!store) throw new Error('缺少应用状态提供者')
-  return store
-}
+export type AppStore = ReturnType<typeof useAppStore>

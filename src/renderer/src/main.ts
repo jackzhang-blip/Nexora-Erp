@@ -1,9 +1,10 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
 import App from './App.vue'
 import './style.css'
 import './light-theme.css'
 import './dark-theme.css'
 import './theme-transitions.css'
 
-// Vue 只负责界面；需要系统能力时通过预加载脚本提供的接口调用。
-createApp(App).mount('#app')
+// 每个渲染窗口安装独立 Pinia 实例；系统能力仍只通过预加载桥接调用。
+createApp(App).use(createPinia()).mount('#app')

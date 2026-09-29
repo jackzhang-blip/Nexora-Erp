@@ -4,7 +4,7 @@
 
 ## 项目概况
 
-- 这是一个 Electron + Vue 3 + TypeScript 桌面应用，后端基础服务使用 FastAPI。
+- 这是一个 Electron + Vue 3 + TypeScript + Pinia 桌面应用，后端基础服务使用 FastAPI。
 - `src/main` 放 Electron 主进程代码，`src/preload` 放受限的预加载桥接，`src/renderer` 放 Vue 渲染层，`src/shared` 放前后端共享类型或协议。
 - `backend/app` 放 Python 后端，`backend/tests` 放后端测试，`tests` 放仓库级测试。
 - README 中标记为“计划”“候选”或“设计目标”的能力，不得在代码、提交说明或文档中描述为已经实现。
@@ -29,7 +29,7 @@
 
 - 默认使用 TypeScript 严格类型，避免 `any`；共享数据优先定义明确的接口或类型。
 - Vue 组件使用现有项目的 Vue 3 写法和样式组织方式，保持页面状态、业务逻辑和进程通信边界清晰。
-  - 新增的组件状态管理使用 Pinia；现有共享状态仍由 `provide/inject` 维护，迁移须作为独立需求处理。避免直接操作 `this.$store`。
+  - 组件共享状态统一使用 Pinia；新页面解构响应式状态时使用 `storeToRefs`，操作方法直接取自 store。现有 `useAppStore()` 兼容入口保留旧页面的 `ref` 接口，新增模块不要另建 `provide/inject` store。
 - 主进程与渲染进程之间只通过预加载层暴露必要能力，不直接把 Node.js 或 Electron 高权限对象暴露给渲染进程。
 - 用户输入、文件路径、网络响应和 IPC 参数都要在边界处校验；错误需要提供可诊断的信息，同时避免泄露敏感数据。
 - Python 代码遵循现有 FastAPI 结构，路由、业务逻辑和数据访问不要无理由混在同一个函数中。
