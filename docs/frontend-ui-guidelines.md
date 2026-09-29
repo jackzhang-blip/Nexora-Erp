@@ -7,6 +7,7 @@
 | 用途 | 项目标准 | 使用方式 |
 | --- | --- | --- |
 | 交互组件 | Naive UI | 从 `naive-ui` 按需导入；表单、按钮、选择器、表格、弹窗和反馈优先使用它。 |
+| 跨页面状态 | Pinia | 新模块使用 `defineStore`；组件解构响应式状态时使用 `storeToRefs`，操作方法直接从 store 获取。 |
 | 布局和样式 | Tailwind CSS 4 | 在 Vue 模板中使用工具类处理布局、间距、响应式和常规视觉样式。 |
 | 图标 | [Icônes](https://icones.js.org/collection/ri) 的 Remix Icon（`ri`） | 从 `~icons/ri/<图标名>` 按需导入 Vue 组件。 |
 
