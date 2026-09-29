@@ -93,3 +93,12 @@ test('基础资料列表保留公共外壳，物料使用第三方表格插槽',
     assert.doesNotMatch(source, /<table\b/, name)
   }
 })
+
+test('原生表格和 vxe 表格的单元格都保持垂直居中', () => {
+  const sharedStyle = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
+  const catalogStyle = readFileSync(new URL('../src/renderer/src/views/workspace/catalog/catalog.css', import.meta.url), 'utf8')
+  // 两种渲染方式共用居中约束，防止全局样式或第三方组件样式再次让文字贴顶。
+  assert.match(sharedStyle, /th, td\s*\{\s*vertical-align:\s*middle;/)
+  assert.match(catalogStyle, /\.catalog-page \.catalog-vxe-table :is\(th, td\)\s*\{[^}]*vertical-align:\s*middle;/)
+  assert.doesNotMatch(sharedStyle, /(?:th|td)\s*\{[^}]*vertical-align:\s*top;/)
+})

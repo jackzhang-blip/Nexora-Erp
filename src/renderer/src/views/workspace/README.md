@@ -31,7 +31,7 @@
 
 页面组件处理展示与表单绑定；跨页面草稿和服务端快照放在 `store/state.ts`，业务写操作放在 `store/modules/`。权限与地址规则只在 `router/workspace-routes.ts` 维护。
 
-需要“上方功能区、下方列表”的业务页可复用 `components/workspace/WorkspaceTable.vue`：原生表格由页面传入标题、列头、结果数量和可选的最小宽度，按业务填充 `actions`、`filters`、`rows`、`empty` 与 `footer` 插槽；需要保留特殊标题或表格前表单时使用 `heading`、`beforeTable` 插槽。提供 `table` 插槽时，仅由页面接管表格本体，公共组件仍负责上方功能区。当前物料列表试接 vxe table 的纯表格版本，通过该插槽保留搜索、增删改和 Naive UI 的删除确认；供应商、仓库、供货物料及职务列表仍使用原生表格。vxe table 尚未推广到其他页面，也未启用表内编辑或批量写入。职务仍沿用现有角色与操作权限数据，内置角色只读；授权树由 `components/workspace/PermissionTreePicker.vue` 提供。权限目录在系统管理下使用单独路由，避免职务列表下方再展开很长的名称维护区域。权限目录可独立重试读取服务端数据，其他业务列表加载失败时不会使目录一直空白。
+需要“上方功能区、下方列表”的业务页可复用 `components/workspace/WorkspaceTable.vue`：原生表格由页面传入标题、列头、结果数量和可选的最小宽度，按业务填充 `actions`、`filters`、`rows`、`empty` 与 `footer` 插槽；需要保留特殊标题或表格前表单时使用 `heading`、`beforeTable` 插槽。提供 `table` 插槽时，仅由页面接管表格本体，公共组件仍负责上方功能区。原生表格与 vxe table 的表头、数据单元格均按垂直居中显示。当前物料列表试接 vxe table 的纯表格版本，通过该插槽保留搜索、增删改和 Naive UI 的删除确认；供应商、仓库、供货物料及职务列表仍使用原生表格。vxe table 尚未推广到其他页面，也未启用表内编辑或批量写入。职务仍沿用现有角色与操作权限数据，内置角色只读；授权树由 `components/workspace/PermissionTreePicker.vue` 提供。权限目录在系统管理下使用单独路由，避免职务列表下方再展开很长的名称维护区域。权限目录可独立重试读取服务端数据，其他业务列表加载失败时不会使目录一直空白。
 
 应用业务状态和主题状态由 Pinia 管理。`store/app-store.ts` 的 `useAppStore()` 保留页面现有的响应式 `ref` 取值接口；应用启动与监听器清理由根组件负责。
 
