@@ -41,6 +41,14 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 物料、供应商和客户资料、采购订单与分批入库及退货、销售订单与分批出库及退货、入库单草稿、确认入库、多仓库库存、仓库调拨、库存盘点及库存流水已实现。确认入库、出库、退货、调拨或有差异的盘点会在单个事务中生成库存流水；重复确认返回冲突。所有数据由服务端 SQLite 保存，远程客户端没有离线副本或自动同步。
 
+## 基础资料与供货关系
+
+物料、供应商、仓库分别通过 `/materials`、`/suppliers`、`/warehouses`（统一前缀 `/api/v1`）提供 GET 列表、POST 新增、PUT `/{id}` 修改和 DELETE `/{id}` 删除。查看要求 `inventory.view`，物料和供应商写入要求 `catalog.manage`，仓库写入要求 `warehouse.manage`。重复编码或名称冲突返回 409，记录不存在返回 404；被业务单据或库存引用的记录不能删除，默认 1 号主仓库也不能删除。修改名称会反映在引用该档案的历史查询中，当前没有档案版本快照。
+
+数据库第 28 版新增 `supplier_materials` 多对多关联表。GET `/supplier-materials` 返回供应商与物料编号；PUT `/suppliers/{supplier_id}/materials/{material_id}` 幂等绑定，DELETE 同路径解绑，写入要求 `catalog.manage`。同一物料可绑定多个供应商，供应商也可绑定多个物料；解绑不删除物料、不改动库存和采购记录。删除未被业务引用的资料会清理其绑定关系；删除失败时关系与资料一并回滚。不同规格使用不同物料编码维护，可在名称中填写规格型号。
+
+桌面基础资料分为物料管理、供应商管理、仓库管理，支持列表搜索。供货关系用于供应商页检索和维护，目前不限制采购选料，不自动补全采购单，不记录报价或推算历史采购价格。客户端与服务端需一起升级，服务端重启时执行数据库迁移。
+
 ## 采购订单
 
 `POST /api/v1/purchase-orders` 创建含供应商、物料、数量与单价的草稿；`POST /api/v1/purchase-orders/{id}/confirm` 确认后才能关联入库单；未入库的订单可调用 `/cancel` 取消。`GET /api/v1/purchase-orders` 返回订单金额、每行已入库与剩余数量。金额按每行数量乘单价后四舍五入到分；当前只按人民币展示。创建、确认和取消分别需要 `purchase_order.create`、`purchase_order.confirm`、`purchase_order.cancel` 权限。

@@ -1,5 +1,7 @@
 """供应商与物料基础资料接口。"""
 
+import sqlite3
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
@@ -63,3 +65,82 @@ def create_material(payload: MaterialInput, _: dict = Depends(require("catalog.m
         except sqlite3.IntegrityError:
             raise HTTPException(409, "物料编码已存在") from None
         return {"id": cursor.lastrowid, **payload.model_dump()}
+
+
+@router.put("/materials/{material_id}")
+def update_material(material_id: int, payload: MaterialInput,
+                    _: dict = Depends(require("catalog.manage"))) -> dict:
+    with connection() as db:
+        try:
+            cursor = db.execute("UPDATE materials SET sku = ?, name = ?, unit = ? WHERE id = ?",
+                                (payload.sku, payload.name, payload.unit, material_id))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, "物料编码已存在") from None
+        if not cursor.rowcount:
+            raise HTTPException(404, "物料不存在")
+        return {"id": material_id, **payload.model_dump()}
+
+
+@router.delete("/materials/{material_id}", status_code=204)
+def delete_material(material_id: int, _: dict = Depends(require("catalog.manage"))) -> None:
+    with connection() as db:
+        try:
+            cursor = db.execute("DELETE FROM materials WHERE id = ?", (material_id,))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, "物料已被业务单据或库存记录引用，不能删除") from None
+        if not cursor.rowcount:
+            raise HTTPException(404, "物料不存在")
+
+
+@router.put("/suppliers/{supplier_id}")
+def update_supplier(supplier_id: int, payload: SupplierInput,
+                    _: dict = Depends(require("catalog.manage"))) -> dict:
+    with connection() as db:
+        try:
+            cursor = db.execute("UPDATE suppliers SET name = ? WHERE id = ?", (payload.name, supplier_id))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, "供应商已存在") from None
+        if not cursor.rowcount:
+            raise HTTPException(404, "供应商不存在")
+        return {"id": supplier_id, **payload.model_dump()}
+
+
+@router.delete("/suppliers/{supplier_id}", status_code=204)
+def delete_supplier(supplier_id: int, _: dict = Depends(require("catalog.manage"))) -> None:
+    with connection() as db:
+        try:
+            cursor = db.execute("DELETE FROM suppliers WHERE id = ?", (supplier_id,))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, "供应商已被业务单据引用，不能删除") from None
+        if not cursor.rowcount:
+            raise HTTPException(404, "供应商不存在")
+
+
+@router.get("/supplier-materials")
+def list_supplier_materials(_: dict = Depends(require("inventory.view"))) -> list[dict]:
+    with connection() as db:
+        return [dict(row) for row in db.execute(
+            "SELECT supplier_id, material_id FROM supplier_materials ORDER BY supplier_id, material_id")]
+
+
+@router.put("/suppliers/{supplier_id}/materials/{material_id}", status_code=204)
+def bind_supplier_material(supplier_id: int, material_id: int,
+                           _: dict = Depends(require("catalog.manage"))) -> None:
+    with connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        if not db.execute("SELECT 1 FROM suppliers WHERE id = ?", (supplier_id,)).fetchone():
+            raise HTTPException(404, "供应商不存在")
+        if not db.execute("SELECT 1 FROM materials WHERE id = ?", (material_id,)).fetchone():
+            raise HTTPException(404, "物料不存在")
+        db.execute("INSERT OR IGNORE INTO supplier_materials(supplier_id, material_id) VALUES (?, ?)",
+                   (supplier_id, material_id))
+
+
+@router.delete("/suppliers/{supplier_id}/materials/{material_id}", status_code=204)
+def unbind_supplier_material(supplier_id: int, material_id: int,
+                             _: dict = Depends(require("catalog.manage"))) -> None:
+    with connection() as db:
+        cursor = db.execute("DELETE FROM supplier_materials WHERE supplier_id = ? AND material_id = ?",
+                            (supplier_id, material_id))
+        if not cursor.rowcount:
+            raise HTTPException(404, "供货关系不存在")

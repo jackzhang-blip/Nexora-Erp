@@ -13,7 +13,7 @@ test('每个工作台页面只有一个路由，且都对应实际页面', () =>
   const registered = router.getRoutes().filter((route) => route.name)
 
   // 路由记录由同一张业务表生成，组件由 Vue Router 装载，避免侧栏出现空白页面。
-  assert.equal(workspaceRoutes.length, 21)
+  assert.equal(workspaceRoutes.length, 23)
   assert.deepEqual(new Set(registered.map(route => route.name)), new Set(workspaceRoutes.map(route => route.key)))
   assert.ok(registered.every((route) => route.components?.default))
   assert.match(shell, /<RouterView \/>/)
@@ -139,4 +139,15 @@ test('收起的页面入口不可聚焦，动效遵循减少动态效果设置',
   assert.match(style, /\.nav-panel \{[^}]*grid-template-rows: 0fr;[^}]*transition: grid-template-rows/)
   assert.match(style, /\.nav-panel\.expanded \{ grid-template-rows: 1fr;/)
   assert.match(style, /@media \(prefers-reduced-motion: reduce\) \{[^}]*\}[^}]*\.nav-panel[^}]*transition: none;/)
+})
+
+
+test('基础资料三个入口独立且沿用查看权限与旧物料地址', () => {
+  const group = visibleRouteGroups(['inventory.view']).find(group => group.key === 'catalog')
+  assert.deepEqual(group.routes.map(route => route.label), ['物料管理', '供应商管理', '仓库管理'])
+  assert.equal(routeByKey('catalog').path, '/workspace/catalog')
+  for (const key of ['catalog', 'suppliers', 'warehouses']) {
+    assert.equal(canVisitRoute(routeByKey(key), []), false)
+    assert.equal(resolveWorkspaceRoute(routeByKey(key).path, ['inventory.view']).key, key)
+  }
 })

@@ -128,6 +128,15 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
       method: 'POST', path: `/api/v1/users/${positiveId(payload, 'userId')}/reset-password`,
       body: { password: (payload as { password: unknown }).password }
     }
+    case 'updateMaterial': return { method: 'PUT', path: `/api/v1/materials/${positiveId(payload, 'id')}`, body: payload }
+    case 'deleteMaterial': return { method: 'DELETE', path: `/api/v1/materials/${positiveId(payload, 'id')}` }
+    case 'updateSupplier': return { method: 'PUT', path: `/api/v1/suppliers/${positiveId(payload, 'id')}`, body: payload }
+    case 'deleteSupplier': return { method: 'DELETE', path: `/api/v1/suppliers/${positiveId(payload, 'id')}` }
+    case 'updateWarehouse': return { method: 'PUT', path: `/api/v1/warehouses/${positiveId(payload, 'id')}`, body: payload }
+    case 'deleteWarehouse': return { method: 'DELETE', path: `/api/v1/warehouses/${positiveId(payload, 'id')}` }
+    case 'supplierMaterials': return { method: 'GET', path: '/api/v1/supplier-materials' }
+    case 'bindSupplierMaterial': return { method: 'PUT', path: `/api/v1/suppliers/${positiveId(payload, 'supplierId')}/materials/${positiveId(payload, 'materialId')}` }
+    case 'unbindSupplierMaterial': return { method: 'DELETE', path: `/api/v1/suppliers/${positiveId(payload, 'supplierId')}/materials/${positiveId(payload, 'materialId')}` }
     case 'suppliers': return { method: 'GET', path: '/api/v1/suppliers' }
     case 'createSupplier': return { method: 'POST', path: '/api/v1/suppliers', body: payload }
     case 'customers': return { method: 'GET', path: '/api/v1/customers' }

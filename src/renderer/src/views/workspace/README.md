@@ -8,7 +8,9 @@
 | `warehouse/` | `InventoryOverviewView.vue` | 查看当前库存与库存流水 |
 | `warehouse/` | `WarehouseTransfersView.vue` | 建立、确认及冲销仓库调拨 |
 | `warehouse/` | `InventoryStocktakesView.vue` | 建立、确认及冲销库存盘点 |
-| `catalog/` | `MaterialsSuppliersView.vue` | 维护物料与供应商资料 |
+| `catalog/` | `MaterialsView.vue` | 物料列表、搜索、增删改及关联供应商展示；沿用 `/workspace/catalog` 地址 |
+| `catalog/` | `SuppliersView.vue` | 供应商增删改查及供货物料绑定、解绑 |
+| `catalog/` | `WarehousesView.vue` | 仓库增删改查，默认主仓库禁止删除 |
 | `purchase/` | `PurchaseOrdersView.vue` | 建立和管理采购订单 |
 | `purchase/` | `PurchaseReceiptsView.vue` | 建立和确认采购入库单 |
 | `purchase/` | `PurchaseReturnsView.vue` | 处理采购退货 |

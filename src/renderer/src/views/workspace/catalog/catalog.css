@@ -1,0 +1,4 @@
+.catalog-page .catalog-search { display: grid; gap: 8px; max-width: 480px; margin-bottom: 20px; }
+.catalog-page .catalog-editor { padding: 20px; margin: 20px 0; border: 1px solid var(--border-color, #34455d); border-radius: 12px; }
+.catalog-page .catalog-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.catalog-page .section-heading { flex-wrap: wrap; gap: 16px; }
