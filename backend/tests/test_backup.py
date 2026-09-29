@@ -6,9 +6,9 @@ import zipfile
 
 import pytest
 
-from app import backup as backup_module
-from app.backup import create_backup, restore_backup
-from app.database import migrate
+from app.service import backup as backup_module
+from app.service.backup import create_backup, restore_backup
+from app.core.database import migrate
 from app.server import ensure_certificate
 
 

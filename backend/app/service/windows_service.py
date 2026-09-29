@@ -4,8 +4,8 @@ import servicemanager
 import win32service
 import win32serviceutil
 
-from .host_service import SERVICE_NAME, read_config, record_service_failure, service_output
-from .server import create_server
+from app.service.host_service import SERVICE_NAME, read_config, record_service_failure, service_output
+from app.server import create_server
 
 
 class NexoraWindowsService(win32serviceutil.ServiceFramework):

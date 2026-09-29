@@ -6,8 +6,8 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from .database import connection
-from .security import require
+from app.core.database import connection
+from app.access.security import require
 
 router = APIRouter(prefix="/api/v1")
 

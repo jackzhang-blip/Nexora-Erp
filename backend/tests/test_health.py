@@ -3,7 +3,7 @@ import sqlite3
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.database import migrate
+from app.core.database import migrate
 
 
 def test_health_contract(monkeypatch, tmp_path):

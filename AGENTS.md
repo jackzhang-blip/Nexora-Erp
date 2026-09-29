@@ -61,6 +61,30 @@
 - 工作台新增入口时同步维护 `router/workspace-routes.ts`、`router/index.ts` 的页面组件映射、对应页面目录说明和路由测试；页面地址与查看权限以路由表为准。
 - 页面只负责展示和表单交互；跨页面状态与业务操作遵循现有 Pinia 结构。现有 `useAppStore()` 兼容入口保留，不为新功能另建 `provide/inject` 状态容器。
 
+## 后端项目树规范
+
+`backend/app` 按功能组织。新增接口应放进对应目录的路由模块，并在 `app/main.py` 装配；不要继续把业务接口写回入口文件。
+
+| 路径 | 职责 |
+| --- | --- |
+| `backend/app/main.py` | 创建 FastAPI 应用、管理启动生命周期、装配各功能路由。 |
+| `backend/app/server.py`、`backup.py` | 保留桌面程序与命令行使用的 HTTPS 服务及备份入口。 |
+| `backend/app/access/` | 登录、账号、角色、权限接口及服务端授权。 |
+| `backend/app/catalog/` | 供应商与物料基础资料接口。 |
+| `backend/app/core/` | SQLite 连接与数据库迁移等全局基础能力。 |
+| `backend/app/purchase/` | 采购订单、入库单及采购退货。 |
+| `backend/app/inventory/` | 仓库、调拨、盘点、库存余额与流水。 |
+| `backend/app/sales/` | 客户、销售订单、出库与销售退货。 |
+| `backend/app/production/` | BOM、工单、领退料、报工与工单成本。 |
+| `backend/app/finance/` | 应收应付来源、订单余额与手工收付款。 |
+| `backend/app/service/` | 服务状态、局域网发现、系统服务、备份恢复。 |
+| `backend/launcher.py` | 打包后的固定命令入口；新增系统服务命令需同步检查。 |
+| `backend/tests/` | 对应业务接口、服务生命周期及跨模块行为的测试。 |
+
+- 功能目录内按单据或职责拆文件；跨目录调用使用明确的 `app.<功能目录>.<模块>` 导入，避免依赖入口文件或循环导入。
+- `app.server` 与 `app.backup` 是现有桌面启动和运维命令入口，移动内部实现时保留这两个模块路径。
+- 新增业务接口时同步维护路由装配、权限约束和相应测试；修改目录职责时同步更新 `backend/README.md`。
+
 ## Electron 安全
 
 - 默认保持 `contextIsolation`、受限的 preload API 和最小权限原则。

@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from app import host_service
+from app.service import host_service
 from launcher import configure_console_output
 
 

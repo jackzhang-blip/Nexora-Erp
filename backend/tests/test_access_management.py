@@ -4,7 +4,7 @@ import sqlite3
 
 from fastapi.testclient import TestClient
 
-from app.database import connection, migrate
+from app.core.database import connection, migrate
 from app.main import app
 
 

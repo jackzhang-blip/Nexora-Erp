@@ -7,9 +7,9 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from .database import connection
-from .material_returns import returned_quantity
-from .security import require
+from app.core.database import connection
+from app.production.material_returns import returned_quantity
+from app.access.security import require
 
 router = APIRouter(prefix="/api/v1")
 

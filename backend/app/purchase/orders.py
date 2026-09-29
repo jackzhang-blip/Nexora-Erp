@@ -6,9 +6,9 @@ from decimal import Decimal, ROUND_HALF_UP
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from .database import connection
-from .purchase_returns import returned_quantity as purchase_returned_quantity
-from .security import require
+from app.core.database import connection
+from app.purchase.returns import returned_quantity as purchase_returned_quantity
+from app.access.security import require
 
 router = APIRouter(prefix="/api/v1")
 

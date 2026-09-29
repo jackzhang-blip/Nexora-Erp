@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from .permission_catalog import DEFAULT_PERMISSION_LABELS
+from app.access.permission_catalog import DEFAULT_PERMISSION_LABELS
 
 
 def database_path() -> Path:

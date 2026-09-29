@@ -1,5 +1,23 @@
 # Nexora FastAPI 服务
 
+## 代码目录
+
+`app/main.py` 组装 FastAPI 应用及路由；`app/server.py` 和 `app/backup.py` 保留桌面程序、命令行与打包程序使用的入口。业务实现按功能查找：
+
+| 目录 | 主要代码 |
+| --- | --- |
+| `app/access/` | 账号登录、用户、角色、权限及授权检查。 |
+| `app/catalog/` | 供应商与物料基础资料。 |
+| `app/core/` | SQLite 连接和数据库迁移。 |
+| `app/purchase/` | 采购订单、入库单、采购退货。 |
+| `app/inventory/` | 仓库、调拨、盘点、库存余额和流水。 |
+| `app/sales/` | 客户、销售订单、出库、销售退货。 |
+| `app/production/` | BOM、工单、领退料、报工、工单成本。 |
+| `app/finance/` | 应收应付、订单余额、手工收付款。 |
+| `app/service/` | 服务状态、局域网发现、系统服务、备份恢复。 |
+
+`backend/launcher.py` 是安装包中的固定命令入口，`backend/tests/` 放对应业务和服务测试。新增功能先放入所属功能目录，再在 `app/main.py` 注册路由；已有 `app.server`、`app.backup` 命令路径保持可用。完整放置规则见 [后端项目树规范](../AGENTS.md#后端项目树规范)。
+
 需要 Python 3.11+。开发环境从仓库根目录安装依赖：
 
 ```bash
