@@ -41,3 +41,5 @@
 业务操作的临时成功与错误反馈写入共享 `notice` / `error` 后，由根组件内的 `AppMessageProvider.vue` 统一显示为右上角通知；页面不再占用内容区显示整行横幅。新页面在组件内需要主动提示时使用 `composables/use-app-message.ts`，不要直接建立第二个消息提供器。底栏继续显示服务端连接状态。
 
 `warehouse/WarehouseOutboundsView.vue` 展示其他出库草稿、仓库确认、取消和冲销；库存仅在确认时变化。
+
+采购退货页提交后展示待出库单号；仓库出库页复用列表确认采购退货，确认后才更新库存与应付。

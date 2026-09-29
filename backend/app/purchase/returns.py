@@ -50,17 +50,23 @@ class PurchaseReturnReverseInput(BaseModel):
         return value.strip()
 
 
-def returned_quantity(db: sqlite3.Connection, receipt_line_id: int) -> Decimal:
+def returned_quantity(db: sqlite3.Connection, receipt_line_id: int,
+                      exclude_return_id: int | None = None,
+                      include_pending: bool = False) -> Decimal:
     # 已冲销退货保留历史，但不再减少原入库的净收货数量。
     return sum((Decimal(row[0]) for row in db.execute("""SELECT prl.quantity
         FROM purchase_return_lines prl JOIN purchase_returns pr ON pr.id = prl.purchase_return_id
         LEFT JOIN purchase_return_reversals rev ON rev.purchase_return_id = pr.id
-        WHERE prl.receipt_line_id = ? AND pr.status = 'posted' AND rev.id IS NULL""",
-        (receipt_line_id,))), Decimal(0))
+        LEFT JOIN warehouse_outbounds wo ON wo.purchase_return_id = pr.id
+        WHERE prl.receipt_line_id = ? AND pr.id != COALESCE(?, -1)
+        AND (pr.status = 'posted' OR (? = 1 AND pr.status = 'draft' AND wo.status = 'draft'))
+        AND rev.id IS NULL""",
+        (receipt_line_id, exclude_return_id, int(include_pending)))), Decimal(0))
 
 
 def checked_return_lines(db: sqlite3.Connection, receipt_id: int,
-                         lines: list[tuple[int, Decimal]]) -> dict[int, sqlite3.Row]:
+                         lines: list[tuple[int, Decimal]],
+                         exclude_return_id: int | None = None) -> dict[int, sqlite3.Row]:
     receipt = db.execute("SELECT status FROM receipts WHERE id = ?", (receipt_id,)).fetchone()
     if not receipt:
         raise HTTPException(422, "原入库单不存在")
@@ -75,7 +81,7 @@ def checked_return_lines(db: sqlite3.Connection, receipt_id: int,
         item = known.get(line_id)
         if not item:
             raise HTTPException(422, "退货明细不属于原入库单")
-        if quantity > Decimal(item["quantity"]) - returned_quantity(db, line_id):
+        if quantity > Decimal(item["quantity"]) - returned_quantity(db, line_id, exclude_return_id, include_pending=True):
             raise HTTPException(409, f"入库明细 #{line_id} 超出可退数量")
         result[line_id] = item
     return result
@@ -86,13 +92,15 @@ def purchase_return_data(db: sqlite3.Connection, return_id: int) -> dict:
         rw.warehouse_id, w.name AS warehouse_name, u.username AS created_by_name,
         rev.id AS reversal_id, rev.reason AS reversal_reason,
         rev.created_by AS reversed_by, ru.username AS reversed_by_name,
-        rev.created_at AS reversed_at
+        rev.created_at AS reversed_at, wo.id AS outbound_id,
+        wo.status AS outbound_status
         FROM purchase_returns pr JOIN receipts r ON r.id = pr.receipt_id
         JOIN suppliers s ON s.id = r.supplier_id
         JOIN receipt_warehouses rw ON rw.receipt_id = r.id
         JOIN warehouses w ON w.id = rw.warehouse_id
         JOIN users u ON u.id = pr.created_by
         LEFT JOIN purchase_return_reversals rev ON rev.purchase_return_id = pr.id
+        LEFT JOIN warehouse_outbounds wo ON wo.purchase_return_id = pr.id
         LEFT JOIN users ru ON ru.id = rev.created_by WHERE pr.id = ?""", (return_id,)).fetchone()
     if not row:
         raise HTTPException(404, "采购退货单不存在")
@@ -145,35 +153,82 @@ def create_purchase_return(payload: PurchaseReturnInput,
         return purchase_return_data(db, cursor.lastrowid)
 
 
+def submit_return_in_transaction(db: sqlite3.Connection, return_id: int) -> int:
+    # 同一退货只对应一张待出库单；提交时预留可退量，确认时再次检查。
+    row = db.execute("SELECT * FROM purchase_returns WHERE id = ?", (return_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "采购退货单不存在")
+    if row['status'] != 'draft':
+        raise HTTPException(409, "此采购退货单已处理")
+    if db.execute("SELECT 1 FROM warehouse_outbounds WHERE purchase_return_id = ?", (return_id,)).fetchone():
+        raise HTTPException(409, "退货已提交，不能重复生成出库单")
+    lines = db.execute("""SELECT prl.receipt_line_id, prl.quantity, rl.material_id
+        FROM purchase_return_lines prl JOIN receipt_lines rl ON rl.id = prl.receipt_line_id
+        WHERE prl.purchase_return_id = ?""", (return_id,)).fetchall()
+    checked_return_lines(db, row['receipt_id'],
+                         [(line['receipt_line_id'], Decimal(line['quantity'])) for line in lines])
+    warehouse_id = db.execute("SELECT warehouse_id FROM receipt_warehouses WHERE receipt_id = ?",
+                              (row['receipt_id'],)).fetchone()[0]
+    outbound_id = db.execute("""INSERT INTO warehouse_outbounds(
+        warehouse_id, source_kind, reason, note, reference, created_by, purchase_return_id)
+        VALUES (?, 'purchase_return', 'purchase_return', ?, ?, ?, ?)""",
+        (warehouse_id, row['reason'], f"采购退货 #{return_id}", row['created_by'], return_id)).lastrowid
+    db.executemany("""INSERT INTO warehouse_outbound_lines(outbound_id, material_id, quantity)
+        VALUES (?, ?, ?)""", [(outbound_id, line['material_id'], line['quantity']) for line in lines])
+    return outbound_id
+
+
+def post_return_in_transaction(db: sqlite3.Connection, return_id: int, actor_id: int) -> dict:
+    # 必须持有 BEGIN IMMEDIATE 写锁；重查原入库可退量和原仓库余额。
+    row = db.execute("SELECT * FROM purchase_returns WHERE id = ?", (return_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "采购退货单不存在")
+    if row['status'] != 'draft':
+        raise HTTPException(409, "此采购退货单已处理")
+    outbound = db.execute("SELECT id, status, warehouse_id FROM warehouse_outbounds WHERE purchase_return_id = ?",
+                          (return_id,)).fetchone()
+    if not outbound:
+        outbound_id = submit_return_in_transaction(db, return_id)
+        outbound = db.execute("SELECT id, status, warehouse_id FROM warehouse_outbounds WHERE id = ?",
+                              (outbound_id,)).fetchone()
+    if outbound['status'] != 'draft':
+        raise HTTPException(409, "关联出库单已处理")
+    lines = db.execute("""SELECT id, receipt_line_id, quantity FROM purchase_return_lines
+        WHERE purchase_return_id = ?""", (return_id,)).fetchall()
+    source = checked_return_lines(db, row['receipt_id'],
+                                  [(line['receipt_line_id'], Decimal(line['quantity'])) for line in lines],
+                                  exclude_return_id=return_id)
+    for line in lines:
+        material_id = source[line['receipt_line_id']]['material_id']
+        quantity = Decimal(line['quantity'])
+        if balance(db, outbound['warehouse_id'], material_id) < quantity:
+            raise HTTPException(409, f"物料 #{material_id} 在原入库仓库库存不足；请先调回原仓库")
+        db.execute("""INSERT INTO stock_movements(
+            warehouse_id, material_id, quantity, source_type, source_id, source_line_id, created_by)
+            VALUES (?, ?, ?, 'purchase_return', ?, ?, ?)""",
+            (outbound['warehouse_id'], material_id, str(-quantity), return_id, line['id'], actor_id))
+    db.execute("""UPDATE purchase_returns SET status = 'posted', posted_by = ?,
+        posted_at = CURRENT_TIMESTAMP WHERE id = ?""", (actor_id, return_id))
+    db.execute("""UPDATE warehouse_outbounds SET status = 'posted', posted_by = ?,
+        posted_at = CURRENT_TIMESTAMP WHERE id = ?""", (actor_id, outbound['id']))
+    return purchase_return_data(db, return_id)
+
+
+@router.post("/purchase-returns/{return_id}/submit")
+def submit_purchase_return(return_id: int,
+                           user: dict = Depends(require("purchase_return.submit"))) -> dict:
+    with connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        submit_return_in_transaction(db, return_id)
+        return purchase_return_data(db, return_id)
+
+
 @router.post("/purchase-returns/{return_id}/post")
 def post_purchase_return(return_id: int, user: dict = Depends(require("purchase_return.post"))) -> dict:
+    # 兼容旧客户端：直接确认会在同一事务补建并确认关联出库单。
     with connection() as db:
-        # 写锁覆盖累计退货量、仓库余额与流水，避免并发单据透支库存。
         db.execute("BEGIN IMMEDIATE")
-        purchase_return = db.execute("SELECT * FROM purchase_returns WHERE id = ?", (return_id,)).fetchone()
-        if not purchase_return:
-            raise HTTPException(404, "采购退货单不存在")
-        if purchase_return["status"] != "draft":
-            raise HTTPException(409, "此采购退货单已处理")
-        lines = db.execute("""SELECT id, receipt_line_id, quantity FROM purchase_return_lines
-            WHERE purchase_return_id = ?""", (return_id,)).fetchall()
-        source = checked_return_lines(db, purchase_return["receipt_id"],
-                                      [(line["receipt_line_id"], Decimal(line["quantity"]))
-                                       for line in lines])
-        warehouse_id = db.execute("SELECT warehouse_id FROM receipt_warehouses WHERE receipt_id = ?",
-                                  (purchase_return["receipt_id"],)).fetchone()[0]
-        for line in lines:
-            material_id = source[line["receipt_line_id"]]["material_id"]
-            quantity = Decimal(line["quantity"])
-            if balance(db, warehouse_id, material_id) < quantity:
-                raise HTTPException(409, f"物料 #{material_id} 在原入库仓库库存不足；请先调回原仓库")
-            db.execute("""INSERT INTO stock_movements(
-                warehouse_id, material_id, quantity, source_type, source_id, source_line_id, created_by)
-                VALUES (?, ?, ?, 'purchase_return', ?, ?, ?)""",
-                (warehouse_id, material_id, str(-quantity), return_id, line["id"], user["id"]))
-        db.execute("""UPDATE purchase_returns SET status = 'posted', posted_by = ?,
-            posted_at = CURRENT_TIMESTAMP WHERE id = ?""", (user["id"], return_id))
-        return purchase_return_data(db, return_id)
+        return post_return_in_transaction(db, return_id, user['id'])
 
 
 @router.post("/purchase-returns/{return_id}/cancel")
@@ -185,6 +240,9 @@ def cancel_purchase_return(return_id: int, user: dict = Depends(require("purchas
             raise HTTPException(404, "采购退货单不存在")
         if row["status"] != "draft":
             raise HTTPException(409, "只有退货草稿可取消；已确认退货须另建更正单")
+        db.execute("""UPDATE warehouse_outbounds SET status = 'cancelled',
+            cancelled_by = ?, cancelled_at = CURRENT_TIMESTAMP
+            WHERE purchase_return_id = ? AND status = 'draft'""", (user['id'], return_id))
         db.execute("""UPDATE purchase_returns SET status = 'cancelled', cancelled_by = ?,
             cancelled_at = CURRENT_TIMESTAMP WHERE id = ?""", (user["id"], return_id))
         return purchase_return_data(db, return_id)

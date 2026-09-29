@@ -113,6 +113,13 @@ def post_outbound(outbound_id: int,
                             (outbound_id,)).fetchone()
         if not source:
             raise HTTPException(404, "仓库出库单不存在")
+        if source["source_kind"] == "purchase_return":
+            # 采购退货仍用原退货流水及应付来源，仓库出库单只负责确认闸口。
+            from app.purchase.returns import post_return_in_transaction
+            row = db.execute("SELECT purchase_return_id FROM warehouse_outbounds WHERE id = ?",
+                             (outbound_id,)).fetchone()
+            post_return_in_transaction(db, row["purchase_return_id"], user["id"])
+            return outbound_data(db, outbound_id)
         if source["status"] != "draft" or source["source_kind"] != "other":
             raise HTTPException(409, "此出库单不能按其他出库确认")
         lines = db.execute("SELECT id, material_id, quantity FROM warehouse_outbound_lines WHERE outbound_id = ?",

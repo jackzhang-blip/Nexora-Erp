@@ -55,13 +55,13 @@ const columns = [
       <template #rows>
         <tr v-for="item in filtered" :key="item.id">
           <td><strong>#{{ item.id }}</strong><small>{{ localTime(item.created_at) }} · {{ item.created_by_name }}</small><small>{{ item.status === 'draft' ? '待确认' : item.status === 'cancelled' ? '已取消' : item.reversal_id ? '已冲销' : '已出库' }}</small></td>
-          <td>{{ item.warehouse_name }} · {{ reasonName[item.reason] }}<small>{{ item.note }}</small><small v-if="item.reference">{{ item.reference }}</small></td>
+          <td>{{ item.warehouse_name }} · {{ reasonName[item.reason] }}<small>{{ item.note }}</small><small v-if="item.reference">{{ item.reference }}</small><small v-if="item.purchase_return_id">采购退货单 #{{ item.purchase_return_id }}</small></td>
           <td><div v-for="line in item.lines" :key="line.id">{{ line.material_name }} × {{ line.quantity }} {{ line.unit }}</div></td>
           <td><div class="form-actions">
             <button v-if="item.status === 'draft' && can('other_outbound.post')" class="primary small" :disabled="busy || connectionLost" @click="postWarehouseOutbound(item.id)">确认出库</button>
-            <button v-if="item.status === 'draft' && can('other_outbound.cancel')" class="secondary small" :disabled="busy || connectionLost" @click="cancelOtherOutbound(item.id)">取消</button>
+            <button v-if="item.status === 'draft' && item.source_kind === 'other' && can('other_outbound.cancel')" class="secondary small" :disabled="busy || connectionLost" @click="cancelOtherOutbound(item.id)">取消</button>
           </div>
-          <form v-if="item.status === 'posted' && !item.reversal_id && can('other_outbound.reverse')" class="inline-form" @submit.prevent="reverseOtherOutbound(item.id)">
+          <form v-if="item.status === 'posted' && !item.reversal_id && item.source_kind === 'other' && can('other_outbound.reverse')" class="inline-form" @submit.prevent="reverseOtherOutbound(item.id)">
             <label>冲销原因<input v-model.trim="otherOutboundReversalReasons[item.id]" required maxlength="200" /></label>
             <button class="secondary small" :disabled="busy || connectionLost">冲销</button>
           </form><small v-if="item.reversal_reason">冲销：{{ item.reversal_reason }}</small></td>

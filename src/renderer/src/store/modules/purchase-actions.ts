@@ -263,6 +263,12 @@ export function createPurchaseActions(
     }, '采购退货草稿已创建。')
   }
 
+  async function submitPurchaseReturn(returnId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('submitPurchaseReturn', { returnId }),
+      `采购退货单 #${returnId} 已提交，仓库待确认出库。`)
+  }
+
   async function postPurchaseReturn(returnId: number): Promise<void> {
     if (!window.nexora) return
     await perform(
@@ -316,6 +322,7 @@ export function createPurchaseActions(
     reverseReceipt,
     choosePurchaseReturnReceipt,
     createPurchaseReturn,
+    submitPurchaseReturn,
     postPurchaseReturn,
     cancelPurchaseReturn,
     reversePurchaseReturn

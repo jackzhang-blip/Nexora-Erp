@@ -232,6 +232,7 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
       return { method: 'POST', path: `/api/v1/production-costs/${entryId}/reverse`, body: { reason: fields.reason } }
     }
     case 'createPurchaseReturn': return { method: 'POST', path: '/api/v1/purchase-returns', body: payload }
+    case 'submitPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/submit` }
     case 'postPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/post` }
     case 'cancelPurchaseReturn': return { method: 'POST', path: `/api/v1/purchase-returns/${positiveId(payload, 'returnId')}/cancel` }
     case 'reversePurchaseReturn': {

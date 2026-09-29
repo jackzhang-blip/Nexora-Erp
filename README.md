@@ -89,3 +89,5 @@ Nexora ERP currently supports a LAN host and connected desktop clients, with Fas
 Windows 客户端不显示窗口内的默认菜单栏（File / Edit / View / Window），标题栏和窗口控制按钮保留；macOS 继续使用系统菜单。开发模式修改后需重启 `npm run dev`。
 
 仓库其他出库支持报废、样品及其他用途，确认后扣减库存，保留单据与流水，并支持冲销。
+
+采购退货提交后生成待仓库确认的出库单；出库确认时才扣库存并确认退货。
