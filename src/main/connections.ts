@@ -6,10 +6,9 @@ import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from '
 import { isIP } from 'node:net'
 import { isAbsolute, join, parse, resolve } from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
-import Bonjour from 'bonjour-service'
-import type { Browser } from 'bonjour-service'
+import { createLanDiscovery } from './lan-discovery'
 import { callBackend, getBackendHealth, getServerInfo, selectBackend, type BackendTarget } from './backend'
-import { findPinnedService, inspectDiscoveredAddresses, localAddress } from './discovery-probe'
+import { findPinnedService, inspectDiscoveredAddresses, localAddress, type ServiceAdvertisement } from './discovery-probe'
 import { installManagedHost, managedHostStatus, startManagedHost, stopManagedHost, upgradeManagedHost } from './host-service'
 import type { ConnectionCandidate, DiscoveryResult, HostInput, ServerProfile, StartupState } from '../shared/desktop-api'
 
@@ -20,8 +19,7 @@ interface Config { host?: HostConfig; activeId?: string; recent: StoredProfile[]
 let config: Config = { recent: [] }
 let service: ChildProcess | null = null
 let stoppingService: Promise<void> | null = null
-let bonjour: Bonjour | null = null
-let browser: Browser | null = null
+let browser: ReturnType<typeof createLanDiscovery> | null = null
 let discovered: DiscoveryResult[] = []
 let discoveryGeneration = 0
 let pending: StoredProfile | null = null
@@ -148,15 +146,14 @@ export async function activateSaved(id: string): Promise<ServerProfile> {
     verified = { ...profile, name: info.name, version: info.version }
   } catch (originalError) {
     if (profile.isLocal) throw originalError
-    const discovery = new Bonjour()
+    const discovery = createLanDiscovery()
     try {
-      const browser = discovery.find({ type: 'nexora', protocol: 'tcp' })
       // 地址变化后仅用原实例 ID 与已固定的证书指纹寻找新地址，绝不自动信任新证书。
-      const recovered = await findPinnedService(browser, profile, inspectServer)
+      const recovered = await findPinnedService(discovery, profile, inspectServer)
       if (!recovered) throw originalError
       verified = recovered
     } finally {
-      discovery.destroy()
+      discovery.stop()
     }
   }
   config.activeId = id
@@ -376,9 +373,8 @@ export function startDiscovery(onUpdate: (results: DiscoveryResult[]) => void): 
   stopDiscovery()
   const generation = discoveryGeneration
   discovered = []
-  bonjour ??= new Bonjour()
-  browser = bonjour.find({ type: 'nexora', protocol: 'tcp' })
-  browser.on('up', (serviceEntry) => {
+  browser = createLanDiscovery()
+  browser.on('up', (serviceEntry: ServiceAdvertisement) => {
     const advertisedId = typeof serviceEntry.txt?.id === 'string' ? serviceEntry.txt.id : undefined
     void inspectDiscoveredAddresses(serviceEntry.addresses ?? [], serviceEntry.port, advertisedId, inspectServer).then((profile) => {
       if (generation !== discoveryGeneration || !profile) return
@@ -387,7 +383,7 @@ export function startDiscovery(onUpdate: (results: DiscoveryResult[]) => void): 
       onUpdate([...discovered])
     })
   })
-  browser.on('down', (serviceEntry) => {
+  browser.on('down', (serviceEntry: ServiceAdvertisement) => {
     if (generation !== discoveryGeneration) return
     const id = serviceEntry.txt?.id
     discovered = discovered.map((entry) => entry.id === id ? { ...entry, online: false } : entry)
@@ -401,6 +397,4 @@ export function stopDiscovery(): void { discoveryGeneration += 1; browser?.stop(
 export function shutdownConnections(): void {
   stopDiscovery()
   void stopHost(false)
-  bonjour?.destroy()
-  bonjour = null
 }
