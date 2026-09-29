@@ -127,7 +127,7 @@ def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path):
         db.execute("PRAGMA user_version = 24")
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 25
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 26
         assert dict(db.execute("SELECT code, label FROM permissions").fetchall()) == {
             "bom.activate": "启用生产物料清单版本",
             "future.view": "未命名权限",
@@ -139,3 +139,36 @@ def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path):
             pass
         else:
             raise AssertionError("缺少名称的权限不应写入目录")
+
+
+def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, tmp_path):
+    monkeypatch.setenv("NEXORA_DB_PATH", str(tmp_path / "permission-labels.db"))
+    migrate()
+    with connection() as db:
+        # 模拟旧版服务端：部分权限被保存为代码，另有管理员自定义名称。
+        db.execute("UPDATE permissions SET label = code WHERE code IN ('bom.activate', 'finance.record')")
+        db.execute("UPDATE permissions SET label = '未命名权限' WHERE code = 'production.view'")
+        db.execute("UPDATE permissions SET label = '查看仓库实时库存' WHERE code = 'inventory.view'")
+        grants = db.execute("SELECT role_code, permission_code FROM role_permissions ORDER BY 1, 2").fetchall()
+        db.execute("PRAGMA user_version = 25")
+
+    with TestClient(app, client=("127.0.0.1", 12345)) as client:
+        assert client.post("/api/v1/setup/admin", json={
+            "username": "admin", "password": "admin-password-123"
+        }).status_code == 201
+        login = client.post("/api/v1/auth/login", json={
+            "username": "admin", "password": "admin-password-123"
+        })
+        headers = {"Authorization": f"Bearer {login.json()['token']}"}
+        labels = {item["code"]: item["label"] for item in
+                  client.get("/api/v1/permissions", headers=headers).json()}
+        assert labels["bom.activate"] == "启用生产物料清单版本"
+        assert labels["finance.record"] == "登记收付款"
+        assert labels["production.view"] == "查看生产业务"
+        assert labels["inventory.view"] == "查看仓库实时库存"
+
+    migrate()
+    with connection() as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 26
+        assert db.execute("SELECT role_code, permission_code FROM role_permissions ORDER BY 1, 2").fetchall() == grants
+        assert db.execute("SELECT label FROM permissions WHERE code = 'inventory.view'").fetchone()[0] == "查看仓库实时库存"

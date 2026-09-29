@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 25:
+        if version > 26:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -775,3 +775,13 @@ def migrate() -> None:
                           BEFORE UPDATE OF label ON permissions WHEN TRIM(NEW.label) = ''
                           BEGIN SELECT RAISE(ABORT, '权限名称不能为空'); END""")
             db.execute("PRAGMA user_version = 25")
+        if version < 26:
+            # 旧版已存入权限代码或通用占位名时补齐中文；保留管理员自行修改的名称。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.executemany(
+                """UPDATE permissions SET label = ?
+                   WHERE code = ? AND (label = code OR label = '未命名权限')""",
+                [(label, code) for code, label in DEFAULT_PERMISSION_LABELS.items()],
+            )
+            db.execute("PRAGMA user_version = 26")
