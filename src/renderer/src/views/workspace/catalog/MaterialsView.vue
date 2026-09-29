@@ -2,9 +2,12 @@
 import { computed, reactive, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { NPopconfirm } from 'naive-ui'
+import VxeColumn from 'vxe-table/es/column'
+import VxeTable from 'vxe-table/es/table'
 import type { Material } from '../../../../../shared/erp-api'
 import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
 import { usePiniaAppStore } from '../../../store/app-store'
+import 'vxe-table/es/table/style.css'
 import './catalog.css'
 
 const store = usePiniaAppStore()
@@ -15,14 +18,7 @@ const editingId = ref<number | undefined>()
 const showForm = ref(false)
 const form = reactive({ sku: '', name: '', unit: '件' })
 const filtered = computed(() => materials.value.filter(item => [item.sku, item.name, item.unit].join(' ').toLowerCase().includes(query.value.trim().toLowerCase())))
-// 列定义交给公共表格，物料行中的业务操作仍由当前页面维护。
-const columns = [
-  { key: 'sku', title: '物料编码' },
-  { key: 'name', title: '名称（可包含规格型号）' },
-  { key: 'unit', title: '单位' },
-  { key: 'suppliers', title: '供应商' },
-  { key: 'actions', title: '操作' }
-]
+// 试接只替换物料表格的渲染层，增删改仍经原有 Pinia 操作和服务端权限校验。
 function edit(item?: Material): void {
   editingId.value = item?.id
   Object.assign(form, item ? { sku: item.sku, name: item.name, unit: item.unit } : { sku: '', name: '', unit: '件' })
@@ -39,7 +35,7 @@ function supplierNames(id: number): string {
 
 <template>
   <section class="stack catalog-page">
-    <WorkspaceTable title="物料列表" :columns="columns" :row-count="filtered.length" :min-table-width="680">
+    <WorkspaceTable title="物料列表">
       <template #heading>
         <p class="eyebrow">MATERIALS</p><h2>物料列表 <span class="pill">{{ materials.length }}</span></h2>
       </template>
@@ -61,21 +57,28 @@ function supplierNames(id: number): string {
         </form>
         <p class="muted">请按规格建立独立物料编码，同一规格无需为不同供应商重复建档。</p>
       </template>
-      <template #rows>
-        <tr v-for="item in filtered" :key="item.id">
-          <td>{{ item.sku }}</td><td>{{ item.name }}</td><td>{{ item.unit }}</td><td>{{ supplierNames(item.id) }}</td>
-          <td><div class="catalog-actions">
-            <template v-if="can('catalog.manage')">
-              <button class="text-button" :disabled="busy || connectionLost" @click="edit(item)">编辑</button>
-              <NPopconfirm positive-text="确认" negative-text="取消" @positive-click="deleteMaterial(item.id)">
-                <template #trigger><button class="text-button" :disabled="busy || connectionLost">删除</button></template>
-                确认删除“{{ item.name }}”？关联的供货关系将一并移除。已被业务记录引用的资料不能删除。
-              </NPopconfirm>
+      <template #table>
+        <VxeTable class="catalog-vxe-table" aria-label="物料列表" row-id="id" :data="filtered" :style="{ minWidth: '680px' }">
+          <VxeColumn field="sku" title="物料编码" min-width="125" />
+          <VxeColumn field="name" title="名称（可包含规格型号）" min-width="220" />
+          <VxeColumn field="unit" title="单位" min-width="80" />
+          <VxeColumn title="供应商" min-width="140">
+            <template #default="{ row }">{{ supplierNames(row.id) }}</template>
+          </VxeColumn>
+          <VxeColumn title="操作" min-width="115">
+            <template #default="{ row }">
+              <div class="catalog-actions" v-if="can('catalog.manage')">
+                <button class="text-button" :disabled="busy || connectionLost" @click="edit(row)">编辑</button>
+                <NPopconfirm positive-text="确认" negative-text="取消" @positive-click="deleteMaterial(row.id)">
+                  <template #trigger><button class="text-button" :disabled="busy || connectionLost">删除</button></template>
+                  确认删除“{{ row.name }}”？关联的供货关系将一并移除。已被业务记录引用的资料不能删除。
+                </NPopconfirm>
+              </div>
             </template>
-          </div></td>
-        </tr>
+          </VxeColumn>
+          <template #empty>{{ query ? '没有匹配的物料。' : '暂无物料，请先新增。' }}</template>
+        </VxeTable>
       </template>
-      <template #empty>{{ query ? '没有匹配的物料。' : '暂无物料，请先新增。' }}</template>
     </WorkspaceTable>
   </section>
 </template>

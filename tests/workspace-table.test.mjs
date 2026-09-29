@@ -57,9 +57,20 @@ test('公共表格渲染页面内容、行和空状态，加载时不展示旧�
   assert.match(defaultEmpty, /<h2[^>]*>资料列表<\/h2>/)
   assert.match(defaultEmpty, /职务说明/)
   assert.match(defaultEmpty, /暂无数据/)
+
+  // 第三方表格只接管列表区域，不应使公共外壳再渲染一张原生表格。
+  const customTable = await render({}, {
+    ...slots,
+    table: () => h('div', { class: 'vxe-table' }, '第三方列表')
+  })
+  assert.match(customTable, /自定义标题/)
+  assert.match(customTable, /编辑资料/)
+  assert.match(customTable, /第三方列表/)
+  assert.doesNotMatch(customTable, /<table\b/)
+  assert.doesNotMatch(customTable, /物料 A/)
 })
 
-test('基础资料的四张列表都接入公共表格', () => {
+test('基础资料列表保留公共外壳，物料使用第三方表格插槽', () => {
   const views = [
     ['MaterialsView.vue', 1],
     ['SuppliersView.vue', 2],
@@ -67,10 +78,18 @@ test('基础资料的四张列表都接入公共表格', () => {
   ]
   for (const [name, expectedTables] of views) {
     const source = readFileSync(new URL(`../src/renderer/src/views/workspace/catalog/${name}`, import.meta.url), 'utf8')
-    // 页面保留业务行与空状态，原生表格外壳不能再由各页重复实现。
+    // 物料试接只替换表格本体，供应商和仓库继续走原有的业务行插槽。
     assert.equal((source.match(/<WorkspaceTable\b/g) ?? []).length, expectedTables, name)
-    assert.equal((source.match(/<template #rows>/g) ?? []).length, expectedTables, name)
-    assert.equal((source.match(/<template #empty>/g) ?? []).length, expectedTables, name)
+    const slotName = name === 'MaterialsView.vue' ? 'table' : 'rows'
+    assert.equal((source.match(new RegExp(`<template #${slotName}>`, 'g')) ?? []).length, expectedTables, name)
+    if (name === 'MaterialsView.vue') {
+      assert.match(source, /<VxeTable\b/)
+      assert.match(source, /:data="filtered"/)
+      assert.match(source, /<template #empty>/)
+      assert.match(source, /deleteMaterial\(row\.id\)/)
+    } else {
+      assert.equal((source.match(/<template #empty>/g) ?? []).length, expectedTables, name)
+    }
     assert.doesNotMatch(source, /<table\b/, name)
   }
 })
