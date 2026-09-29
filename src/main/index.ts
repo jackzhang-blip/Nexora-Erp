@@ -75,6 +75,9 @@ function createWindow(): void {
     }
   })
 
+  // Windows 直接移除窗口菜单，避免按 Alt 后重新出现默认英文菜单栏。
+  if (process.platform === 'win32') window.setMenu(null)
+
   mainWindow = window
   window.on('closed', () => {
     if (mainWindow === window) {
