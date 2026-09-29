@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-test('登录和工作台共用底栏，业务提示留在页面内', () => {
+test('登录和工作台共用连接底栏，业务反馈交由通知层展示', () => {
   const shell = readFileSync(new URL('../src/renderer/src/views/WorkspaceShell.vue', import.meta.url), 'utf8')
   const onboarding = readFileSync(new URL('../src/renderer/src/views/OnboardingView.vue', import.meta.url), 'utf8')
   const footer = readFileSync(new URL('../src/renderer/src/components/AppStatusFooter.vue', import.meta.url), 'utf8')
@@ -11,8 +11,8 @@ test('登录和工作台共用底栏，业务提示留在页面内', () => {
   assert.match(shell, /<AppStatusFooter \/>/)
   assert.match(onboarding, /<AppStatusFooter \/>/)
   assert.doesNotMatch(shell, /<footer v-if="isAuthScreen"/)
-  assert.match(shell, /v-if="notice" class="message success" role="status"/)
-  assert.match(shell, /v-if="error" class="message error" role="alert"/)
+  assert.doesNotMatch(shell, /v-if="notice" class="message success" role="status"/)
+  assert.doesNotMatch(shell, /v-if="error" class="message error" role="alert"/)
   assert.doesNotMatch(shell, /v-if="connectionLost" class="message/)
   assert.match(footer, /server\?\.name \|\| '未选择服务端'/)
   assert.match(footer, /server\?\.version/)

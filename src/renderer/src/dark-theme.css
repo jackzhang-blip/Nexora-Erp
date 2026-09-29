@@ -46,8 +46,6 @@
 :root[data-theme='dark'] .receipt-lines span { background: #20344c; color: #c5d4e8; }
 :root[data-theme='dark'] .pill { border-color: #7a6945; background: #3b3525; color: #ead18d; }
 :root[data-theme='dark'] .pill.posted { border-color: #376d5a; background: #1d3a32; color: #9bdfc1; }
-:root[data-theme='dark'] .message.error { border-color: #955b5a; background: #3b262d; color: #ffb9b3; }
-:root[data-theme='dark'] .message.success { border-color: #3f8066; background: #1d3830; color: #9be3bd; }
 
 /* 公共底栏在登录页和工作台共用，避免切换主题后留下浅色横条。 */
 :root[data-theme='dark'] .onboard-footer,
