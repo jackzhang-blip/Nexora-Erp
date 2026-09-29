@@ -1,4 +1,4 @@
-/* 深色主题集中覆盖旧页面的固定浅色值，账号开关和 Naive UI 主题共用 html 标记。 */
+/* 深色主题集中覆盖旧页面的固定浅色值，账号图标与 Naive UI 主题共用 html 标记。 */
 :root[data-theme='dark'] {
   color: #e6edf8;
   background: #0c1526;
@@ -57,7 +57,7 @@
 :root[data-theme='dark'] .onboard-footer-status.is-error { color: #ffaaa2; }
 
 /* 启动向导虽没有开关，重启后仍沿用用户保存的主题。 */
-:root[data-theme='dark'] .onboarding { color: #e6edf8; background: radial-gradient(circle at 83% 24%, #183f58 0, transparent 30%), linear-gradient(145deg, #0b172b 0%, #14263b 60%, #0c192d 100%); }
+:root[data-theme='dark'] .onboarding { color: #e6edf8; background: #101e32; }
 :root[data-theme='dark'] .onboard-top { border-color: #31445f; background: rgba(16, 29, 48, .82); }
 :root[data-theme='dark'] .onboard-logo small,
 :root[data-theme='dark'] .onboard-kicker { color: #82b8ff; }
