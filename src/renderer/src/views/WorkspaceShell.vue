@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useAppStore } from '../store/app-store'
 import type { Component } from 'vue'
 import WorkspaceSidebar from '../components/WorkspaceSidebar.vue'
@@ -54,7 +55,6 @@ const {
   screen,
   activeTab,
   expandedGroupKey,
-  version,
   notice,
   error,
   busy,
@@ -75,49 +75,74 @@ const {
   authenticate,
   logout
 } = useAppStore()
+
+// 登录与管理员初始化共用底部状态栏，切换到工作台后恢复原有页面提示。
+const isAuthScreen = computed(() => screen.value === 'setup' || screen.value === 'login')
+// 登录页始终在右下角交代连接状态；断线优先于旧的成功消息。
+const authConnectionMessage = computed(() => {
+  if (connectionLost.value) return '服务端连接已中断，正在重试。恢复连接前无法保存更改。'
+  if (notice.value) return notice.value
+  if (!server.value) return '等待连接服务端'
+  // 服务端名称和版本已固定在左下角，右侧只承担连接结果的提示。
+  return '已连接'
+})
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'auth-shell': isAuthScreen }">
     <WorkspaceSidebar />
 
-    <main class="content">
-      <WorkspaceTabs v-if="screen === 'app'" />
+    <main class="content" :class="{ 'auth-content': isAuthScreen }">
+      <div class="content-body">
+        <WorkspaceTabs v-if="screen === 'app'" />
 
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">NEXORA WORKSPACE</p>
-          <h1>
-            {{
-              screen === 'app'
-                ? visibleTabs.find((item) => item.key === activeTab)?.label
-                : '开始使用联光 ERP'
-            }}
-          </h1>
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">NEXORA WORKSPACE</p>
+            <h1>
+              {{
+                screen === 'app'
+                  ? visibleTabs.find((item) => item.key === activeTab)?.label
+                  : '开始使用联光 ERP'
+              }}
+            </h1>
+          </div>
+          <div v-if="user" class="account">
+            <span
+              >{{ user.username
+              }}<small>{{ user.roles.join(' · ') }}</small></span
+            ><button class="text-button" type="button" @click="logout">
+              退出登录
+            </button>
+          </div>
+        </header>
+
+        <div v-if="error" class="message error" role="alert">{{ error }}</div>
+        <div v-if="connectionLost && !isAuthScreen" class="message error" role="alert">
+          服务端连接已中断，正在重试。恢复连接前无法保存更改。
         </div>
-        <div v-if="user" class="account">
-          <span
-            >{{ user.username
-            }}<small>{{ user.roles.join(' · ') }}</small></span
-          ><button class="text-button" type="button" @click="logout">
-            退出登录
-          </button>
+        <div v-if="notice && !isAuthScreen" class="message success" role="status">
+          {{ notice }}
         </div>
-      </header>
 
-      <div v-if="error" class="message error" role="alert">{{ error }}</div>
-      <div v-if="connectionLost" class="message error" role="alert">
-        服务端连接已中断，正在重试。恢复连接前无法保存更改。
+        <AuthView v-if="isAuthScreen" />
+        <template v-else-if="screen === 'app' && activeRouteAllowed">
+          <!-- 页面映射由路由键决定，新增页面须同时登记路由与视图。 -->
+          <component :is="workspaceViews[activeTab]" />
+        </template>
       </div>
-      <div v-if="notice" class="message success" role="status">
-        {{ notice }}
-      </div>
-
-      <AuthView v-if="screen === 'setup' || screen === 'login'" />
-      <template v-else-if="screen === 'app' && activeRouteAllowed">
-        <!-- 页面映射由路由键决定，新增页面须同时登记路由与视图。 -->
-        <component :is="workspaceViews[activeTab]" />
-      </template>
+      <footer v-if="isAuthScreen" class="onboard-footer auth-footer">
+        <span class="onboard-footer-copy">联光 ERP · 团队工作台</span>
+        <!-- 连接结果固定在右端；账号与密码错误仍在表单上方方便处理。 -->
+        <span
+          class="onboard-footer-status"
+          :class="{ 'is-error': connectionLost }"
+          :role="connectionLost ? 'alert' : 'status'"
+          :title="authConnectionMessage"
+        >
+          <span class="onboard-footer-status-text">{{ authConnectionMessage }}</span>
+        </span>
+      </footer>
     </main>
   </div>
 </template>

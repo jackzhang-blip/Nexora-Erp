@@ -73,8 +73,9 @@ const {
         </div>
       </div>
     </div>
-    <div class="sidebar-bottom">
-      <span class="status-dot"></span> {{ server?.name || 'Nexora ERP' }}
+    <!-- 左下角保留服务端身份；登录阶段不显示表示连接状态的绿点。 -->
+    <div class="sidebar-bottom" :class="{ 'auth-server-details': screen !== 'app' }">
+      <span v-if="screen === 'app'" class="status-dot"></span>{{ server?.name || 'Nexora ERP' }}
       <small v-if="version">v{{ version }}</small>
     </div>
   </aside>
