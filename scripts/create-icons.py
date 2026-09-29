@@ -33,7 +33,9 @@ def main() -> None:
     RESOURCES.mkdir(exist_ok=True)
     icon = make_icon()
     icon.save(RESOURCES / "icon.png")
-    icon.resize((64, 64), Image.Resampling.LANCZOS).save(RESOURCES / "tray.png")
+    # 菜单栏使用 16 像素逻辑尺寸；同名 @2x 图片供 Retina 屏选用，避免原 64 像素图标撑高菜单栏。
+    icon.resize((16, 16), Image.Resampling.LANCZOS).save(RESOURCES / "tray.png", dpi=(72, 72))
+    icon.resize((32, 32), Image.Resampling.LANCZOS).save(RESOURCES / "tray@2x.png", dpi=(144, 144))
     icon.save(RESOURCES / "icon.ico", sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
     # Pillow 直接写 ICNS，避免依赖不同 macOS 版本的 iconutil 校验行为。
     icon.save(RESOURCES / "icon.icns", format="ICNS")

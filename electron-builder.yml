@@ -5,6 +5,8 @@ directories:
 files:
   - out/**/*
   - resources/tray.png
+  # 与标准尺寸图标放在同一目录，供高清屏自动选择。
+  - resources/tray@2x.png
   - package.json
 extraResources:
   - from: build/nexora-server
