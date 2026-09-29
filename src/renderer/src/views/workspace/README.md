@@ -25,7 +25,7 @@
 | `production/` | `ProductionCompletionsView.vue` | 报工、质检与成品入库 |
 | `production/` | `ProductionCostsView.vue` | 核价、费用归集与成本冲销 |
 | `system/` | `UserManagementView.vue` | 创建账号并管理用户状态与角色 |
-| `system/` | `RolePermissionsView.vue` | 创建角色并设置权限 |
+| `system/` | `RolePermissionsView.vue` | 按模块、单据、操作树创建角色并分配权限，维护操作的中文名称；树选择器位于 `components/workspace/PermissionTreePicker.vue` |
 | `system/` | `ConnectionSettingsView.vue` | 查看连接、修改密码和管理本机服务 |
 
 页面组件处理展示与表单绑定；跨页面草稿和服务端快照放在 `store/state.ts`，业务写操作放在 `store/modules/`。权限与地址规则只在 `router/workspace-routes.ts` 维护。

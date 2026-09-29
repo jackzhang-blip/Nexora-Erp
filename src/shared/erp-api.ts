@@ -7,7 +7,9 @@ export interface User {
   permissions: string[]
 }
 
-export interface Permission { code: string; label: string }
+export interface PermissionGroup { code: string; label: string }
+// 模块与单据层级用于展示；角色和服务端仍只保存、校验操作叶子的 code。
+export interface Permission { code: string; label: string; group_path: PermissionGroup[] }
 export interface Role { code: string; label: string; is_builtin: boolean; permissions: string[] }
 export interface SupplierMaterial { supplier_id: number; material_id: number }
 export interface Supplier { id: number; name: string }
@@ -528,7 +530,7 @@ export interface ErpOperations {
   changePassword: { input: { current_password: string; new_password: string }; output: void }
   permissions: { input: undefined; output: Permission[] }
   // 仅修改权限目录的展示文案；授权仍以 code 为准。
-  updatePermissionLabel: { input: { code: string; label: string }; output: Permission }
+  updatePermissionLabel: { input: { code: string; label: string }; output: Pick<Permission, 'code' | 'label'> }
   roles: { input: undefined; output: Role[] }
   createRole: { input: { code: string; label: string; permissions: string[] }; output: Role }
   updateRole: { input: { code: string; label: string; permissions: string[] }; output: Role }

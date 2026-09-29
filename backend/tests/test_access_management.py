@@ -29,6 +29,21 @@ def test_access_management(monkeypatch, tmp_path):
                    and item["label"] != item["code"]
                    and not item["label"].startswith("未命名权限") for item in permissions)
         assert len({item["code"] for item in permissions}) == len(permissions)
+        # 入库单、出库单分别挂在仓库模块下，同名操作也可按各自代码独立授权。
+        by_code = {item["code"]: item for item in permissions}
+        assert by_code["receipt.post"]["group_path"] == [
+            {"code": "warehouse", "label": "仓库管理"}, {"code": "warehouse.receipt", "label": "入库单"}]
+        assert by_code["shipment.post"]["group_path"] == [
+            {"code": "warehouse", "label": "仓库管理"}, {"code": "warehouse.shipment", "label": "出库单"}]
+        assert all(len(item["group_path"]) == 2 and item["group_path"][0]["code"] != "other"
+                   for item in permissions)
+        with connection() as db:
+            # 接口应实时使用数据库中的目录名称与归属，不能再由 Python 常量重建。
+            db.execute("""UPDATE permission_groups SET label = '采购入库单'
+                          WHERE code = 'warehouse.receipt'""")
+        updated_permissions = client.get(f"{base}/permissions", headers=admin).json()
+        assert next(item for item in updated_permissions if item["code"] == "receipt.post")[
+            "group_path"][1]["label"] == "采购入库单"
         renamed = client.put(f"{base}/permissions/inventory.view/label", headers=admin,
                              json={"label": "  查看各仓库存量  "})
         assert renamed.status_code == 200, renamed.text
@@ -127,7 +142,7 @@ def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path):
         db.execute("PRAGMA user_version = 24")
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 27
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 28
         assert dict(db.execute("SELECT code, label FROM permissions").fetchall()) == {
             "bom.activate": "启用生产物料清单版本",
             "future.view": "未命名权限",
@@ -139,6 +154,47 @@ def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path):
             pass
         else:
             raise AssertionError("缺少名称的权限不应写入目录")
+        try:
+            db.execute("INSERT INTO permissions(code, label) VALUES ('new.view', '查看新功能')")
+        except sqlite3.IntegrityError:
+            pass
+        else:
+            raise AssertionError("缺少所属单据的权限不应写入目录")
+        try:
+            db.execute("""INSERT INTO permissions(code, label, group_code)
+                          VALUES ('new.view', '查看新功能', 'warehouse')""")
+        except sqlite3.IntegrityError:
+            pass
+        else:
+            raise AssertionError("操作权限不能直接挂在模块节点下")
+        assert db.execute("""SELECT group_code FROM permissions
+                             WHERE code = 'future.view'""").fetchone()[0] == "other.unclassified"
+
+
+def test_receipt_action_does_not_grant_same_action_on_shipment(monkeypatch, tmp_path):
+    monkeypatch.setenv("NEXORA_DB_PATH", str(tmp_path / "document-actions.db"))
+    with TestClient(app, client=("127.0.0.1", 12345)) as client:
+        assert client.post("/api/v1/setup/admin", json={
+            "username": "admin", "password": "admin-password-123"
+        }).status_code == 201
+        token = client.post("/api/v1/auth/login", json={
+            "username": "admin", "password": "admin-password-123"
+        }).json()["token"]
+        admin = {"Authorization": f"Bearer {token}"}
+        assert client.post("/api/v1/roles", headers=admin, json={
+            "code": "receipt_approver", "label": "入库确认员", "permissions": ["receipt.post"]
+        }).status_code == 201
+        assert client.post("/api/v1/users", headers=admin, json={
+            "username": "clerk", "password": "clerk-password-123", "roles": ["receipt_approver"]
+        }).status_code == 201
+        clerk_token = client.post("/api/v1/auth/login", json={
+            "username": "clerk", "password": "clerk-password-123"
+        }).json()["token"]
+        clerk = {"Authorization": f"Bearer {clerk_token}"}
+        assert client.get("/api/v1/auth/me", headers=clerk).json()["permissions"] == ["receipt.post"]
+        # 同属仓库模块不会继承兄弟单据的操作；入库权限先过授权再查找单据。
+        assert client.post("/api/v1/shipments/1/post", headers=clerk).status_code == 403
+        assert client.post("/api/v1/receipts/1/post", headers=clerk).status_code == 404
 
 
 def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, tmp_path):
@@ -151,6 +207,11 @@ def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, 
         db.execute("UPDATE permissions SET label = '查看仓库实时库存' WHERE code = 'inventory.view'")
         grants = db.execute("SELECT role_code, permission_code FROM role_permissions ORDER BY 1, 2").fetchall()
         db.execute("DROP TABLE supplier_materials")
+        # 还原成升级前的 v25 表结构，验证中文修复与目录落库连续迁移。
+        db.execute("DROP TRIGGER permissions_group_required_insert")
+        db.execute("DROP TRIGGER permissions_group_required_update")
+        db.execute("ALTER TABLE permissions DROP COLUMN group_code")
+        db.execute("DROP TABLE permission_groups")
         db.execute("PRAGMA user_version = 25")
 
     with TestClient(app, client=("127.0.0.1", 12345)) as client:
@@ -170,6 +231,6 @@ def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, 
 
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 27
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 28
         assert db.execute("SELECT role_code, permission_code FROM role_permissions ORDER BY 1, 2").fetchall() == grants
         assert db.execute("SELECT label FROM permissions WHERE code = 'inventory.view'").fetchone()[0] == "查看仓库实时库存"

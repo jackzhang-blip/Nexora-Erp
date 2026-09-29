@@ -85,14 +85,14 @@ def test_viewer_cannot_modify_catalog(client):
     assert client.delete("/api/v1/suppliers/1/materials/1").status_code == 403
 
 
-def test_v26_migration_preserves_existing_materials(client):
+def test_v27_migration_preserves_existing_materials(client):
     material = create(client, "materials", {"sku": "OLD", "name": "旧物料", "unit": "件"})
     with connection() as db:
         db.execute("DROP TABLE supplier_materials")
-        db.execute("PRAGMA user_version = 26")
+        db.execute("PRAGMA user_version = 27")
     migrate()
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 27
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 28
         assert db.execute("SELECT name FROM materials WHERE id = ?", (material,)).fetchone()[0] == "旧物料"
         assert db.execute("SELECT COUNT(*) FROM supplier_materials").fetchone()[0] == 0

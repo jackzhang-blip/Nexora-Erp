@@ -187,9 +187,19 @@ def change_password(payload: ChangePasswordInput, user: dict = Depends(current_u
 
 @router.get("/permissions")
 def list_permissions(_: dict = Depends(require("users.manage"))) -> list[dict]:
-    # 以数据库权限目录为唯一展示来源；代码只负责后端授权。
+    # 中文名称和父子关系全部取自数据库；角色授权仍只保存叶子操作的稳定代码。
     with connection() as db:
-        return [dict(row) for row in db.execute("SELECT code, label FROM permissions ORDER BY code")]
+        rows = db.execute("""SELECT p.code, p.label, m.code AS module_code,
+                                   m.label AS module_label, d.code AS document_code,
+                                   d.label AS document_label
+                            FROM permissions p
+                            JOIN permission_groups d ON d.code = p.group_code
+                            JOIN permission_groups m ON m.code = d.parent_code
+                            ORDER BY m.sort_order, d.sort_order, p.code""")
+        return [{"code": row["code"], "label": row["label"], "group_path": [
+            {"code": row["module_code"], "label": row["module_label"]},
+            {"code": row["document_code"], "label": row["document_label"]},
+        ]} for row in rows]
 
 
 @router.put("/permissions/{code}/label")

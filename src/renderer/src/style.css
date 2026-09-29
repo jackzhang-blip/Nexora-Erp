@@ -176,6 +176,24 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
 .role-row small { color: #96a3b3; }
 .role-editor > label { max-width: 280px; }
 .role-editor button { justify-self: start; }
+/* 模块和单据节点只做分组及批量选择，缩进的操作叶子对应真实授权代码。 */
+.permission-tree-fieldset { display: block; }
+.permission-tree { display: grid; width: 100%; gap: 8px; }
+.permission-tree-module { border: 1px solid #e0e8ee; border-radius: 10px; background: #f9fbfc; }
+.permission-tree-heading { display: flex; align-items: center; gap: 9px; min-height: 42px; padding: 5px 12px; }
+.permission-tree-heading > input { flex: none; width: 16px; min-height: 16px; height: 16px; margin: 0; padding: 0; accent-color: #1d7777; }
+.permission-tree-expand { display: flex; flex: 1; align-items: center; gap: 8px; border: 0; padding: 6px 0; background: none; color: #244663; text-align: left; cursor: pointer; }
+.permission-tree-expand span[aria-hidden] { width: 14px; color: #528b91; }
+.permission-tree-expand small { margin-left: auto; color: #708198; font-size: 11px; }
+.permission-tree-children { margin: 0 12px 12px 20px; border-left: 1px solid #d7e5e8; padding-left: 15px; }
+.permission-tree-document { border-top: 1px solid #e7edf0; }
+.permission-tree-document:first-child { border-top: 0; }
+.permission-tree-leaves { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 9px 14px; padding: 4px 12px 14px 36px; }
+.permission-tree-leaves .check { white-space: normal; }
+.permission-catalog-group { border-top: 1px solid #e0e8ee; padding: 12px 0; }
+.permission-catalog-group > summary, .permission-catalog-document > summary { color: #244663; font-size: 13px; font-weight: 700; cursor: pointer; }
+.permission-catalog-document { margin: 12px 0 0 18px; border-left: 1px solid #d7e5e8; padding: 5px 0 5px 15px; }
+.permission-catalog-row { margin-left: 18px; }
 /* 权限代码保持只读，中文名称单独编辑，避免改名影响已授予的权限。 */
 .permission-catalog-row { display: grid; grid-template-columns: minmax(210px, 1fr) minmax(230px, 1.2fr) auto; align-items: end; gap: 16px; border-top: 1px solid #edf0f3; padding: 13px 0; }
 .permission-catalog-row small { align-self: center; color: #708198; overflow-wrap: anywhere; }
