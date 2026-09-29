@@ -51,7 +51,7 @@ def test_existing_command_modules_still_start() -> None:
         # Windows CI 默认代码页可能无法打印中文帮助文案；这里只核对模块入口能否正常导入。
         result = subprocess.run(
             [sys.executable, "-m", module, "--help"],
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, encoding="utf-8", check=False,
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
         # 桌面端和运维脚本仍调用这两个旧模块路径，导入失败会阻断启动。
