@@ -10,6 +10,7 @@ const {
   expandedGroupKey,
   version,
   server,
+  user,
   visibleGroups,
   toggleRouteGroup,
   navigateToRoute
@@ -75,6 +76,12 @@ const {
     </div>
     <!-- 左下角保留服务端身份；登录阶段不显示表示连接状态的绿点。 -->
     <div class="sidebar-bottom" :class="{ 'auth-server-details': screen !== 'app' }">
+      <!-- 账号信息只属于当前登录会话，退出后立即从侧栏消失。 -->
+      <div v-if="screen === 'app' && user" class="sidebar-account">
+        <span class="sidebar-account-label">当前账号</span>
+        <strong class="sidebar-account-name">{{ user.username }}</strong>
+        <span class="sidebar-account-roles">{{ user.roles.join(' · ') }}</span>
+      </div>
       <span v-if="screen === 'app'" class="status-dot"></span>{{ server?.name || 'Nexora ERP' }}
       <small v-if="version">v{{ version }}</small>
     </div>
