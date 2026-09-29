@@ -57,6 +57,29 @@ def test_received_goods_wait_for_warehouse_post(monkeypatch, tmp_path):
         assert posted.json()["goods_receipt_id"] == goods_id
         assert client.get(f"{base}/stock", headers=admin).json()[0]["quantity"] == "6"
         assert client.get(f"{base}/purchase-orders", headers=admin).json()[0]["lines"][0]["remaining_quantity"] == "4"
+        payable = client.get(f"{base}/finance/receivables-payables", headers=admin).json()
+        assert payable["payable_amount"] == "18.00"
+        assert [entry["source_type"] for entry in payable["entries"]] == ["receipt"]
+
+        # 新收货链路产生的应付只在仓库确认退货出库后减少，待出库阶段不提前冲减。
+        purchase_return = client.post(f"{base}/purchase-returns", headers=admin, json={
+            "receipt_id": inbound_id, "reason": "质量问题", "lines": [{
+                "receipt_line_id": posted.json()["lines"][0]["id"], "quantity": "2"}]}).json()
+        outbound_id = client.post(f"{base}/purchase-returns/{purchase_return['id']}/submit",
+                                  headers=admin).json()["outbound_id"]
+        assert client.get(f"{base}/finance/receivables-payables", headers=admin).json()["payable_amount"] == "18.00"
+        assert client.post(f"{base}/warehouse-outbounds/{outbound_id}/post", headers=admin).status_code == 200
+        assert client.post(f"{base}/warehouse-outbounds/{outbound_id}/post", headers=admin).status_code == 409
+        payable_after_return = client.get(f"{base}/finance/receivables-payables", headers=admin).json()
+        assert payable_after_return["payable_amount"] == "12.00"
+        assert {entry["source_type"] for entry in payable_after_return["entries"]} == {"receipt", "purchase_return"}
+        assert client.get(f"{base}/stock", headers=admin).json()[0]["quantity"] == "4"
+        ledger = client.post(f"{base}/inventory-ledger/query", headers=admin, json={
+            "warehouse_id": 1, "material_id": order["lines"][0]["material_id"]}).json()
+        assert [(row["source_type"], row["source_id"], row["balance_quantity"])
+                for row in ledger["rows"]] == [
+                    ("receipt", inbound_id, "6"), ("purchase_return", purchase_return["id"], "4")]
+        assert ledger["groups"][0]["closing_quantity"] == "4"
 
         # 全数拒收只记录原因，不伪造空入库单。
         rejected = client.post(f"{base}/purchase-goods-receipts", headers=admin, json={
@@ -66,7 +89,7 @@ def test_received_goods_wait_for_warehouse_post(monkeypatch, tmp_path):
         rejected_done = client.post(f"{base}/purchase-goods-receipts/{rejected['id']}/confirm",
                                     headers=admin).json()
         assert rejected_done["inbound_receipt_id"] is None
-        assert client.get(f"{base}/stock", headers=admin).json()[0]["quantity"] == "6"
+        assert client.get(f"{base}/stock", headers=admin).json()[0]["quantity"] == "4"
 
 
 def test_parallel_goods_confirmation_cannot_overreserve(monkeypatch, tmp_path):
