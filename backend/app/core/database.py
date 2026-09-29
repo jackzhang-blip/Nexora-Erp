@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 28:
+        if version > 29:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -842,3 +842,53 @@ def migrate() -> None:
             )""")
             db.execute("CREATE INDEX supplier_materials_material ON supplier_materials(material_id)")
             db.execute("PRAGMA user_version = 28")
+
+        if version < 29:
+            # 申请与订单明细保持独立引用；旧订单不补造申请来源。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE purchase_requests (
+                id INTEGER PRIMARY KEY,
+                reference TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
+                    ('draft', 'submitted', 'approved', 'rejected', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                submitted_by INTEGER REFERENCES users(id),
+                reviewed_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                review_reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                submitted_at TEXT,
+                reviewed_at TEXT,
+                cancelled_at TEXT
+            )""")
+            db.execute("""CREATE TABLE purchase_request_lines (
+                id INTEGER PRIMARY KEY,
+                purchase_request_id INTEGER NOT NULL REFERENCES purchase_requests(id),
+                material_id INTEGER NOT NULL REFERENCES materials(id),
+                quantity TEXT NOT NULL,
+                UNIQUE (purchase_request_id, material_id)
+            )""")
+            db.execute("""CREATE TABLE purchase_order_request_links (
+                purchase_order_line_id INTEGER PRIMARY KEY REFERENCES purchase_order_lines(id),
+                purchase_request_line_id INTEGER NOT NULL REFERENCES purchase_request_lines(id)
+            )""")
+            db.execute("CREATE INDEX purchase_order_request_links_request_line ON purchase_order_request_links(purchase_request_line_id)")
+            request_permissions = (
+                ("purchase_request.view", "查看采购申请"),
+                ("purchase_request.create", "创建和修改采购申请"),
+                ("purchase_request.submit", "提交采购申请"),
+                ("purchase_request.review", "审批采购申请"),
+                ("purchase_request.cancel", "取消采购申请"),
+            )
+            db.execute("""INSERT INTO permission_groups(code, label, parent_code, sort_order)
+                VALUES ('purchase.purchase_request', '采购申请', 'purchase', 100)""")
+            db.executemany("INSERT INTO permissions(code, label, group_code) VALUES (?, ?, 'purchase.purchase_request')",
+                           request_permissions)
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, code) for role in ("admin", "buyer", "warehouse")
+                            for code in ("purchase_request.view", "purchase_request.create",
+                                         "purchase_request.submit", "purchase_request.cancel")])
+            db.execute("INSERT INTO role_permissions(role_code, permission_code) VALUES ('admin', 'purchase_request.review')")
+            db.execute("PRAGMA user_version = 29")

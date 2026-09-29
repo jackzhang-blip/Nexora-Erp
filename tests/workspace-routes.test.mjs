@@ -13,7 +13,7 @@ test('每个工作台页面只有一个路由，且都对应实际页面', () =>
   const registered = router.getRoutes().filter((route) => route.name)
 
   // 路由记录由同一张业务表生成，组件由 Vue Router 装载，避免侧栏出现空白页面。
-  assert.equal(workspaceRoutes.length, 24)
+  assert.equal(workspaceRoutes.length, 25)
   assert.deepEqual(new Set(registered.map(route => route.name)), new Set(workspaceRoutes.map(route => route.key)))
   assert.ok(registered.every((route) => route.components?.default))
   assert.match(shell, /<RouterView \/>/)
@@ -160,4 +160,11 @@ test('基础资料三个入口独立且沿用查看权限与旧物料地址', ()
     assert.equal(canVisitRoute(routeByKey(key), []), false)
     assert.equal(resolveWorkspaceRoute(routeByKey(key).path, ['inventory.view']).key, key)
   }
+})
+
+test('采购申请入口只向有申请查看权限的账号开放', () => {
+  assert.equal(routeByKey('purchaseRequests').path, '/workspace/purchase-requests')
+  assert.equal(canVisitRoute(routeByKey('purchaseRequests'), ['inventory.view']), false)
+  assert.equal(canVisitRoute(routeByKey('purchaseRequests'), ['purchase_request.view']), true)
+  assert.equal(resolveWorkspaceRoute('/workspace/purchase-requests', []).key, 'home')
 })

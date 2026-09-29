@@ -12,6 +12,7 @@
 | `catalog/` | `SuppliersView.vue` | 供应商增删改查及供货物料绑定、解绑 |
 | `catalog/` | `WarehousesView.vue` | 仓库增删改查，默认主仓库禁止删除 |
 | `purchase/` | `PurchaseOrdersView.vue` | 建立和管理采购订单 |
+| `purchase/` | `PurchaseRequestsView.vue` | 采购申请、审批、分批转采购订单 |
 | `purchase/` | `PurchaseReceiptsView.vue` | 建立和确认采购入库单 |
 | `purchase/` | `PurchaseReturnsView.vue` | 处理采购退货 |
 | `sales/` | `SalesOrdersView.vue` | 建立和管理销售订单 |
