@@ -73,9 +73,9 @@ const {
         </div>
       </div>
     </div>
-    <!-- 登录阶段的连接状态只在右下角显示，避免侧栏绿点与断线告警互相矛盾。 -->
-    <div v-if="screen === 'app'" class="sidebar-bottom">
-      <span class="status-dot"></span> {{ server?.name || 'Nexora ERP' }}
+    <!-- 左下角保留服务端身份；登录阶段不显示表示连接状态的绿点。 -->
+    <div class="sidebar-bottom" :class="{ 'auth-server-details': screen !== 'app' }">
+      <span v-if="screen === 'app'" class="status-dot"></span>{{ server?.name || 'Nexora ERP' }}
       <small v-if="version">v{{ version }}</small>
     </div>
   </aside>

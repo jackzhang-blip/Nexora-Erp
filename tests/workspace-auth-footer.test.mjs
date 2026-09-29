@@ -9,7 +9,7 @@ test('登录页连接状态持续位于底栏右侧，工作台与账号错误�
   assert.match(shell, /screen\.value === 'setup' \|\| screen\.value === 'login'/)
   assert.match(shell, /if \(connectionLost\.value\) return '服务端连接已中断/)
   assert.match(shell, /if \(notice\.value\) return notice\.value/)
-  assert.match(shell, /return `已连接 · \$\{server\.value\.name\}/)
+  assert.match(shell, /return '已连接'/)
   assert.match(shell, /v-if="notice && !isAuthScreen" class="message success" role="status"/)
   assert.match(shell, /v-if="error" class="message error" role="alert"/)
   assert.match(shell, /v-if="connectionLost && !isAuthScreen" class="message error" role="alert"/)
@@ -34,10 +34,14 @@ test('登录内容独立滚动，底栏在宽窄窗口内都保留可见', () =>
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.auth-footer \.onboard-footer-copy:first-child \{ display: none; \}/)
 })
 
-test('登录页隐藏侧栏里带绿点的重复服务端状态', () => {
+test('登录页左下角保留服务端名称和版本，但连接状态只在右下角', () => {
   const sidebar = readFileSync(new URL('../src/renderer/src/components/WorkspaceSidebar.vue', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
 
-  // 连接中断时不能同时在左侧显示绿点、在右下角显示红色告警。
-  assert.match(sidebar, /<div v-if="screen === 'app'" class="sidebar-bottom">/)
-  assert.match(sidebar, /<span class="status-dot"><\/span> \{\{ server\?\.name/)
+  // 服务端身份是静态信息，应保留；左侧不能再用绿点表示动态连接状态。
+  assert.match(sidebar, /<div class="sidebar-bottom" :class="\{ 'auth-server-details': screen !== 'app' \}">/)
+  assert.match(sidebar, /<span v-if="screen === 'app'" class="status-dot"><\/span>/)
+  assert.match(sidebar, /\{\{ server\?\.name \|\| 'Nexora ERP' \}\}/)
+  assert.match(sidebar, /<small v-if="version">v\{\{ version \}\}<\/small>/)
+  assert.match(css, /\.sidebar-bottom\.auth-server-details small \{ margin-left: 0; \}/)
 })
