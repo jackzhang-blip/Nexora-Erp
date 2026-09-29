@@ -278,3 +278,22 @@ test('采购收货的确认和取消只能调用固定单据路径', async (t) =
     '/api/v1/purchase-goods-receipts/3/confirm'])
   await assert.rejects(callBackend('cancelGoodsReceipt', { goodsReceiptId: '../users' }), /记录编号无效/)
 })
+
+test('其他入库冲销只转发固定路径与原因', async (t) => {
+  const originalUrl = process.env.NEXORA_API_URL
+  t.after(() => {
+    if (originalUrl === undefined) delete process.env.NEXORA_API_URL
+    else process.env.NEXORA_API_URL = originalUrl
+  })
+  process.env.NEXORA_API_URL = 'http://127.0.0.1:8000'
+  const calls = []
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push({ path: new URL(url).pathname, body: init.body })
+    return Response.json({ token: 'test-token', user: { id: 1 } })
+  })
+  await callBackend('login', {})
+  await callBackend('reverseOtherInbound', { inboundId: 4, reason: '误录' })
+  assert.equal(calls.at(-1).path, '/api/v1/warehouse-inbounds/4/reverse')
+  assert.deepEqual(JSON.parse(calls.at(-1).body), { reason: '误录' })
+  await assert.rejects(callBackend('postOtherInbound', { inboundId: '../users' }), /记录编号无效/)
+})

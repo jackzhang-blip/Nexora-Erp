@@ -13,6 +13,7 @@ export function createDataLoader(
     supplierMaterials,
     stock,
     movements,
+    otherInbounds,
     receipts,
     goodsReceipts,
     purchaseOrders,
@@ -104,6 +105,9 @@ export function createDataLoader(
       : []
     goodsReceipts.value = can('purchase_receiving.view')
       ? await window.nexora.callApi('goodsReceipts', undefined)
+      : []
+    otherInbounds.value = can('other_inbound.view')
+      ? await window.nexora.callApi('otherInbounds', undefined)
       : []
     if (can('sales.view')) {
       ;[

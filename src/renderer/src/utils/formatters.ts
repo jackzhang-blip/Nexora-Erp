@@ -23,6 +23,9 @@ export function movementSource(item: Movement): string {
   if (item.receipt_id !== null) return `入库单 #${item.receipt_id}`
   if (item.receipt_reversal_id !== null)
     return `入库冲销单 #${item.receipt_reversal_id}`
+  if (item.other_inbound_id !== null) return `其他入库单 #${item.other_inbound_id}`
+  if (item.other_inbound_reversal_id !== null)
+    return `其他入库冲销单 #${item.other_inbound_reversal_id}`
   if (item.transfer_id !== null) return `调拨单 #${item.transfer_id}`
   if (item.transfer_reversal_id !== null)
     return `调拨冲销单 #${item.transfer_reversal_id}`

@@ -8,11 +8,46 @@ export function createWarehouseActions(
 ) {
   const {
     warehouseForm,
+    otherInboundForm,
+    otherInboundReversalReasons,
     transferForm,
     transferReversalReasons,
     stocktakeForm,
     stocktakeReversalReasons
   } = state
+
+  async function createOtherInbound(): Promise<void> {
+    if (!window.nexora) return
+    await perform(async () => {
+      await window.nexora!.callApi('createOtherInbound', {
+        ...otherInboundForm.value,
+        lines: otherInboundForm.value.lines.map((line) => ({ ...line }))
+      })
+      otherInboundForm.value = { warehouse_id: otherInboundForm.value.warehouse_id,
+        reason: 'other', note: '', reference: '', lines: [{ material_id: 0, quantity: '1' }] }
+    }, '其他入库草稿已创建。')
+  }
+
+  async function postOtherInbound(inboundId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('postOtherInbound', { inboundId }),
+      `其他入库单 #${inboundId} 已确认，库存流水已生成。`)
+  }
+
+  async function cancelOtherInbound(inboundId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('cancelOtherInbound', { inboundId }),
+      `其他入库单 #${inboundId} 已取消。`)
+  }
+
+  async function reverseOtherInbound(inboundId: number): Promise<void> {
+    if (!window.nexora) return
+    const reason = otherInboundReversalReasons.value[inboundId]?.trim() ?? ''
+    await perform(async () => {
+      await window.nexora!.callApi('reverseOtherInbound', { inboundId, reason })
+      delete otherInboundReversalReasons.value[inboundId]
+    }, `其他入库单 #${inboundId} 已冲销。`)
+  }
 
   async function createWarehouse(): Promise<void> {
     if (!window.nexora) return
@@ -125,6 +160,10 @@ export function createWarehouseActions(
   }
 
   return {
+    createOtherInbound,
+    postOtherInbound,
+    cancelOtherInbound,
+    reverseOtherInbound,
     saveWarehouse,
     deleteWarehouse,
     createWarehouse,

@@ -10,7 +10,7 @@
 | `app/catalog/` | 供应商与物料基础资料。 |
 | `app/core/` | SQLite 连接和数据库迁移。 |
 | `app/purchase/` | 采购申请、采购订单、采购收货、入库单、采购退货。 |
-| `app/inventory/` | 仓库、调拨、盘点、库存余额和流水。 |
+| `app/inventory/` | 仓库、其他入库、调拨、盘点、库存余额和流水。 |
 | `app/sales/` | 客户、销售订单、出库、销售退货。 |
 | `app/production/` | BOM、工单、领退料、报工、工单成本。 |
 | `app/finance/` | 应收应付、订单余额、手工收付款。 |
@@ -98,6 +98,8 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 这是按工单汇总的人工核价与费用归集，尚不从库存流水自动计算真实材料单价，也不生成完工批次成本、存货价值、销售成本或总账凭证。未完工工单显示的是截至当前已归集金额，不能当作最终制造成本。
 
 ## 多仓库库存与调拨
+
+数据库第 31 版新增 `/api/v1/warehouse-inbounds` 其他入库单，适用于期初补录、赠品及有明确说明的其他非采购来源。单据保存仓库、用途、说明、参考号和物料数量；`/post` 确认后在同一事务写入正向库存流水，`/cancel` 仅取消草稿，管理员可用 `/reverse` 填写原因并在原仓库存充足时追加负向冲销流水。重复确认、重复冲销和库存不足返回 409，原单及原流水留存。其他入库不生成采购应付。查看、创建、确认、取消、冲销分别要求 `other_inbound.view`、`other_inbound.create`、`other_inbound.post`、`other_inbound.cancel`、`other_inbound.reverse`；管理员和仓库员默认可处理草稿，冲销默认仅管理员可做。
 
 数据库升级时自动建立 `MAIN` 主仓库，旧入库单和历史流水归入主仓库。新入库单可指定 `warehouse_id`；旧客户端省略时仍入主仓库。`GET /api/v1/warehouses` 查看仓库，`POST /api/v1/warehouses` 创建仓库。`GET /api/v1/stock` 返回所有仓库合计，添加 `warehouse_id` 查询参数可查看指定仓库；`GET /api/v1/movements` 返回带仓库、单据来源和操作者的有符号流水。
 
