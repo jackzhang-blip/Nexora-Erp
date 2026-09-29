@@ -1,5 +1,7 @@
 """采购退货提交后由仓库确认出库，验证预留、重复操作和流水时点。"""
 
+from decimal import Decimal
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -31,7 +33,7 @@ def test_return_requires_warehouse_outbound_confirmation(monkeypatch, tmp_path):
         assert submitted.json()["outbound_status"] == "draft"
         assert client.post(f"{base}/purchase-returns/{return_id}/submit", headers=auth).status_code == 409
         assert len(client.get(f"{base}/movements", headers=auth).json()) == before
-        assert client.get(f"{base}/stock?warehouse_id=1", headers=auth).json()[0]["quantity"] == "3.000"
+        assert Decimal(client.get(f"{base}/stock?warehouse_id=1", headers=auth).json()[0]["quantity"]) == 3
         # 待出库量占用可退额度，另一张超量退货不能再提交。
         assert client.post(f"{base}/purchase-returns", headers=auth, json={
             **payload, "lines": [{"receipt_line_id": receipt["lines"][0]["id"], "quantity": "2"}]
@@ -42,6 +44,6 @@ def test_return_requires_warehouse_outbound_confirmation(monkeypatch, tmp_path):
         assert confirmed.json()["purchase_return_id"] == return_id
         assert client.post(f"{base}/warehouse-outbounds/{outbound_id}/post", headers=auth).status_code == 409
         assert len(client.get(f"{base}/movements", headers=auth).json()) == before + 1
-        assert client.get(f"{base}/stock?warehouse_id=1", headers=auth).json()[0]["quantity"] == "1.000"
+        assert Decimal(client.get(f"{base}/stock?warehouse_id=1", headers=auth).json()[0]["quantity"]) == 1
         assert client.get(f"{base}/purchase-returns", headers=auth).json()[0]["status"] == "posted"
         assert client.post(f"{base}/purchase-returns/{return_id}/cancel", headers=auth).status_code == 409
