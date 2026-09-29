@@ -7,7 +7,7 @@ import { useAppStore } from './store/app-store'
 import { useThemeStore } from './store/theme-store'
 import OnboardingView from './views/OnboardingView.vue'
 import WorkspaceShell from './views/WorkspaceShell.vue'
-import AppMessageProvider from './components/AppMessageProvider.vue'
+import AppMessageProvider from './components/feedback/AppMessageProvider.vue'
 
 // 根组件统一启动和释放桌面连接资源；页面状态仍由 Pinia store 管理。
 const { screen, initialize, dispose } = useAppStore()

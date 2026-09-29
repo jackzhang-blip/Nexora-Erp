@@ -5,7 +5,7 @@ import { test } from 'node:test'
 test('登录和工作台共用连接底栏，业务反馈交由通知层展示', () => {
   const shell = readFileSync(new URL('../src/renderer/src/views/WorkspaceShell.vue', import.meta.url), 'utf8')
   const onboarding = readFileSync(new URL('../src/renderer/src/views/OnboardingView.vue', import.meta.url), 'utf8')
-  const footer = readFileSync(new URL('../src/renderer/src/components/AppStatusFooter.vue', import.meta.url), 'utf8')
+  const footer = readFileSync(new URL('../src/renderer/src/components/app/AppStatusFooter.vue', import.meta.url), 'utf8')
 
   // 所有阶段只实例化同一个底栏，避免工作台遗漏连接状态。
   assert.match(shell, /<AppStatusFooter \/>/)
@@ -52,8 +52,8 @@ test('登录页占满窗口，进入工作台后侧栏与底栏同步过渡', ()
 })
 
 test('侧栏底部显示当前用户、角色和退出，服务端身份交给公共底栏', () => {
-  const sidebar = readFileSync(new URL('../src/renderer/src/components/WorkspaceSidebar.vue', import.meta.url), 'utf8')
-  const card = readFileSync(new URL('../src/renderer/src/components/SidebarAccountCard.vue', import.meta.url), 'utf8')
+  const sidebar = readFileSync(new URL('../src/renderer/src/components/workspace/WorkspaceSidebar.vue', import.meta.url), 'utf8')
+  const card = readFileSync(new URL('../src/renderer/src/components/workspace/SidebarAccountCard.vue', import.meta.url), 'utf8')
   const shell = readFileSync(new URL('../src/renderer/src/views/WorkspaceShell.vue', import.meta.url), 'utf8')
   const css = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
 

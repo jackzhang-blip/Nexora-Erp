@@ -30,8 +30,8 @@ test('全局反馈只在新消息出现时发出，清空后相同操作仍会�
 
 test('全应用提供右上角通知，工作台不再渲染整行成功与失败横幅', () => {
   const app = readFileSync(new URL('../src/renderer/src/App.vue', import.meta.url), 'utf8')
-  const provider = readFileSync(new URL('../src/renderer/src/components/AppMessageProvider.vue', import.meta.url), 'utf8')
-  const bridge = readFileSync(new URL('../src/renderer/src/components/AppMessageBridge.vue', import.meta.url), 'utf8')
+  const provider = readFileSync(new URL('../src/renderer/src/components/feedback/AppMessageProvider.vue', import.meta.url), 'utf8')
+  const bridge = readFileSync(new URL('../src/renderer/src/components/feedback/AppMessageBridge.vue', import.meta.url), 'utf8')
   const shell = readFileSync(new URL('../src/renderer/src/views/WorkspaceShell.vue', import.meta.url), 'utf8')
 
   // 提供器必须包住引导页和工作台，桥接器才能在任何页面收到业务反馈。

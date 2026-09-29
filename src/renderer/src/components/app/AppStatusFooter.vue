@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useAppStore } from '../store/app-store'
-import { resolveFooterStatus } from '../utils/footer-status'
+import { useAppStore } from '../../store/app-store'
+import { resolveFooterStatus } from '../../utils/footer-status'
 
 const { screen, server, connectionLost, connectionNotice, error, notice, busy } = useAppStore()
 const status = computed(() => resolveFooterStatus({
