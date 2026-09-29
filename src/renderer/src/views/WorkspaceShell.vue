@@ -6,6 +6,7 @@ import WorkspaceSidebar from '../components/WorkspaceSidebar.vue'
 import WorkspaceTabs from '../components/WorkspaceTabs.vue'
 import AppStatusFooter from '../components/AppStatusFooter.vue'
 import AuthView from './AuthView.vue'
+import { nexoraLogo } from '../assets/brand'
 import type { WorkspaceRouteKey } from '../router/workspace-routes'
 import { accountRoleText } from '../utils/account-role'
 import InventoryOverviewView from './workspace/warehouse/InventoryOverviewView.vue'
@@ -83,14 +84,21 @@ const accountRole = computed(() => accountRoleText(user.value?.roles ?? [], role
 </script>
 
 <template>
-  <div class="app-shell">
-    <WorkspaceSidebar />
+  <div class="app-shell" :class="{ 'has-sidebar': screen === 'app' }">
+    <!-- 只在进入工作台后挂载侧栏，进出时与内容列共用同一段过渡。 -->
+    <Transition name="sidebar-slide">
+      <WorkspaceSidebar v-if="screen === 'app'" />
+    </Transition>
 
     <main class="content">
-      <div class="content-body">
+      <div class="content-body" :class="{ 'auth-screen': isAuthScreen }">
         <WorkspaceTabs v-if="screen === 'app'" />
 
         <header class="topbar">
+          <!-- 登录标题沿用侧栏的品牌图形，保持未登录和工作台的视觉识别一致。 -->
+          <span v-if="isAuthScreen" class="auth-header-mark" aria-hidden="true">
+            <img :src="nexoraLogo" alt="" />
+          </span>
           <div>
             <p class="eyebrow">NEXORA WORKSPACE</p>
             <h1>
