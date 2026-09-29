@@ -246,13 +246,13 @@ export function createConnectionActions(
     try {
       await window.nexora.stopHost()
       host.value = await window.nexora.hostStatus()
-      notice.value = '本机服务已停止。'
       if (server.value?.isLocal) {
         // 服务已退出，主进程也已清除令牌，此时无需再向停掉的服务发送登出请求。
         user.value = null
         await switchServer()
-        notice.value = '本机服务已停止。'
       }
+      // 切回连接向导后再写入一次反馈，避免切屏过程中重复弹出同一条消息。
+      notice.value = '本机服务已停止。'
     } catch (cause) {
       error.value = displayError(cause)
     } finally {

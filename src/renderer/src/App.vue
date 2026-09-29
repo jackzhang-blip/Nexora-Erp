@@ -5,6 +5,7 @@ import { provideAppStore } from './store/app-store'
 import { isDarkTheme } from './store/theme-store'
 import OnboardingView from './views/OnboardingView.vue'
 import WorkspaceShell from './views/WorkspaceShell.vue'
+import AppMessageProvider from './components/AppMessageProvider.vue'
 
 // 根组件只装配应用环境；页面状态与业务操作由 store 和各视图负责。
 const { screen } = provideAppStore()
@@ -24,9 +25,11 @@ const naiveThemeOverrides: GlobalThemeOverrides = {
     :theme="isDarkTheme ? darkTheme : null"
     :theme-overrides="naiveThemeOverrides"
   >
-    <OnboardingView
-      v-if="screen !== 'app' && screen !== 'login' && screen !== 'setup'"
-    />
-    <WorkspaceShell v-else />
+    <AppMessageProvider>
+      <OnboardingView
+        v-if="screen !== 'app' && screen !== 'login' && screen !== 'setup'"
+      />
+      <WorkspaceShell v-else />
+    </AppMessageProvider>
   </NConfigProvider>
 </template>

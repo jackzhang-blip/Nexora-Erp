@@ -61,8 +61,6 @@ const {
   screen,
   activeTab,
   expandedGroupKey,
-  notice,
-  error,
   busy,
   user,
   username,
@@ -122,11 +120,6 @@ const accountRole = computed(() => accountRoleText(user.value?.roles ?? [], role
             </button>
           </div>
         </header>
-
-        <div v-if="error" class="message error" role="alert">{{ error }}</div>
-        <div v-if="notice" class="message success" role="status">
-          {{ notice }}
-        </div>
 
         <AuthView v-if="isAuthScreen" />
         <template v-else-if="screen === 'app' && activeRouteAllowed">
