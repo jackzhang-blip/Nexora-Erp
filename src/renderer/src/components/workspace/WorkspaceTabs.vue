@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useAppStore } from '../store/app-store'
+import { useAppStore } from '../../store/app-store'
 import IconCloseLine from '~icons/ri/close-line'
 
 // 标签栏只渲染当前会话已打开的路由；关闭规则由路由模块统一决定。

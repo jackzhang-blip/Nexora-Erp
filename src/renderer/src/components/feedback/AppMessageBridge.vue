@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onUnmounted } from 'vue'
-import { useAppStore } from '../store/app-store'
-import { useAppMessage } from '../composables/use-app-message'
-import { observeAppMessageFeedback } from '../utils/app-message-feedback'
+import { useAppStore } from '../../store/app-store'
+import { useAppMessage } from '../../composables/use-app-message'
+import { observeAppMessageFeedback } from '../../utils/app-message-feedback'
 
 const { notice, error } = useAppStore()
 const message = useAppMessage()

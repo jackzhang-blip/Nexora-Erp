@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useAppStore } from '../store/app-store'
-import { nexoraLogo } from '../assets/brand'
+import { useAppStore } from '../../store/app-store'
+import { nexoraLogo } from '../../assets/brand'
 import IconArrowDownSLine from '~icons/ri/arrow-down-s-line'
 import SidebarAccountCard from './SidebarAccountCard.vue'
 

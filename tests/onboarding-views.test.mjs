@@ -36,7 +36,7 @@ test('启动页的长内容在中间滚动，底部说明保留在窗口内', ()
 
 test('引导页与工作台共用底栏，连接提示位于右端且保留告警语义', () => {
   const shell = readFileSync(new URL('../src/renderer/src/views/OnboardingView.vue', import.meta.url), 'utf8')
-  const footer = readFileSync(new URL('../src/renderer/src/components/AppStatusFooter.vue', import.meta.url), 'utf8')
+  const footer = readFileSync(new URL('../src/renderer/src/components/app/AppStatusFooter.vue', import.meta.url), 'utf8')
   const css = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
 
   // 引导阶段的连接错误不再占用表单区域，和已连接状态共用右端位置。

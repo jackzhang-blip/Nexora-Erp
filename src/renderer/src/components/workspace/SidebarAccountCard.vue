@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useAppStore } from '../store/app-store'
+import { useAppStore } from '../../store/app-store'
 import IconUser3Line from '~icons/ri/user-3-line'
 import IconLogoutBoxRLine from '~icons/ri/logout-box-r-line'
-import { accountRoleText } from '../utils/account-role'
-import ThemeToggle from './ThemeToggle.vue'
+import { accountRoleText } from '../../utils/account-role'
+import ThemeToggle from '../app/ThemeToggle.vue'
 
 const { user, roles, logout } = useAppStore()
 const card = ref<HTMLElement | null>(null)

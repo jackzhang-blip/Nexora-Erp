@@ -39,7 +39,7 @@ test('侧栏按查看权限分类，隐藏空分类及未授权页面', () => {
 })
 
 test('首页是登录账号均可见的固定入口与默认页面', () => {
-  const sidebar = readFileSync(new URL('../src/renderer/src/components/WorkspaceSidebar.vue', import.meta.url), 'utf8')
+  const sidebar = readFileSync(new URL('../src/renderer/src/components/workspace/WorkspaceSidebar.vue', import.meta.url), 'utf8')
   const state = readFileSync(new URL('../src/renderer/src/store/state.ts', import.meta.url), 'utf8')
   assert.equal(routeByKey('home').path, '/workspace/home')
   assert.match(sidebar, /v-if="group\.key === 'home'"[\s\S]*?@click="navigateToRoute\('home'\)"/)
@@ -91,7 +91,7 @@ test('分类默认收起，同一时间只能展开一个分类', () => {
 })
 
 test('收起的页面入口不可聚焦，动效遵循减少动态效果设置', () => {
-  const sidebar = readFileSync(new URL('../src/renderer/src/components/WorkspaceSidebar.vue', import.meta.url), 'utf8')
+  const sidebar = readFileSync(new URL('../src/renderer/src/components/workspace/WorkspaceSidebar.vue', import.meta.url), 'utf8')
   const style = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
 
   // 内容保留在 DOM 中完成收起动画时，必须同步关闭交互与辅助技术访问。
