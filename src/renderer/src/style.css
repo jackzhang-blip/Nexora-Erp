@@ -154,7 +154,6 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
 .onboard-hero h1 { margin: 0; font-size: clamp(31px, 3.4vw, 49px); line-height: 1.15; letter-spacing: -.05em; font-weight: 800; }
 .onboard-hero p:last-child { margin: 16px 0 0; color: #647fa6; font-size: clamp(14px, 1.45vw, 17px); }
 .onboard-alert { position: relative; max-width: 920px; margin: 0 auto 20px; border: 1px solid #fac5c2; border-radius: 11px; padding: 13px 18px; background: #fff7f6; color: #973c3b; font-size: 13px; }
-.onboard-alert.success { border-color: #b9e7d3; background: #ecfaf3; color: #22755c; }
 .choice-grid { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px; margin-top: clamp(22px, 6vh, 72px); }
 /* 入场使用独立的 translate 属性，避免覆盖 hover 的 transform 过渡。 */
 .choice-card { display: flex; flex-direction: column; min-height: 342px; border: 1px solid #d5e7fa; border-radius: 21px; padding: 25px; background: #ffffffda; color: #0b2347; text-align: left; box-shadow: 0 18px 38px #366ea116; transform: scale(1); animation: choice-rise .55s cubic-bezier(.16, 1, .3, 1) both; transition: transform .3s cubic-bezier(.16, 1, .3, 1), border-color .3s ease, box-shadow .3s ease; }
@@ -240,7 +239,12 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
 .offline-panel p { color: #748ba7; font-size: 13px; line-height: 1.6; }
 .offline-symbol { width: 64px; height: 64px; display: grid; place-items: center; margin: 0 auto 20px; border-radius: 50%; background: #fff2db; color: #c68319; font-size: 36px; font-weight: 700; }
 .offline-symbol svg { width: 32px; height: 32px; }
-.onboard-footer { flex: none; display: flex; justify-content: space-between; gap: 20px; border-top: 1px solid #d8e7f6; padding: 17px clamp(24px, 4vw, 68px); background: #ffffff8c; color: #8ea6c3; font-size: 11px; }
+/* 三列为连接状态预留中间位置；长消息换行时两侧说明仍留在底栏内。 */
+.onboard-footer { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); align-items: center; gap: 12px; border-top: 1px solid #d8e7f6; padding: 17px clamp(24px, 4vw, 68px); background: #ffffff8c; color: #8ea6c3; font-size: 11px; }
+.onboard-footer-copy:first-child { grid-column: 1; }
+.onboard-footer-copy:last-child { grid-column: 3; text-align: right; }
+.onboard-footer-status { grid-column: 2; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 7px; color: #177456; font-size: 12px; font-weight: 600; line-height: 1.5; text-align: center; overflow-wrap: anywhere; }
+.onboard-footer-status::before { content: ''; width: 7px; height: 7px; flex: none; border-radius: 50%; background: #19b989; }
 .auth-switch { margin-top: 22px; padding: 0; }
 @keyframes scan-turn { to { transform: rotate(360deg); } }
 /* 按本页需求保留卡片的明确交互动画；扫描装饰仍遵循系统减少动态效果设置。 */
@@ -280,8 +284,10 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
   .choice-symbol svg { width: 32px; height: 32px; }
   .scan-panel { grid-template-columns: 1fr; text-align: center; }
   .scan-visual { margin: 25px 0; }
-  .onboard-footer { display: block; text-align: center; }
-  .onboard-footer span { display: block; margin: 3px 0; }
+  /* 窄窗口先显示连接反馈，再顺序显示底栏说明。 */
+  .onboard-footer { display: flex; flex-direction: column; gap: 3px; text-align: center; }
+  .onboard-footer-status { order: -1; }
+  .onboard-footer-copy:last-child { text-align: center; }
 }
 @media (max-width: 560px) {
   /* 窄窗口优先完整显示放大后的品牌标识，避免右侧说明与它重叠。 */

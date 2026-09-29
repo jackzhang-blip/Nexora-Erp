@@ -53,15 +53,14 @@ const currentView = computed(() => {
         <p>{{ onboardingCopy[screen].description }}</p>
       </div>
       <div v-if="error" class="onboard-alert" role="alert">{{ error }}</div>
-      <div v-if="notice" class="onboard-alert success" role="status">
-        {{ notice }}
-      </div>
 
       <component :is="currentView" v-if="currentView" />
     </main>
     <footer class="onboard-footer">
-      <span>联光 ERP · 让业务流转有据可查</span
-      ><span>局域网内连接 · 账号权限由服务端管理</span>
+      <span class="onboard-footer-copy">联光 ERP · 让业务流转有据可查</span>
+      <!-- 成功消息属于当前连接状态，放在始终可见的底栏中，避免推挤页面内容。 -->
+      <span v-if="notice" class="onboard-footer-status" role="status">{{ notice }}</span>
+      <span class="onboard-footer-copy">局域网内连接 · 账号权限由服务端管理</span>
     </footer>
   </div>
 </template>
