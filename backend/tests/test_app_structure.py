@@ -1,5 +1,6 @@
 """目录迁移后，功能路由和固定命令入口仍须可用。"""
 
+import os
 import subprocess
 import sys
 
@@ -47,9 +48,11 @@ def test_every_feature_router_is_registered() -> None:
 
 def test_existing_command_modules_still_start() -> None:
     for module in ("app.server", "app.backup"):
+        # Windows CI 默认代码页可能无法打印中文帮助文案；这里只核对模块入口能否正常导入。
         result = subprocess.run(
             [sys.executable, "-m", module, "--help"],
             capture_output=True, text=True, check=False,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
         # 桌面端和运维脚本仍调用这两个旧模块路径，导入失败会阻断启动。
         assert result.returncode == 0, f"{module}: {result.stderr}"
