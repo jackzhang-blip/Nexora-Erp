@@ -85,6 +85,15 @@ function roleCode(payload: unknown): string {
   return code
 }
 
+function permissionCode(payload: unknown): string {
+  // 仅把合法的固定权限代码放入请求路径，不接受页面提供的任意 URL 片段。
+  const code = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).code : undefined
+  if (typeof code !== 'string' || code.length > 80 || !/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(code)) {
+    throw new Error('权限代码无效')
+  }
+  return code
+}
+
 function operation(action: keyof ErpOperations, payload: unknown): { method: string; path: string; body?: unknown } {
   // 明确列出可调用的接口，禁止页面拼接任意后端路径。
   switch (action) {
@@ -95,6 +104,10 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'me': return { method: 'GET', path: '/api/v1/auth/me' }
     case 'changePassword': return { method: 'POST', path: '/api/v1/auth/change-password', body: payload }
     case 'permissions': return { method: 'GET', path: '/api/v1/permissions' }
+    case 'updatePermissionLabel': return {
+      method: 'PUT', path: `/api/v1/permissions/${permissionCode(payload)}/label`,
+      body: { label: (payload as { label: unknown }).label }
+    }
     case 'roles': return { method: 'GET', path: '/api/v1/roles' }
     case 'createRole': return { method: 'POST', path: '/api/v1/roles', body: payload }
     case 'updateRole': return {

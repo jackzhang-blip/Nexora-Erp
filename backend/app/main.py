@@ -133,6 +133,19 @@ class RoleUpdate(BaseModel):
         return value.strip()
 
 
+class PermissionLabelInput(BaseModel):
+    label: str = Field(min_length=1, max_length=60)
+
+    @field_validator("label")
+    @classmethod
+    def trim_label(cls, value: str) -> str:
+        label = value.strip()
+        # 授权列表面对中文用户，名称至少包含一个汉字，避免再次显示纯英文代码。
+        if not label or not any("\u4e00" <= char <= "\u9fff" for char in label):
+            raise ValueError("权限名称须包含中文")
+        return label
+
+
 class StatusInput(BaseModel):
     is_active: bool
 
@@ -360,49 +373,21 @@ def change_password(payload: ChangePasswordInput, user: dict = Depends(current_u
 
 @app.get("/api/v1/permissions")
 def list_permissions(_: dict = Depends(require("users.manage"))) -> list[dict]:
-    # 权限代码用于授权判断，中文名称只用于界面展示；新增权限须同时补充这里与测试。
-    labels = {"users.manage": "管理用户与角色", "catalog.manage": "管理基础资料",
-              "inventory.view": "查看库存与入库单", "receipt.create": "创建入库单",
-              "receipt.post": "确认入库", "receipt.reverse": "冲销已确认入库", "warehouse.manage": "管理仓库",
-              "transfer.create": "创建调拨单", "transfer.post": "确认调拨",
-              "transfer.reverse": "冲销已确认调拨单",
-              "purchase_order.create": "创建采购订单", "purchase_order.confirm": "确认采购订单",
-              "purchase_order.cancel": "取消采购订单",
-              "stocktake.create": "创建盘点单", "stocktake.post": "确认盘点单",
-              "stocktake.cancel": "取消盘点单", "stocktake.reverse": "冲销已确认盘点单", "sales.view": "查看销售单据",
-              "customer.manage": "管理客户", "sales_order.create": "创建销售订单",
-              "sales_order.confirm": "确认销售订单", "sales_order.cancel": "取消销售订单",
-              "shipment.create": "创建出库单", "shipment.post": "确认出库",
-              "shipment.cancel": "取消出库草稿", "shipment.reverse": "冲销已确认出库",
-              "sales_return.create": "创建销售退货单",
-              "sales_return.post": "确认销售退货", "sales_return.cancel": "取消销售退货草稿",
-              "sales_return.reverse": "冲销已确认销售退货",
-              "bom.activate": "启用生产物料清单版本", "bom.cancel": "取消生产物料清单草稿",
-              "bom.create": "创建生产物料清单", "bom.retire": "停用生产物料清单版本",
-              "finance.record": "登记收付款", "finance.reverse": "冲销收付款",
-              "finance.view": "查看应收应付",
-              "material_issue.cancel": "取消生产领料单", "material_issue.create": "创建生产领料单",
-              "material_issue.post": "确认生产领料",
-              "material_return.cancel": "取消生产退料单", "material_return.create": "创建生产退料单",
-              "material_return.post": "确认生产退料", "production.view": "查看生产业务",
-              "production_completion.cancel": "取消完工报工单",
-              "production_completion.create": "创建完工报工单",
-              "production_completion.inspect": "检验完工报工",
-              "production_completion.post": "确认完工入库",
-              "production_completion.reverse": "冲销已确认完工入库",
-              "production_cost.record": "登记生产成本",
-              "production_cost.reverse": "冲销生产成本记录",
-              "production_cost.view": "查看生产成本",
-              "purchase_return.cancel": "取消采购退货单",
-              "purchase_return.create": "创建采购退货单",
-              "purchase_return.post": "确认采购退货",
-              "purchase_return.reverse": "冲销已确认采购退货",
-              "work_order.cancel": "取消生产工单",
-              "work_order.create": "创建生产工单",
-              "work_order.release": "下达生产工单"}
+    # 以数据库权限目录为唯一展示来源；代码只负责后端授权。
     with connection() as db:
-        return [{"code": row[0], "label": labels.get(row[0], "未命名权限（请升级服务端）")}
-                for row in db.execute("SELECT code FROM permissions ORDER BY code")]
+        return [dict(row) for row in db.execute("SELECT code, label FROM permissions ORDER BY code")]
+
+
+@app.put("/api/v1/permissions/{code}/label")
+def update_permission_label(code: str, payload: PermissionLabelInput,
+                            _: dict = Depends(require("users.manage"))) -> dict:
+    # 只允许更改展示名称，权限代码与角色授权关系都保持不变。
+    with connection() as db:
+        updated = db.execute("UPDATE permissions SET label = ? WHERE code = ?",
+                             (payload.label, code))
+        if updated.rowcount == 0:
+            raise HTTPException(404, "权限不存在")
+        return {"code": code, "label": payload.label}
 
 
 @app.get("/api/v1/roles")

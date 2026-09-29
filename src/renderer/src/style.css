@@ -178,6 +178,11 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
 .role-row small { color: #96a3b3; }
 .role-editor > label { max-width: 280px; }
 .role-editor button { justify-self: start; }
+/* 权限代码保持只读，中文名称单独编辑，避免改名影响已授予的权限。 */
+.permission-catalog-row { display: grid; grid-template-columns: minmax(210px, 1fr) minmax(230px, 1.2fr) auto; align-items: end; gap: 16px; border-top: 1px solid #edf0f3; padding: 13px 0; }
+.permission-catalog-row small { align-self: center; color: #708198; overflow-wrap: anywhere; }
+.permission-catalog-row label { display: grid; gap: 5px; }
+.permission-catalog-row button { white-space: nowrap; }
 
 /* 启动页占满窗口，长内容交给中间区域滚动，避免底部说明被挤到窗口外。 */
 .onboarding { height: 100vh; overflow: hidden; display: flex; flex-direction: column; color: #0b2347; background: radial-gradient(circle at 83% 24%, #dceeff 0, transparent 28%), linear-gradient(145deg, #f6fbff 0%, #e9f3ff 55%, #f7fbff 100%); }
@@ -304,6 +309,7 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
   .user-row { grid-template-columns: 1fr; }
   .user-actions { justify-content: flex-start; }
   .role-row { grid-template-columns: 1fr; }
+  .permission-catalog-row { grid-template-columns: 1fr; gap: 8px; }
   .create-columns { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {

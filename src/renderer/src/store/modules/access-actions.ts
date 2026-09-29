@@ -12,6 +12,7 @@ export function createAccessActions(
     password,
     roles,
     permissions,
+    permissionLabelDrafts,
     roleDrafts,
     rolePermissionDrafts,
     roleLabelDrafts,
@@ -70,6 +71,17 @@ export function createAccessActions(
     )
   }
 
+  async function savePermissionLabel(code: string): Promise<void> {
+    if (!window.nexora) return
+    await perform(
+      () => window.nexora!.callApi('updatePermissionLabel', {
+        code,
+        label: permissionLabelDrafts.value[code]
+      }),
+      '权限名称已更新。'
+    )
+  }
+
   async function setUserStatus(entry: User): Promise<void> {
     if (!window.nexora) return
     await perform(
@@ -97,6 +109,7 @@ export function createAccessActions(
     saveRoles,
     createRole,
     saveRole,
+    savePermissionLabel,
     setUserStatus,
     resetUserPassword
   }

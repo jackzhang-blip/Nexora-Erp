@@ -1,8 +1,10 @@
-"""验证用户生命周期和自定义角色在真实 SQLite 会话中的授权行为。"""
+"""验证用户生命周期和权限目录在真实 SQLite 会话中的授权行为。"""
+
+import sqlite3
 
 from fastapi.testclient import TestClient
 
-from app.database import connection
+from app.database import connection, migrate
 from app.main import app
 
 
@@ -26,12 +28,28 @@ def test_access_management(monkeypatch, tmp_path):
         assert all(any("\u4e00" <= char <= "\u9fff" for char in item["label"])
                    and item["label"] != item["code"]
                    and not item["label"].startswith("未命名权限") for item in permissions)
+        assert len({item["code"] for item in permissions}) == len(permissions)
+        renamed = client.put(f"{base}/permissions/inventory.view/label", headers=admin,
+                             json={"label": "  查看各仓库存量  "})
+        assert renamed.status_code == 200, renamed.text
+        assert renamed.json() == {"code": "inventory.view", "label": "查看各仓库存量"}
+        with connection() as db:
+            # 仅改变展示文案，角色授权继续引用原权限代码。
+            assert db.execute("SELECT permission_code FROM role_permissions WHERE role_code = 'viewer'").fetchone()[0] == "inventory.view"
+            assert db.execute("SELECT label FROM permissions WHERE code = 'inventory.view'").fetchone()[0] == "查看各仓库存量"
         worker_data = client.post(f"{base}/users", headers=admin, json={
             "username": "worker", "password": "worker-password-123", "roles": ["viewer"]
         }).json()
         worker = login("worker", "worker-password-123")
         assert worker_data["is_active"] is True
         assert client.get(f"{base}/permissions", headers=worker).status_code == 403
+        assert client.put(f"{base}/permissions/inventory.view/label", headers=worker,
+                          json={"label": "查看库存"}).status_code == 403
+        assert client.put(f"{base}/permissions/not_found.view/label", headers=admin,
+                          json={"label": "无效权限"}).status_code == 404
+        for label in ["  ", "inventory.view", "A" * 61]:
+            assert client.put(f"{base}/permissions/inventory.view/label", headers=admin,
+                              json={"label": label}).status_code == 422
         assert client.post(f"{base}/roles", headers=worker, json={
             "code": "custom", "label": "自定义", "permissions": []
         }).status_code == 403
@@ -99,19 +117,25 @@ def test_access_management(monkeypatch, tmp_path):
                           json={"roles": ["viewer"]}).status_code == 409
 
 
-def test_unknown_permission_never_displays_raw_code(monkeypatch, tmp_path):
-    monkeypatch.setenv("NEXORA_DB_PATH", str(tmp_path / "unknown-permission.db"))
-    with TestClient(app, client=("127.0.0.1", 12345)) as client:
-        client.post("/api/v1/setup/admin", json={
-            "username": "admin", "password": "admin-password-123"
-        })
-        token = client.post("/api/v1/auth/login", json={
-            "username": "admin", "password": "admin-password-123"
-        }).json()["token"]
-        with connection() as db:
-            # 模拟未来数据库迁移先登记权限、展示文案尚未更新的情况。
-            db.execute("INSERT INTO permissions(code) VALUES (?)", ("future.view",))
-        permissions = client.get("/api/v1/permissions", headers={
-            "Authorization": f"Bearer {token}"
-        }).json()
-        assert next(item["label"] for item in permissions if item["code"] == "future.view") == "未命名权限（请升级服务端）"
+def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path):
+    path = tmp_path / "legacy-permissions.db"
+    monkeypatch.setenv("NEXORA_DB_PATH", str(path))
+    with sqlite3.connect(path) as db:
+        # 模拟 v24 旧库：权限表只有代码，迁移须保留已有角色关联所用的代码。
+        db.execute("CREATE TABLE permissions (code TEXT PRIMARY KEY)")
+        db.execute("INSERT INTO permissions(code) VALUES ('bom.activate'), ('future.view')")
+        db.execute("PRAGMA user_version = 24")
+    migrate()
+    with connection() as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 25
+        assert dict(db.execute("SELECT code, label FROM permissions").fetchall()) == {
+            "bom.activate": "启用生产物料清单版本",
+            "future.view": "未命名权限",
+        }
+        # 升级后新增权限必须同时登记中文名称，不再产生裸代码展示。
+        try:
+            db.execute("INSERT INTO permissions(code) VALUES ('new.view')")
+        except sqlite3.IntegrityError:
+            pass
+        else:
+            raise AssertionError("缺少名称的权限不应写入目录")

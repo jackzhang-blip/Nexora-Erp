@@ -80,6 +80,7 @@ export function createAppState() {
   const selectedWarehouseId = ref(0)
   const roles = ref<Role[]>([])
   const permissions = ref<Permission[]>([])
+  const permissionLabelDrafts = ref<Record<string, string>>({})
   const users = ref<User[]>([])
   const roleDrafts = ref<Record<number, string[]>>({})
   const rolePermissionDrafts = ref<Record<string, string[]>>({})
@@ -295,6 +296,7 @@ export function createAppState() {
     selectedWarehouseId,
     roles,
     permissions,
+    permissionLabelDrafts,
     users,
     roleDrafts,
     rolePermissionDrafts,
