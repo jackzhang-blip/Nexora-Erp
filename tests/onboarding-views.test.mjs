@@ -34,6 +34,19 @@ test('启动页的长内容在中间滚动，底部说明保留在窗口内', ()
   assert.match(rule('.onboard-footer'), /\bflex: none;/)
 })
 
+test('连接成功提示位于始终可见的底栏，错误仍在内容区显示', () => {
+  const shell = readFileSync(new URL('../src/renderer/src/views/OnboardingView.vue', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
+  const [main, footer] = shell.split('<footer class="onboard-footer">')
+
+  // 成功反馈不应再次占据卡片上方的整行空间，错误则继续紧邻当前操作显示。
+  assert.match(main, /v-if="error"[^>]*role="alert"/)
+  assert.doesNotMatch(main, /v-if="notice"/)
+  assert.match(footer, /v-if="notice"[^>]*role="status"/)
+  assert.match(css, /\.onboard-footer-status \{[^}]*grid-column: 2;/)
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.onboard-footer-status \{ order: -1; \}/)
+})
+
 test('服务端就绪页左右卡片等宽，窄窗口仍改为单列', () => {
   const view = readFileSync(new URL('../src/renderer/src/views/onboarding/ConnectionReadyView.vue', import.meta.url), 'utf8')
   const css = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
