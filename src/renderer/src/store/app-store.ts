@@ -27,8 +27,10 @@ import {
   permittedOpenedRoutes,
   resolveWorkspaceRoute,
   routeByKey,
+  workspaceRoutes,
   visibleRouteGroups
 } from '../router/workspace-routes'
+import { workspaceRouter } from '../router/browser-router'
 import type {
   WorkspaceRouteGroupKey,
   WorkspaceRouteKey
@@ -61,7 +63,6 @@ function createAppStore() {
   const state = createAppState()
   const {
     screen,
-    activeTab,
     openedRouteKeys,
     expandedGroupKey,
     version,
@@ -74,6 +75,14 @@ function createAppStore() {
     connectionLost
   } = state
   let healthTimer: ReturnType<typeof setInterval> | null = null
+  let removeRouteHook: (() => void) | null = null
+
+  // 当前页面以 Vue Router 为唯一来源，避免标签高亮与地址栏各保存一份状态。
+  const activeTab = computed<WorkspaceRouteKey>(() =>
+    workspaceRoutes.find(
+      (route) => route.path === workspaceRouter.currentRoute.value.path
+    )?.key ?? 'home'
+  )
 
   const can = (permission: string): boolean =>
     user.value?.permissions.includes(permission) ?? false
@@ -137,29 +146,29 @@ function createAppStore() {
   function syncWorkspaceRoute(): void {
     if (screen.value !== 'app' || !user.value) return
     const route = resolveWorkspaceRoute(
-      window.location.hash,
+      workspaceRouter.currentRoute.value.path,
       user.value.permissions
     )
     openedRouteKeys.value = openRoute(
       permittedOpenedRoutes(openedRouteKeys.value, user.value.permissions),
       route.key
     )
-    activeTab.value = route.key
-    revealCurrentTab()
-    if (window.location.hash !== `#${route.path}`) {
-      // 未授权或未知地址不留在历史记录中，也不渲染原页面。
-      window.history.replaceState(null, '', `#${route.path}`)
+    if (workspaceRouter.currentRoute.value.path !== route.path) {
+      // 权限被撤销后替换当前历史项，避免后退再次进入无权页面。
+      void workspaceRouter.replace(route.path)
+      return
     }
+    revealCurrentTab()
   }
 
   function navigateToRoute(key: WorkspaceRouteKey): void {
     if (!user.value) return
     const route = routeByKey(key)
     if (!canVisitRoute(route, user.value.permissions)) return
-    openedRouteKeys.value = openRoute(openedRouteKeys.value, key)
-    activeTab.value = key
-    revealCurrentTab()
-    window.location.hash = route.path
+    // 导航成功后由路由钩子登记页面标签，避免被守卫拒绝的地址留下入口。
+    void workspaceRouter.push(route.path).catch((cause: unknown) => {
+      error.value = displayError(cause)
+    })
   }
 
   function closeOpenedRoute(key: WorkspaceRouteKey): void {
@@ -214,7 +223,9 @@ function createAppStore() {
     // 启动资源仍由根组件控制，避免 Pinia store 在首次读取时自行注册窗口监听。
     if (initialized) return
     initialized = true
-    window.addEventListener('hashchange', syncWorkspaceRoute)
+    removeRouteHook = workspaceRouter.afterEach((_to, _from, failure) => {
+      if (!failure) syncWorkspaceRoute()
+    })
     window.addEventListener('resize', revealCurrentTab)
     if (window.nexora)
       version.value = await window.nexora.getVersion().catch(() => '')
@@ -236,11 +247,13 @@ function createAppStore() {
     void stopScan()
     if (healthTimer) clearInterval(healthTimer)
     healthTimer = null
-    window.removeEventListener('hashchange', syncWorkspaceRoute)
+    removeRouteHook?.()
+    removeRouteHook = null
     window.removeEventListener('resize', revealCurrentTab)
   }
   return {
     ...state,
+    activeTab,
     ...connectionActions,
     ...catalogActions,
     ...purchaseActions,
