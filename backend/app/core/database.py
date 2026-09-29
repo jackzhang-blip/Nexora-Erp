@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 29:
+        if version > 30:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -892,3 +892,49 @@ def migrate() -> None:
                                          "purchase_request.submit", "purchase_request.cancel")])
             db.execute("INSERT INTO role_permissions(role_code, permission_code) VALUES ('admin', 'purchase_request.review')")
             db.execute("PRAGMA user_version = 29")
+
+        if version < 30:
+            # 收货事实与入库确认分开保存；每张已确认收货最多生成一张待入库单。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE purchase_goods_receipts (
+                id INTEGER PRIMARY KEY,
+                purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id),
+                warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+                inbound_receipt_id INTEGER UNIQUE REFERENCES receipts(id),
+                reference TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'confirmed', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                confirmed_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                confirmed_at TEXT,
+                cancelled_at TEXT
+            )""")
+            db.execute("""CREATE TABLE purchase_goods_receipt_lines (
+                id INTEGER PRIMARY KEY,
+                goods_receipt_id INTEGER NOT NULL REFERENCES purchase_goods_receipts(id),
+                purchase_order_line_id INTEGER NOT NULL REFERENCES purchase_order_lines(id),
+                accepted_quantity TEXT NOT NULL,
+                rejected_quantity TEXT NOT NULL,
+                rejection_reason TEXT NOT NULL DEFAULT '',
+                UNIQUE (goods_receipt_id, purchase_order_line_id)
+            )""")
+            db.execute("CREATE INDEX purchase_goods_receipt_lines_order ON purchase_goods_receipt_lines(purchase_order_line_id)")
+            db.execute("""INSERT INTO permission_groups(code, label, parent_code, sort_order)
+                VALUES ('purchase.receiving', '采购收货', 'purchase', 110)""")
+            receiving_permissions = (
+                ("purchase_receiving.view", "查看采购收货"),
+                ("purchase_receiving.create", "创建采购收货单"),
+                ("purchase_receiving.confirm", "确认采购收货"),
+                ("purchase_receiving.cancel", "取消采购收货草稿"),
+            )
+            db.executemany("INSERT INTO permissions(code, label, group_code) VALUES (?, ?, 'purchase.receiving')",
+                           receiving_permissions)
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, code) for role in ("admin", "buyer", "warehouse")
+                            for code in ("purchase_receiving.view", "purchase_receiving.create",
+                                         "purchase_receiving.cancel")])
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, "purchase_receiving.confirm") for role in ("admin", "warehouse")])
+            db.execute("PRAGMA user_version = 30")

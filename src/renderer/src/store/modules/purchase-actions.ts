@@ -7,6 +7,8 @@ export function createPurchaseActions(
 ) {
   const {
     purchaseOrders,
+    goodsReceipts,
+    goodsReceiptForm,
     purchaseRequests,
     purchaseRequestForm,
     requestConversionForm,
@@ -18,6 +20,42 @@ export function createPurchaseActions(
     receiptReversalReasons,
     selectedPurchaseReturnReceipt
   } = state
+
+  function chooseGoodsReceiptOrder(): void {
+    const order = purchaseOrders.value.find((item) => item.id === goodsReceiptForm.value.purchase_order_id)
+    goodsReceiptForm.value.lines = order?.lines.flatMap((line) => {
+      const pending = goodsReceipts.value.filter((item) => item.status === 'confirmed' && item.inbound_status === 'draft')
+        .flatMap((item) => item.lines).filter((item) => item.purchase_order_line_id === line.id)
+        .reduce((total, item) => total + Number(item.accepted_quantity), 0)
+      const remaining = Math.max(0, Number(line.remaining_quantity) - pending)
+      return remaining > 0 ? [{ purchase_order_line_id: line.id,
+        accepted_quantity: remaining.toFixed(3), rejected_quantity: '0', rejection_reason: '' }] : []
+    }) ?? []
+  }
+
+  async function createGoodsReceipt(): Promise<void> {
+    if (!window.nexora || !goodsReceiptForm.value.lines.length) return
+    await perform(async () => {
+      await window.nexora!.callApi('createGoodsReceipt', {
+        ...goodsReceiptForm.value,
+        lines: goodsReceiptForm.value.lines.map((line) => ({ ...line }))
+      })
+      goodsReceiptForm.value = { purchase_order_id: 0, warehouse_id: goodsReceiptForm.value.warehouse_id,
+        reference: '', lines: [] }
+    }, '采购收货草稿已创建。')
+  }
+
+  async function confirmGoodsReceipt(goodsReceiptId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('confirmGoodsReceipt', { goodsReceiptId }),
+      `采购收货 #${goodsReceiptId} 已确认，合格数量已生成待入库单。`)
+  }
+
+  async function cancelGoodsReceipt(goodsReceiptId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('cancelGoodsReceipt', { goodsReceiptId }),
+      `采购收货 #${goodsReceiptId} 已取消。`)
+  }
 
   function editPurchaseRequest(requestId?: number): void {
     const request = purchaseRequests.value.find((item) => item.id === requestId)
@@ -255,6 +293,10 @@ export function createPurchaseActions(
   }
 
   return {
+    chooseGoodsReceiptOrder,
+    createGoodsReceipt,
+    confirmGoodsReceipt,
+    cancelGoodsReceipt,
     editPurchaseRequest,
     savePurchaseRequest,
     submitPurchaseRequest,

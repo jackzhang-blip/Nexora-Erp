@@ -13,6 +13,7 @@
 | `catalog/` | `WarehousesView.vue` | 仓库增删改查，默认主仓库禁止删除 |
 | `purchase/` | `PurchaseOrdersView.vue` | 建立和管理采购订单 |
 | `purchase/` | `PurchaseRequestsView.vue` | 采购申请、审批、分批转采购订单 |
+| `purchase/` | `PurchaseGoodsReceiptsView.vue` | 分批记录采购合格实收与拒收，确认后生成待入库单 |
 | `purchase/` | `PurchaseReceiptsView.vue` | 建立和确认采购入库单 |
 | `purchase/` | `PurchaseReturnsView.vue` | 处理采购退货 |
 | `sales/` | `SalesOrdersView.vue` | 建立和管理销售订单 |

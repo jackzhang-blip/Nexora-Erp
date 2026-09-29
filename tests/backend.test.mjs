@@ -258,3 +258,23 @@ test('采购申请操作使用固定路径且只发送正式字段', async (t) =
   assert.deepEqual(JSON.parse(calls.at(-1).body), { reason: '数量错误' })
   await assert.rejects(callBackend('approvePurchaseRequest', { requestId: '../users' }), /记录编号无效/)
 })
+
+test('采购收货的确认和取消只能调用固定单据路径', async (t) => {
+  const originalUrl = process.env.NEXORA_API_URL
+  t.after(() => {
+    if (originalUrl === undefined) delete process.env.NEXORA_API_URL
+    else process.env.NEXORA_API_URL = originalUrl
+  })
+  process.env.NEXORA_API_URL = 'http://127.0.0.1:8000'
+  const paths = []
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    paths.push(new URL(url).pathname)
+    return Response.json({ token: 'test-token', user: { id: 1 } })
+  })
+  await callBackend('login', {})
+  await callBackend('goodsReceipts', undefined)
+  await callBackend('confirmGoodsReceipt', { goodsReceiptId: 3 })
+  assert.deepEqual(paths.slice(-2), ['/api/v1/purchase-goods-receipts',
+    '/api/v1/purchase-goods-receipts/3/confirm'])
+  await assert.rejects(callBackend('cancelGoodsReceipt', { goodsReceiptId: '../users' }), /记录编号无效/)
+})
