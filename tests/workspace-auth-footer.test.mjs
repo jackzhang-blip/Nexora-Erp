@@ -34,16 +34,26 @@ test('页面内容滚动时，公共底栏仍固定在视口底部', () => {
 
 test('侧栏底部显示当前用户、角色和退出，服务端身份交给公共底栏', () => {
   const sidebar = readFileSync(new URL('../src/renderer/src/components/WorkspaceSidebar.vue', import.meta.url), 'utf8')
+  const card = readFileSync(new URL('../src/renderer/src/components/SidebarAccountCard.vue', import.meta.url), 'utf8')
   const shell = readFileSync(new URL('../src/renderer/src/views/WorkspaceShell.vue', import.meta.url), 'utf8')
   const css = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
 
-  // 登录前不显示旧用户；小窗口收起侧栏后，右上角保留同一退出入口。
-  assert.match(sidebar, /v-if="screen === 'app' && user" class="sidebar-bottom sidebar-account"/)
-  assert.match(sidebar, /class="sidebar-account-name">\{\{ user\.username \}\}/)
-  assert.match(sidebar, /class="sidebar-account-roles">\{\{ user\.roles\.join\(' · '\) \}\}/)
-  assert.match(sidebar, /class="sidebar-logout"[^>]*@click="logout"/)
+  // 登录前不显示旧用户；公共底栏继续展示服务端身份。
+  assert.match(sidebar, /v-if="screen === 'app' && user" class="sidebar-bottom"/)
+  assert.match(sidebar, /<SidebarAccountCard \/>/)
   assert.doesNotMatch(sidebar, /<small v-if="version"/)
+  assert.match(card, /v-if="user"[\s\S]*?class="sidebar-account"/)
+  assert.match(card, /<strong :title="user\.username">\{\{ user\.username \}\}<\/strong>/)
+  assert.match(card, /<small :title="roleText">\{\{ roleText \}\}<\/small>/)
+  assert.match(card, /@mouseenter="menuOpen = true"/)
+  assert.match(card, /@focusin="menuOpen = true"/)
+  assert.match(card, /@focusout="closeWhenFocusLeaves"/)
+  assert.match(card, /@keydown\.esc\.stop="closeOnEscape"/)
+  assert.match(card, /v-show="menuOpen"[\s\S]*?@click="logout"/)
+  assert.match(shell, /class="account-identity"[\s\S]*?user\.username[\s\S]*?accountRole/)
   assert.match(shell, /v-if="user" class="account"[\s\S]*?@click="logout"/)
   assert.match(css, /\.account \{ display: none;/)
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.account \{ display: flex; \}/)
+  assert.match(css, /\.account-identity \{ display: none; \}/)
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.account-identity \{ display: block; \}/)
 })

@@ -47,13 +47,22 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .nav-item:hover { background: #1d304f; color: #fff; }
 .nav-item.active { background: #223b5b; color: #8de2d8; font-weight: 700; box-shadow: inset 3px 0 #70d8cc; }
 .sidebar-bottom { margin-top: auto; padding: 16px 12px 2px; color: #a7bad1; font-size: 12px; }
-/* 导航底部只保留账号与退出入口，长用户名和角色不撑宽侧栏。 */
-.sidebar-account { min-width: 0; border-top: 1px solid #34425c; }
-.sidebar-account-label, .sidebar-account-roles { display: block; color: #9fb1ca; font-size: 11px; line-height: 1.45; }
-.sidebar-account-name { display: block; margin: 5px 0; color: #f6f8fc; font-size: 14px; overflow-wrap: anywhere; }
-.sidebar-account-roles { overflow-wrap: anywhere; }
-.sidebar-logout { margin-top: 12px; border: 0; padding: 0; background: none; color: #82d7cf; font-size: 12px; font-weight: 700; }
-.sidebar-logout:hover { text-decoration: underline; }
+/* 账号入口留在侧栏底部；菜单紧贴卡片上沿，长用户名和角色也不挤出侧栏。 */
+.sidebar-account { position: relative; min-width: 0; }
+.sidebar-account-card { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 65px; border: 1px solid #344c65; border-radius: 12px; padding: 10px; background: #1b2b45; color: #f6f8fc; text-align: left; transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.sidebar-account-card:hover, .sidebar-account-card[aria-expanded="true"] { border-color: #5cbab4; background: #203853; box-shadow: 0 6px 20px rgba(0, 0, 0, .15); }
+.sidebar-account-avatar { display: grid; place-items: center; width: 37px; height: 37px; flex: none; border: 1px solid #6ed4cb; border-radius: 50%; background: linear-gradient(145deg, #348e9a, #1b5879); color: #effffc; }
+.sidebar-account-avatar svg { width: 21px; height: 21px; }
+.sidebar-account-identity { display: grid; min-width: 0; flex: 1; gap: 3px; }
+.sidebar-account-identity strong, .sidebar-account-identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-account-identity strong { font-size: 13px; line-height: 1.2; }
+.sidebar-account-identity small { color: #adc3d6; font-size: 11px; line-height: 1.25; }
+.sidebar-account-chevron { width: 15px; height: 15px; flex: none; color: #8dbabf; transition: transform .18s ease; }
+.sidebar-account-card[aria-expanded="true"] .sidebar-account-chevron { transform: rotate(180deg); }
+.sidebar-account-menu { position: absolute; z-index: 5; right: 0; bottom: 100%; left: 0; border: 1px solid #446178; border-radius: 10px; padding: 5px; background: #1b2b45; box-shadow: 0 12px 25px rgba(0, 0, 0, .25); }
+.sidebar-account-menu button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 38px; border: 0; border-radius: 7px; padding: 8px 10px; background: transparent; color: #d7eaf1; font-size: 12px; font-weight: 700; text-align: left; }
+.sidebar-account-menu button:hover, .sidebar-account-menu button:focus-visible { background: #294d62; color: #fff; }
+.sidebar-account-menu svg { width: 17px; height: 17px; color: #78d6cb; }
 .status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #70d8cc; }
 /* 登录和工作台共用可滚动内容及固定底栏，长页面不会把连接状态推出窗口。 */
 .content { min-width: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
@@ -266,7 +275,7 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
 @keyframes choice-rise { from { opacity: 0; translate: 0 22px; } to { opacity: 1; translate: 0 0; } }
 @media (prefers-reduced-motion: reduce) {
   .scan-orbit, .scan-core { animation: none; }
-  .side-category, .category-chevron, .nav-panel, .nav-list { transition: none; }
+  .side-category, .category-chevron, .nav-panel, .nav-list, .sidebar-account-card, .sidebar-account-chevron { transition: none; }
 }
 
 @media (max-width: 1080px) {
