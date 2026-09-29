@@ -153,6 +153,15 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
       const fields = payload as ErpOperations['reverseOtherInbound']['input']
       return { method: 'POST', path: `/api/v1/warehouse-inbounds/${inboundId}/reverse`, body: { reason: fields.reason } }
     }
+    case 'warehouseOutbounds': return { method: 'GET', path: '/api/v1/warehouse-outbounds' }
+    case 'createOtherOutbound': return { method: 'POST', path: '/api/v1/warehouse-outbounds', body: payload }
+    case 'postWarehouseOutbound': return { method: 'POST', path: `/api/v1/warehouse-outbounds/${positiveId(payload, 'outboundId')}/post` }
+    case 'cancelOtherOutbound': return { method: 'POST', path: `/api/v1/warehouse-outbounds/${positiveId(payload, 'outboundId')}/cancel` }
+    case 'reverseOtherOutbound': {
+      const outboundId = positiveId(payload, 'outboundId')
+      const fields = payload as ErpOperations['reverseOtherOutbound']['input']
+      return { method: 'POST', path: `/api/v1/warehouse-outbounds/${outboundId}/reverse`, body: { reason: fields.reason } }
+    }
     case 'createWarehouse': return { method: 'POST', path: '/api/v1/warehouses', body: payload }
     case 'receipts': return { method: 'GET', path: '/api/v1/receipts' }
     case 'goodsReceipts': return { method: 'GET', path: '/api/v1/purchase-goods-receipts' }
