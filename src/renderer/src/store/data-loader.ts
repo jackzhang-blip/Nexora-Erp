@@ -42,11 +42,28 @@ export function createDataLoader(
     roleLabelDrafts,
     inspectionDrafts
   } = state
+  async function loadPermissions(): Promise<void> {
+    if (!window.nexora || !user.value) return
+    if (!can('users.manage')) {
+      // 授权被撤销时立即清除旧目录，不能依赖后续业务请求全部成功。
+      permissions.value = []
+      permissionLabelDrafts.value = {}
+      return
+    }
+    // 权限目录独立读取，避免其他业务接口失败时连职务授权数据也无法展示。
+    const entries = await window.nexora.callApi('permissions', undefined)
+    permissions.value = entries
+    permissionLabelDrafts.value = Object.fromEntries(
+      entries.map((entry) => [entry.code, entry.label])
+    )
+  }
+
   async function refreshData(): Promise<void> {
     if (!window.nexora || !user.value) return
     // 每次写操作后重新读取服务端权限；角色变化立即反映到当前页面。
     user.value = await window.nexora.callApi('me', undefined)
     syncWorkspaceRoute()
+    await loadPermissions()
     // 页面只显示当前角色可访问的入口；数据访问仍以服务端授权为准。
     if (can('inventory.view')) {
       ;[
@@ -143,14 +160,10 @@ export function createDataLoader(
       ? await window.nexora.callApi('productionCosts', undefined)
       : null
     if (can('users.manage')) {
-      ;[permissions.value, roles.value, users.value] = await Promise.all([
-        window.nexora.callApi('permissions', undefined),
+      ;[roles.value, users.value] = await Promise.all([
         window.nexora.callApi('roles', undefined),
         window.nexora.callApi('users', undefined)
       ])
-      permissionLabelDrafts.value = Object.fromEntries(
-        permissions.value.map((entry) => [entry.code, entry.label])
-      )
       roleDrafts.value = Object.fromEntries(
         users.value.map((entry) => [entry.id, [...entry.roles]])
       )
@@ -167,5 +180,5 @@ export function createDataLoader(
       users.value = []
     }
   }
-  return refreshData
+  return { refreshData, loadPermissions }
 }

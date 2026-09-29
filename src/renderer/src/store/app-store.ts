@@ -176,7 +176,7 @@ function createAppStore() {
     openedRouteKeys.value = result.opened
     if (result.active !== activeTab.value) navigateToRoute(result.active)
   }
-  const refreshData = createDataLoader(state, can, syncWorkspaceRoute)
+  const { refreshData, loadPermissions } = createDataLoader(state, can, syncWorkspaceRoute)
   const connectionActions = createConnectionActions(state, refreshData)
   const { checkConnection, stopScan, monitorConnection } = connectionActions
 
@@ -277,6 +277,7 @@ function createAppStore() {
     movementSource,
     financialSource,
     refreshData,
+    loadPermissions,
     perform,
     paymentActionLabel,
     initialize,
