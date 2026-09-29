@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import PermissionTreePicker from '../../../components/workspace/PermissionTreePicker.vue'
 import { useAppStore } from '../../../store/app-store'
+import { buildPermissionTree } from '../../../utils/permission-tree'
 
 // 页面直接使用共享状态与操作，切换标签时不会丢失正在填写的草稿。
 const {
@@ -14,6 +17,9 @@ const {
   saveRole,
   savePermissionLabel
 } = useAppStore()
+
+// 页面按服务端提供的模块、单据层级组织操作权限，角色草稿仍只保存叶子代码。
+const permissionModules = computed(() => buildPermissionTree(permissions.value))
 </script>
 
 <template>
@@ -33,18 +39,9 @@ const {
             maxlength="40"
             placeholder="例如 库存专员"
         /></label>
-        <fieldset>
+        <fieldset class="permission-tree-fieldset">
           <legend>授权范围</legend>
-          <label
-            v-for="permission in permissions"
-            :key="permission.code"
-            class="check"
-            ><input
-              v-model="newRole.permissions"
-              type="checkbox"
-              :value="permission.code"
-            />{{ permission.label }}</label
-          >
+          <PermissionTreePicker v-model="newRole.permissions" :modules="permissionModules" :disabled="busy" />
         </fieldset>
         <button class="primary" type="submit" :disabled="busy">创建角色</button>
       </form>
@@ -63,35 +60,25 @@ const {
             role.is_builtin ? '内置角色 · 只读' : '自定义角色'
           }}</small>
         </div>
-        <div v-if="role.is_builtin" class="muted">
-          {{
-            role.permissions
-              .map(
-                (code) =>
-                  permissions.find((item) => item.code === code)?.label ??
-                  '未命名权限（请升级服务端）'
-              )
-              .join(' · ')
-          }}
-        </div>
+        <PermissionTreePicker
+          v-if="role.is_builtin"
+          :model-value="role.permissions"
+          :modules="permissionModules"
+          readonly
+        />
         <div v-else class="role-editor">
           <label
             >名称<input
               v-model.trim="roleLabelDrafts[role.code]"
               maxlength="40"
           /></label>
-          <fieldset>
+          <fieldset class="permission-tree-fieldset">
             <legend>权限</legend>
-            <label
-              v-for="permission in permissions"
-              :key="permission.code"
-              class="check"
-              ><input
-                v-model="rolePermissionDrafts[role.code]"
-                type="checkbox"
-                :value="permission.code"
-              />{{ permission.label }}</label
-            >
+            <PermissionTreePicker
+              v-model="rolePermissionDrafts[role.code]"
+              :modules="permissionModules"
+              :disabled="busy"
+            />
           </fieldset>
           <button
             class="secondary small"
@@ -114,27 +101,33 @@ const {
         </div>
       </div>
       <div class="permission-catalog">
-        <form
-          v-for="permission in permissions"
-          :key="permission.code"
-          class="permission-catalog-row"
-          @submit.prevent="savePermissionLabel(permission.code)"
-        >
-          <small>{{ permission.code }}</small>
-          <label>
-            中文名称
-            <input
-              v-model.trim="permissionLabelDrafts[permission.code]"
-              required
-              maxlength="60"
-            />
-          </label>
-          <button
-            class="secondary small"
-            type="submit"
-            :disabled="busy || !permissionLabelDrafts[permission.code] || permissionLabelDrafts[permission.code] === permission.label"
-          >保存名称</button>
-        </form>
+        <details v-for="module in permissionModules" :key="module.code" class="permission-catalog-group">
+          <summary>{{ module.label }}</summary>
+          <details v-for="document in module.documents" :key="document.code" class="permission-catalog-document">
+            <summary>{{ document.label }}</summary>
+            <form
+              v-for="permission in document.permissions"
+              :key="permission.code"
+              class="permission-catalog-row"
+              @submit.prevent="savePermissionLabel(permission.code)"
+            >
+              <small>{{ permission.code }}</small>
+              <label>
+                中文名称
+                <input
+                  v-model.trim="permissionLabelDrafts[permission.code]"
+                  required
+                  maxlength="60"
+                />
+              </label>
+              <button
+                class="secondary small"
+                type="submit"
+                :disabled="busy || !permissionLabelDrafts[permission.code] || permissionLabelDrafts[permission.code] === permission.label"
+              >保存名称</button>
+            </form>
+          </details>
+        </details>
       </div>
     </div>
   </section>

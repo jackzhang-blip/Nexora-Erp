@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from app.access.permission_catalog import DEFAULT_PERMISSION_LABELS
+from app.access.permission_seed import DEFAULT_PERMISSION_LABELS, PERMISSION_GROUP_PATHS
 
 
 def database_path() -> Path:
@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 26:
+        if version > 27:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -785,3 +785,48 @@ def migrate() -> None:
                 [(label, code) for code, label in DEFAULT_PERMISSION_LABELS.items()],
             )
             db.execute("PRAGMA user_version = 26")
+        if version < 27:
+            # 模块、单据及操作的归属一次性落库；之后接口直接读取数据库，允许名称独立调整。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE permission_groups (
+                code TEXT PRIMARY KEY,
+                label TEXT NOT NULL CHECK (TRIM(label) <> ''),
+                parent_code TEXT REFERENCES permission_groups(code),
+                sort_order INTEGER NOT NULL
+            )""")
+            groups = list(dict.fromkeys(PERMISSION_GROUP_PATHS.values()))
+            for sort_order, (module, _) in enumerate(groups):
+                db.execute("""INSERT OR IGNORE INTO permission_groups(code, label, parent_code, sort_order)
+                              VALUES (?, ?, NULL, ?)""", (*module, sort_order))
+            db.execute("""INSERT INTO permission_groups(code, label, parent_code, sort_order)
+                          VALUES ('other', '其他权限', NULL, 999)""")
+            for sort_order, (module, document) in enumerate(groups):
+                # 单据代码包含模块前缀，避免不同模块出现同名节点时互相覆盖。
+                db.execute("""INSERT INTO permission_groups(code, label, parent_code, sort_order)
+                              VALUES (?, ?, ?, ?)""",
+                           (f"{module[0]}.{document[0]}", document[1], module[0], sort_order))
+            db.execute("""INSERT INTO permission_groups(code, label, parent_code, sort_order)
+                          VALUES ('other.unclassified', '待分类权限', 'other', 999)""")
+            db.execute("ALTER TABLE permissions ADD COLUMN group_code TEXT REFERENCES permission_groups(code)")
+            for prefix, (module, document) in PERMISSION_GROUP_PATHS.items():
+                db.execute("""UPDATE permissions SET group_code = ?
+                              WHERE SUBSTR(code, 1, ?) = ?""",
+                           (f"{module[0]}.{document[0]}", len(prefix) + 1, f"{prefix}."))
+            db.execute("""UPDATE permissions SET group_code = 'other.unclassified'
+                          WHERE group_code IS NULL""")
+            db.execute("""CREATE TRIGGER permissions_group_required_insert
+                          BEFORE INSERT ON permissions
+                          WHEN NOT EXISTS (
+                              SELECT 1 FROM permission_groups
+                              WHERE code = NEW.group_code AND parent_code IS NOT NULL
+                          )
+                          BEGIN SELECT RAISE(ABORT, '权限所属单据无效'); END""")
+            db.execute("""CREATE TRIGGER permissions_group_required_update
+                          BEFORE UPDATE OF group_code ON permissions
+                          WHEN NOT EXISTS (
+                              SELECT 1 FROM permission_groups
+                              WHERE code = NEW.group_code AND parent_code IS NOT NULL
+                          )
+                          BEGIN SELECT RAISE(ABORT, '权限所属单据无效'); END""")
+            db.execute("PRAGMA user_version = 27")

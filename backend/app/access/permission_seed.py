@@ -1,4 +1,4 @@
-"""权限目录的初始中文名称；运行时名称以数据库为准。"""
+"""旧库迁移时一次性写入 SQLite 的权限目录种子；运行时不读取此文件。"""
 
 # 历史权限升级时一次性写入中文名称，管理员随后可独立调整展示文案。
 DEFAULT_PERMISSION_LABELS = {"users.manage": "管理用户与角色", "catalog.manage": "管理基础资料",
@@ -40,3 +40,30 @@ DEFAULT_PERMISSION_LABELS = {"users.manage": "管理用户与角色", "catalog.m
               "work_order.cancel": "取消生产工单",
               "work_order.create": "创建生产工单",
               "work_order.release": "下达生产工单"}
+
+
+# 迁移时建立模块与单据节点；运行时的中文名称和所属关系均以数据库为准。
+PERMISSION_GROUP_PATHS = {
+    "users": (("system", "系统管理"), ("users", "用户与角色")),
+    "catalog": (("catalog", "基础资料"), ("materials", "物料与供应商")),
+    "inventory": (("warehouse", "仓库管理"), ("inventory", "库存查看")),
+    "warehouse": (("warehouse", "仓库管理"), ("warehouses", "仓库资料")),
+    "receipt": (("warehouse", "仓库管理"), ("receipt", "入库单")),
+    "shipment": (("warehouse", "仓库管理"), ("shipment", "出库单")),
+    "transfer": (("warehouse", "仓库管理"), ("transfer", "调拨单")),
+    "stocktake": (("warehouse", "仓库管理"), ("stocktake", "盘点单")),
+    "purchase_order": (("purchase", "采购管理"), ("purchase_order", "采购订单")),
+    "purchase_return": (("purchase", "采购管理"), ("purchase_return", "采购退货单")),
+    "sales": (("sales", "销售管理"), ("sales", "销售单据查看")),
+    "customer": (("sales", "销售管理"), ("customer", "客户资料")),
+    "sales_order": (("sales", "销售管理"), ("sales_order", "销售订单")),
+    "sales_return": (("sales", "销售管理"), ("sales_return", "销售退货单")),
+    "finance": (("finance", "财务管理"), ("finance", "应收应付")),
+    "production": (("production", "生产管理"), ("production", "生产业务查看")),
+    "bom": (("production", "生产管理"), ("bom", "生产物料清单")),
+    "work_order": (("production", "生产管理"), ("work_order", "生产工单")),
+    "material_issue": (("production", "生产管理"), ("material_issue", "生产领料单")),
+    "material_return": (("production", "生产管理"), ("material_return", "生产退料单")),
+    "production_completion": (("production", "生产管理"), ("production_completion", "完工报工单")),
+    "production_cost": (("production", "生产管理"), ("production_cost", "生产成本")),
+}
