@@ -155,3 +155,5 @@ PYTHONPATH=backend python3 -m pytest backend/tests -q
 数据库第 32 版新增 `/api/v1/warehouse-outbounds`。其他出库草稿记录仓库、用途、原因及明细，`/post` 在仓库余额充足时原子扣减库存；`/cancel` 仅取消草稿，`/reverse` 追加冲销流水。重复操作返回 409，其他出库不产生采购应付。权限为 `other_outbound.view/create/post/cancel/reverse`。
 
 数据库第 33 版将采购退货提交与仓库出库确认分离。`POST /api/v1/purchase-returns/{id}/submit` 创建唯一待出库单并占用原入库可退量；仓库通过 `/api/v1/warehouse-outbounds/{id}/post` 在同一事务重查原入库可退量和原仓余额，确认一次才写一组退货流水、确认退货及应付冲减。取消待出库退货释放占用。旧客户端的退货 `/post` 在同一事务补建并确认关联出库单；迁移仅为历史已确认退货补单据，不重放流水。
+
+`POST /api/v1/inventory-ledger/query` 以仓库、物料、日期和来源筛选库存流水，返回每个仓库物料组合的期初、逐笔累计结余与期末。来源筛选后数量表示该来源范围内的累计变动；库存总览仍展示所有来源的实际余额。

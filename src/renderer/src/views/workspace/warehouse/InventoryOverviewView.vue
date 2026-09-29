@@ -12,8 +12,6 @@ const {
   receipts,
   warehouses,
   selectedWarehouseId,
-  localTime,
-  movementSource,
   refreshData,
   perform
 } = useAppStore()
@@ -83,47 +81,6 @@ const {
             </tr>
             <tr v-if="!stock.length">
               <td colspan="3" class="muted">暂无物料，先到基础资料中添加。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="card">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">AUDIT TRAIL</p>
-          <h2>库存流水</h2>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>时间</th>
-              <th>仓库</th>
-              <th>物料</th>
-              <th>数量变动</th>
-              <th>来源</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in movements" :key="item.id">
-              <td>{{ localTime(item.created_at) }}</td>
-              <td>{{ item.warehouse_name }}</td>
-              <td>
-                {{ item.material_name }}
-                <small class="mono">{{ item.sku }}</small>
-              </td>
-              <td>
-                {{ item.quantity.startsWith('-') ? '' : '+'
-                }}{{ item.quantity }} {{ item.unit }}
-              </td>
-              <td>{{ movementSource(item) }}</td>
-            </tr>
-            <tr v-if="!movements.length">
-              <td colspan="5" class="muted">
-                确认入库、调拨、盘点、出库或退货后，这里会显示库存流水。
-              </td>
             </tr>
           </tbody>
         </table>

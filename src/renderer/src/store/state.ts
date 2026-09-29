@@ -5,6 +5,8 @@ import type {
   FinanceAccount,
   FinancialEntry,
   GoodsReceipt,
+  LedgerResult,
+  LedgerQuery,
   Material,
   MaterialIssue,
   MaterialReturn,
@@ -63,6 +65,9 @@ export function createAppState() {
   const suppliers = ref<Supplier[]>([])
   const stock = ref<Stock[]>([])
   const movements = ref<Movement[]>([])
+  const ledgerResult = ref<LedgerResult>({ groups: [], rows: [] })
+  const ledgerQuery = ref<LedgerQuery>({ warehouse_id: null, material_id: null,
+    from_date: null, to_date: null, source_type: null })
   const otherInbounds = ref<OtherInbound[]>([])
   const warehouseOutbounds = ref<WarehouseOutbound[]>([])
   const receipts = ref<Receipt[]>([])
@@ -319,6 +324,8 @@ export function createAppState() {
     supplierMaterials,
     stock,
     movements,
+    ledgerResult,
+    ledgerQuery,
     otherInbounds,
     warehouseOutbounds,
     receipts,

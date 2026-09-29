@@ -55,6 +55,13 @@ export const workspaceRouteGroups = [
         icon: 'stack'
       },
       {
+        key: 'inventoryLedger',
+        path: '/workspace/inventory-ledger',
+        label: '库存台账',
+        permission: 'inventory.view',
+        icon: 'history'
+      },
+      {
         key: 'transfers',
         path: '/workspace/transfers',
         label: '仓库调拨',

@@ -637,6 +637,42 @@ export interface Movement {
   created_at: string
 }
 
+// 台账按同一服务端筛选结果给出期初、逐笔余额和期末。
+export interface LedgerGroup {
+  warehouse_id: number
+  warehouse_name: string
+  material_id: number
+  sku: string
+  material_name: string
+  unit: string
+  opening_quantity: string
+  closing_quantity: string
+}
+export interface LedgerRow {
+  id: number
+  warehouse_id: number
+  warehouse_name: string
+  material_id: number
+  sku: string
+  material_name: string
+  unit: string
+  quantity: string
+  source_type: string
+  source_id: number
+  source_line_id: number
+  created_at: string
+  created_by_name: string | null
+  balance_quantity: string
+}
+export interface LedgerResult { groups: LedgerGroup[]; rows: LedgerRow[] }
+export interface LedgerQuery {
+  warehouse_id: number | null
+  material_id: number | null
+  from_date: string | null
+  to_date: string | null
+  source_type: string | null
+}
+
 export interface ErpOperations {
   setupStatus: { input: undefined; output: { needs_setup: boolean } }
   bootstrap: { input: { username: string; password: string }; output: User }
@@ -768,4 +804,5 @@ export interface ErpOperations {
   reverseStocktake: { input: { stocktakeId: number; reason: string }; output: Stocktake }
   stock: { input: { warehouseId?: number } | undefined; output: Stock[] }
   movements: { input: undefined; output: Movement[] }
+  inventoryLedger: { input: LedgerQuery; output: LedgerResult }
 }
