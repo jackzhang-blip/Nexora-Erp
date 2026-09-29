@@ -30,9 +30,11 @@ import ProductionCostsView from './workspace/production/ProductionCostsView.vue'
 import UserManagementView from './workspace/system/UserManagementView.vue'
 import RolePermissionsView from './workspace/system/RolePermissionsView.vue'
 import ConnectionSettingsView from './workspace/system/ConnectionSettingsView.vue'
+import HomeDashboardView from './workspace/home/HomeDashboardView.vue'
 
 // 路由键与视图一一对应，避免页面再次回到 App.vue 的条件分支。
 const workspaceViews: Record<WorkspaceRouteKey, Component> = {
+  home: HomeDashboardView,
   stock: InventoryOverviewView,
   transfers: WarehouseTransfersView,
   stocktakes: InventoryStocktakesView,

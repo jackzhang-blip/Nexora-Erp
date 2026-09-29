@@ -25,8 +25,8 @@ test('关闭后台页面不影响当前页面，唯一页面保持打开', () =>
   })
 })
 
-test('权限撤销后清除无权访问的页面，保留公共设置页面', () => {
-  assert.deepEqual(permittedOpenedRoutes(['stock', 'boms', 'users', 'settings'], ['production.view']), [
-    'boms', 'settings'
+test('权限撤销后清除无权访问的页面，保留公共首页与设置页面', () => {
+  assert.deepEqual(permittedOpenedRoutes(['home', 'stock', 'boms', 'users', 'settings'], ['production.view']), [
+    'home', 'boms', 'settings'
   ])
 })

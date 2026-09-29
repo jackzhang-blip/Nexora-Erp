@@ -1,5 +1,5 @@
 /** 工作台页面地址与查看权限统一在此登记，写操作仍由服务端逐项授权。 */
-type RouteIcon = 'stack' | 'archive' | 'file' | 'history' | 'team' | 'settings'
+type RouteIcon = 'dashboard' | 'stack' | 'archive' | 'file' | 'history' | 'team' | 'settings'
 
 interface RouteEntry {
   key: string
@@ -16,6 +16,19 @@ interface RouteGroup {
 }
 
 export const workspaceRouteGroups = [
+  {
+    key: 'home',
+    label: '工作台',
+    routes: [
+      {
+        key: 'home',
+        path: '/workspace/home',
+        label: '工作台首页',
+        permission: null,
+        icon: 'dashboard'
+      }
+    ]
+  },
   {
     key: 'warehouse',
     label: '仓库管理',
@@ -265,7 +278,7 @@ export function resolveWorkspaceRoute(
 ): WorkspaceRoute {
   const requested = workspaceRoutes.find((route) => hash === `#${route.path}`)
   if (requested && canVisitRoute(requested, permissions)) return requested
-  // 未知地址或权限被撤销时，只回退到当前账号能看的页面。
+  // 首页不依赖业务查看权限，未知地址或权限变化时都能安全回到工作台。
   return workspaceRoutes.find((route) => canVisitRoute(route, permissions))!
 }
 
