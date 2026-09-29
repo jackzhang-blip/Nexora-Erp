@@ -202,7 +202,7 @@ export const workspaceRouteGroups = [
     key: 'system',
     label: '系统管理',
     routes: [
-      // 两个入口沿用同一服务端管理权限，页面操作仍由服务端逐项校验。
+      // 三个管理入口沿用同一查看权限，页面写操作仍由服务端逐项校验。
       {
         key: 'users',
         path: '/workspace/users',
@@ -216,6 +216,13 @@ export const workspaceRouteGroups = [
         label: '权限管理',
         permission: 'users.manage',
         icon: 'settings'
+      },
+      {
+        key: 'permissionCatalog',
+        path: '/workspace/permission-catalog',
+        label: '权限目录',
+        permission: 'users.manage',
+        icon: 'file'
       },
       {
         key: 'settings',

@@ -25,10 +25,13 @@
 | `production/` | `ProductionCompletionsView.vue` | 报工、质检与成品入库 |
 | `production/` | `ProductionCostsView.vue` | 核价、费用归集与成本冲销 |
 | `system/` | `UserManagementView.vue` | 创建账号并管理用户状态与角色 |
-| `system/` | `RolePermissionsView.vue` | 按模块、单据、操作树创建角色并分配权限，维护操作的中文名称；树选择器位于 `components/workspace/PermissionTreePicker.vue` |
+| `system/` | `RolePermissionsView.vue` | 在职务表格中搜索、筛选、新增和配置自定义角色；按模块、单据、操作树授权 |
+| `system/` | `PermissionCatalogView.vue` | 独立维护操作权限的中文名称，模块与单据仍按树状目录查看 |
 | `system/` | `ConnectionSettingsView.vue` | 查看连接、修改密码和管理本机服务 |
 
 页面组件处理展示与表单绑定；跨页面草稿和服务端快照放在 `store/state.ts`，业务写操作放在 `store/modules/`。权限与地址规则只在 `router/workspace-routes.ts` 维护。
+
+需要“上方功能区、下方列表”的业务页可复用 `components/workspace/WorkspaceTable.vue`：页面传入标题、列头和结果数量，按业务填充 `actions`、`filters`、`rows`、`empty` 与 `footer` 插槽；组件统一处理表格结构、加载和空状态。权限管理的职务列表是首个使用处，职务仍沿用现有角色与操作权限数据，内置角色只读；授权树由 `components/workspace/PermissionTreePicker.vue` 提供。权限目录在系统管理下使用单独路由，避免职务列表下方再展开很长的名称维护区域。
 
 应用业务状态和主题状态由 Pinia 管理。`store/app-store.ts` 的 `useAppStore()` 保留页面现有的响应式 `ref` 取值接口；应用启动与监听器清理由根组件负责。
 

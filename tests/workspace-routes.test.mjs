@@ -13,7 +13,7 @@ test('每个工作台页面只有一个路由，且都对应实际页面', () =>
   const registered = router.getRoutes().filter((route) => route.name)
 
   // 路由记录由同一张业务表生成，组件由 Vue Router 装载，避免侧栏出现空白页面。
-  assert.equal(workspaceRoutes.length, 23)
+  assert.equal(workspaceRoutes.length, 24)
   assert.deepEqual(new Set(registered.map(route => route.name)), new Set(workspaceRoutes.map(route => route.key)))
   assert.ok(registered.every((route) => route.components?.default))
   assert.match(shell, /<RouterView \/>/)
@@ -45,23 +45,29 @@ test('直接访问未授权或未知地址时回退到可访问页面', () => {
   assert.equal(resolveWorkspaceRoute('/workspace/shipments', permissions).key, 'shipments')
   assert.equal(resolveWorkspaceRoute('/workspace/users', permissions).key, 'home')
   assert.equal(resolveWorkspaceRoute('/workspace/roles', permissions).key, 'home')
+  assert.equal(resolveWorkspaceRoute('/workspace/permission-catalog', permissions).key, 'home')
   assert.equal(resolveWorkspaceRoute('/workspace/missing', permissions).key, 'home')
   assert.equal(resolveWorkspaceRoute('/workspace/stock', []).key, 'home')
 })
 
-test('用户管理与权限管理有独立入口，且都要求用户管理权限', () => {
+test('用户、职务授权与权限目录分别有入口，且都要求用户管理权限', () => {
   const routes = visibleRouteGroups(['users.manage']).flatMap(group => group.routes)
-  assert.deepEqual(routes.filter(route => ['users', 'roles'].includes(route.key)).map(route => route.label),
-    ['用户管理', '权限管理'])
+  assert.deepEqual(routes.filter(route => ['users', 'roles', 'permissionCatalog'].includes(route.key)).map(route => route.label),
+    ['用户管理', '权限管理', '权限目录'])
   assert.equal(resolveWorkspaceRoute('/workspace/roles', ['users.manage']).key, 'roles')
+  assert.equal(resolveWorkspaceRoute('/workspace/permission-catalog', ['users.manage']).key, 'permissionCatalog')
 
   const userPage = readFileSync(new URL('../src/renderer/src/views/workspace/system/UserManagementView.vue', import.meta.url), 'utf8')
   const rolePage = readFileSync(new URL('../src/renderer/src/views/workspace/system/RolePermissionsView.vue', import.meta.url), 'utf8')
-  // 表单分属两页，防止后续修改又把角色授权塞回用户列表。
+  const catalogPage = readFileSync(new URL('../src/renderer/src/views/workspace/system/PermissionCatalogView.vue', import.meta.url), 'utf8')
+  // 用户、职务和名称维护分属三页，避免权限目录把职务表格重新撑成长页。
   assert.match(userPage ?? '', /@submit\.prevent="createUser"/)
-  assert.doesNotMatch(userPage ?? '', /@submit\.prevent="createRole"/)
-  assert.match(rolePage ?? '', /@submit\.prevent="createRole"/)
+  assert.doesNotMatch(userPage ?? '', /WorkspaceTable/)
+  assert.match(rolePage ?? '', /<WorkspaceTable/)
+  assert.match(rolePage ?? '', /@submit\.prevent="submitNewRole"/)
   assert.doesNotMatch(rolePage ?? '', /@submit\.prevent="createUser"/)
+  assert.doesNotMatch(rolePage ?? '', /savePermissionLabel/)
+  assert.match(catalogPage ?? '', /savePermissionLabel/)
   // 新建角色不能在管理员勾选前就带有默认业务权限。
   const state = readFileSync(new URL('../src/renderer/src/store/state.ts', import.meta.url), 'utf8')
   assert.match(state, /const newRole = ref\(\{ label: '', permissions: \[\] as string\[\] \}\)/)
@@ -89,12 +95,16 @@ test('Vue Router 保留登录前深链接，登录后拦截无权限页面和未
   permissions = []
   await router.push('/workspace/roles')
   assert.equal(router.currentRoute.value.path, '/workspace/home')
+  await router.push('/workspace/permission-catalog')
+  assert.equal(router.currentRoute.value.path, '/workspace/home')
   await router.push('/workspace/missing')
   assert.equal(router.currentRoute.value.path, '/workspace/home')
 
   permissions = ['users.manage']
   await router.push('/workspace/roles')
   assert.equal(router.currentRoute.value.path, '/workspace/roles')
+  await router.push('/workspace/permission-catalog')
+  assert.equal(router.currentRoute.value.path, '/workspace/permission-catalog')
 })
 
 test('工作台地址切换进入 Vue Router 历史，后退能恢复上一页面', async () => {

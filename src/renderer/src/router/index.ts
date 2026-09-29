@@ -28,6 +28,7 @@ const workspaceRouteComponents = {
   productionCosts: () => import('../views/workspace/production/ProductionCostsView.vue'),
   users: () => import('../views/workspace/system/UserManagementView.vue'),
   roles: () => import('../views/workspace/system/RolePermissionsView.vue'),
+  permissionCatalog: () => import('../views/workspace/system/PermissionCatalogView.vue'),
   settings: () => import('../views/workspace/system/ConnectionSettingsView.vue')
 } satisfies Record<WorkspaceRouteKey, () => Promise<unknown>>
 
