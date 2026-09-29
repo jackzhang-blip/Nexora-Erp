@@ -32,7 +32,8 @@ export function createConnectionActions(
     hostForm,
     trustChecked,
     host,
-    connectionLost
+    connectionLost,
+    connectionNotice
   } = state
   let scanTimer: ReturnType<typeof setInterval> | null = null
   let checkingHealth = false
@@ -49,6 +50,7 @@ export function createConnectionActions(
     try {
       const state = await window.nexora.startup()
       connectionLost.value = false
+      connectionNotice.value = ''
       if (state.status === 'connected') {
         server.value = state.server
         screen.value = 'login'
@@ -75,6 +77,7 @@ export function createConnectionActions(
   function clearMessage(): void {
     error.value = ''
     notice.value = ''
+    connectionNotice.value = ''
   }
 
   async function go(screenName: Screen): Promise<void> {
@@ -94,6 +97,7 @@ export function createConnectionActions(
     }
     user.value = null
     connectionLost.value = false
+    connectionNotice.value = ''
     server.value = null
     // 仓库编号只在当前服务端有效，切换实例时重置筛选，避免请求另一实例不存在的仓库。
     selectedWarehouseId.value = 0
@@ -307,6 +311,7 @@ export function createConnectionActions(
       })
       password.value = ''
       screen.value = 'app'
+      connectionNotice.value = ''
       await refreshData()
     } catch (cause) {
       error.value = displayError(cause)
@@ -347,6 +352,7 @@ export function createConnectionActions(
     }
     user.value = null
     screen.value = 'login'
+    connectionNotice.value = ''
     notice.value = ''
     error.value = ''
   }
@@ -373,6 +379,7 @@ export function createConnectionActions(
       }
       if (!health.connected) {
         connectionLost.value = true
+        connectionNotice.value = ''
         return
       }
       if (!connectionLost.value) return
@@ -385,13 +392,14 @@ export function createConnectionActions(
         } catch {
           user.value = null
           screen.value = 'login'
-          notice.value = '连接已恢复，请重新登录后查看最新数据。'
+          connectionNotice.value = '连接已恢复，请重新登录后查看最新数据。'
           return
         }
       }
-      notice.value = '服务端连接已恢复，数据已更新。'
+      connectionNotice.value = '服务端连接已恢复，数据已更新。'
     } catch {
       connectionLost.value = true
+      connectionNotice.value = ''
     } finally {
       checkingHealth = false
     }

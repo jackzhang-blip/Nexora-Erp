@@ -228,6 +228,8 @@ export function createAppState() {
     fingerprint: null
   })
   const connectionLost = ref(false)
+  // 连接恢复反馈独立于业务操作提示，供所有页面共用的底栏展示。
+  const connectionNotice = ref('')
 
   const selectedSalesReturnShipment = computed(() =>
     shipments.value.find(
@@ -342,6 +344,7 @@ export function createAppState() {
     trustChecked,
     host,
     connectionLost,
+    connectionNotice,
     selectedSalesReturnShipment,
     selectedPurchaseReturnReceipt,
     selectedIssueOrder,
