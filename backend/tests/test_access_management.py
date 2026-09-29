@@ -29,6 +29,14 @@ def test_access_management(monkeypatch, tmp_path):
                    and item["label"] != item["code"]
                    and not item["label"].startswith("未命名权限") for item in permissions)
         assert len({item["code"] for item in permissions}) == len(permissions)
+        # 入库单、出库单分别挂在仓库模块下，同名操作也可按各自代码独立授权。
+        by_code = {item["code"]: item for item in permissions}
+        assert by_code["receipt.post"]["group_path"] == [
+            {"code": "warehouse", "label": "仓库管理"}, {"code": "receipt", "label": "入库单"}]
+        assert by_code["shipment.post"]["group_path"] == [
+            {"code": "warehouse", "label": "仓库管理"}, {"code": "shipment", "label": "出库单"}]
+        assert all(len(item["group_path"]) == 2 and item["group_path"][0]["code"] != "other"
+                   for item in permissions)
         renamed = client.put(f"{base}/permissions/inventory.view/label", headers=admin,
                              json={"label": "  查看各仓库存量  "})
         assert renamed.status_code == 200, renamed.text
@@ -139,6 +147,32 @@ def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path):
             pass
         else:
             raise AssertionError("缺少名称的权限不应写入目录")
+
+
+def test_receipt_action_does_not_grant_same_action_on_shipment(monkeypatch, tmp_path):
+    monkeypatch.setenv("NEXORA_DB_PATH", str(tmp_path / "document-actions.db"))
+    with TestClient(app, client=("127.0.0.1", 12345)) as client:
+        assert client.post("/api/v1/setup/admin", json={
+            "username": "admin", "password": "admin-password-123"
+        }).status_code == 201
+        token = client.post("/api/v1/auth/login", json={
+            "username": "admin", "password": "admin-password-123"
+        }).json()["token"]
+        admin = {"Authorization": f"Bearer {token}"}
+        assert client.post("/api/v1/roles", headers=admin, json={
+            "code": "receipt_approver", "label": "入库确认员", "permissions": ["receipt.post"]
+        }).status_code == 201
+        assert client.post("/api/v1/users", headers=admin, json={
+            "username": "clerk", "password": "clerk-password-123", "roles": ["receipt_approver"]
+        }).status_code == 201
+        clerk_token = client.post("/api/v1/auth/login", json={
+            "username": "clerk", "password": "clerk-password-123"
+        }).json()["token"]
+        clerk = {"Authorization": f"Bearer {clerk_token}"}
+        assert client.get("/api/v1/auth/me", headers=clerk).json()["permissions"] == ["receipt.post"]
+        # 同属仓库模块不会继承兄弟单据的操作；入库权限先过授权再查找单据。
+        assert client.post("/api/v1/shipments/1/post", headers=clerk).status_code == 403
+        assert client.post("/api/v1/receipts/1/post", headers=clerk).status_code == 404
 
 
 def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, tmp_path):

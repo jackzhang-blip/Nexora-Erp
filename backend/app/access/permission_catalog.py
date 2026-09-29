@@ -40,3 +40,37 @@ DEFAULT_PERMISSION_LABELS = {"users.manage": "管理用户与角色", "catalog.m
               "work_order.cancel": "取消生产工单",
               "work_order.create": "创建生产工单",
               "work_order.release": "下达生产工单"}
+
+
+# 前两层只用于组织目录，不能作为角色授权；最后一层仍是实际校验的权限代码。
+PERMISSION_GROUP_PATHS = {
+    "users": (("system", "系统管理"), ("users", "用户与角色")),
+    "catalog": (("catalog", "基础资料"), ("materials", "物料与供应商")),
+    "inventory": (("warehouse", "仓库管理"), ("inventory", "库存查看")),
+    "warehouse": (("warehouse", "仓库管理"), ("warehouses", "仓库资料")),
+    "receipt": (("warehouse", "仓库管理"), ("receipt", "入库单")),
+    "shipment": (("warehouse", "仓库管理"), ("shipment", "出库单")),
+    "transfer": (("warehouse", "仓库管理"), ("transfer", "调拨单")),
+    "stocktake": (("warehouse", "仓库管理"), ("stocktake", "盘点单")),
+    "purchase_order": (("purchase", "采购管理"), ("purchase_order", "采购订单")),
+    "purchase_return": (("purchase", "采购管理"), ("purchase_return", "采购退货单")),
+    "sales": (("sales", "销售管理"), ("sales", "销售单据查看")),
+    "customer": (("sales", "销售管理"), ("customer", "客户资料")),
+    "sales_order": (("sales", "销售管理"), ("sales_order", "销售订单")),
+    "sales_return": (("sales", "销售管理"), ("sales_return", "销售退货单")),
+    "finance": (("finance", "财务管理"), ("finance", "应收应付")),
+    "production": (("production", "生产管理"), ("production", "生产业务查看")),
+    "bom": (("production", "生产管理"), ("bom", "生产物料清单")),
+    "work_order": (("production", "生产管理"), ("work_order", "生产工单")),
+    "material_issue": (("production", "生产管理"), ("material_issue", "生产领料单")),
+    "material_return": (("production", "生产管理"), ("material_return", "生产退料单")),
+    "production_completion": (("production", "生产管理"), ("production_completion", "完工报工单")),
+    "production_cost": (("production", "生产管理"), ("production_cost", "生产成本")),
+}
+
+
+def permission_group_path(code: str) -> list[dict[str, str]]:
+    # 新单据只需登记其前缀与两级目录；不同单据可拥有同名但独立的操作权限。
+    prefix = code.partition(".")[0]
+    groups = PERMISSION_GROUP_PATHS.get(prefix, (("other", "其他权限"), (prefix, "待分类权限")))
+    return [{"code": group_code, "label": label} for group_code, label in groups]
