@@ -48,6 +48,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .nav-item.active { background: #223b5b; color: #8de2d8; font-weight: 700; box-shadow: inset 3px 0 #70d8cc; }
 .sidebar-bottom { margin-top: auto; padding: 20px 12px 2px; color: #a7bad1; font-size: 12px; }
 .sidebar-bottom small { display: block; margin: 10px 0 0 16px; color: #768eaa; }
+/* 登录页左下角没有状态圆点，版本与服务端名称保持左对齐。 */
+.sidebar-bottom.auth-server-details small { margin-left: 0; }
 .status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #70d8cc; }
 .content { min-width: 0; padding: 35px clamp(25px, 4vw, 62px) 70px; }
 /* 登录与管理员初始化页分出可滚动内容和固定底栏，长表单也不会把状态推出窗口。 */

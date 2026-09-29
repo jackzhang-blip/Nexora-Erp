@@ -55,7 +55,6 @@ const {
   screen,
   activeTab,
   expandedGroupKey,
-  version,
   notice,
   error,
   busy,
@@ -84,7 +83,8 @@ const authConnectionMessage = computed(() => {
   if (connectionLost.value) return '服务端连接已中断，正在重试。恢复连接前无法保存更改。'
   if (notice.value) return notice.value
   if (!server.value) return '等待连接服务端'
-  return `已连接 · ${server.value.name}${version.value ? ` · v${version.value}` : ''}`
+  // 服务端名称和版本已固定在左下角，右侧只承担连接结果的提示。
+  return '已连接'
 })
 </script>
 
