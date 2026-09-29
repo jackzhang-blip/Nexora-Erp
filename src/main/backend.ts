@@ -162,6 +162,22 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
       const fields = payload as ErpOperations['reverseOtherOutbound']['input']
       return { method: 'POST', path: `/api/v1/warehouse-outbounds/${outboundId}/reverse`, body: { reason: fields.reason } }
     }
+    case 'stockAdjustments': return { method: 'GET', path: '/api/v1/stock-adjustments' }
+    case 'createStockAdjustment': return { method: 'POST', path: '/api/v1/stock-adjustments', body: payload }
+    case 'submitStockAdjustment': return { method: 'POST', path: `/api/v1/stock-adjustments/${positiveId(payload, 'adjustmentId')}/submit` }
+    case 'approveStockAdjustment': return { method: 'POST', path: `/api/v1/stock-adjustments/${positiveId(payload, 'adjustmentId')}/approve` }
+    case 'rejectStockAdjustment': {
+      const adjustmentId = positiveId(payload, 'adjustmentId')
+      const fields = payload as ErpOperations['rejectStockAdjustment']['input']
+      return { method: 'POST', path: `/api/v1/stock-adjustments/${adjustmentId}/reject`, body: { reason: fields.reason } }
+    }
+    case 'cancelStockAdjustment': return { method: 'POST', path: `/api/v1/stock-adjustments/${positiveId(payload, 'adjustmentId')}/cancel` }
+    case 'postStockAdjustment': return { method: 'POST', path: `/api/v1/stock-adjustments/${positiveId(payload, 'adjustmentId')}/post` }
+    case 'reverseStockAdjustment': {
+      const adjustmentId = positiveId(payload, 'adjustmentId')
+      const fields = payload as ErpOperations['reverseStockAdjustment']['input']
+      return { method: 'POST', path: `/api/v1/stock-adjustments/${adjustmentId}/reverse`, body: { reason: fields.reason } }
+    }
     case 'createWarehouse': return { method: 'POST', path: '/api/v1/warehouses', body: payload }
     case 'receipts': return { method: 'GET', path: '/api/v1/receipts' }
     case 'goodsReceipts': return { method: 'GET', path: '/api/v1/purchase-goods-receipts' }

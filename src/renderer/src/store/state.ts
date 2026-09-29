@@ -27,6 +27,7 @@ import type {
   SalesReturn,
   Shipment,
   Stock,
+  StockAdjustment,
   Stocktake,
   Supplier,
   SupplierMaterial,
@@ -66,6 +67,7 @@ export function createAppState() {
   const stock = ref<Stock[]>([])
   const movements = ref<Movement[]>([])
   const ledgerResult = ref<LedgerResult>({ groups: [], rows: [] })
+  const stockAdjustments = ref<StockAdjustment[]>([])
   const ledgerQuery = ref<LedgerQuery>({ warehouse_id: null, material_id: null,
     from_date: null, to_date: null, source_type: null })
   const otherInbounds = ref<OtherInbound[]>([])
@@ -212,6 +214,14 @@ export function createAppState() {
     lines: [{ material_id: 0, quantity: '1' }]
   })
   const otherOutboundReversalReasons = ref<Record<number, string>>({})
+  const adjustmentForm = ref({
+    warehouse_id: 1,
+    reason: '',
+    reference: '',
+    lines: [{ material_id: 0, quantity: '1' }]
+  })
+  const adjustmentDecisionReasons = ref<Record<number, string>>({})
+  const adjustmentReversalReasons = ref<Record<number, string>>({})
   const transferForm = ref({
     from_warehouse_id: 1,
     to_warehouse_id: 0,
@@ -325,6 +335,7 @@ export function createAppState() {
     stock,
     movements,
     ledgerResult,
+    stockAdjustments,
     ledgerQuery,
     otherInbounds,
     warehouseOutbounds,
@@ -384,6 +395,9 @@ export function createAppState() {
     otherInboundReversalReasons,
     otherOutboundForm,
     otherOutboundReversalReasons,
+    adjustmentForm,
+    adjustmentDecisionReasons,
+    adjustmentReversalReasons,
     transferForm,
     transferReversalReasons,
     salesReturnReversalReasons,

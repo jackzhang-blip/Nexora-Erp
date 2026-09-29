@@ -14,11 +14,65 @@ export function createWarehouseActions(
     otherOutboundReversalReasons,
     ledgerResult,
     ledgerQuery,
+    adjustmentForm,
+    adjustmentDecisionReasons,
+    adjustmentReversalReasons,
     transferForm,
     transferReversalReasons,
     stocktakeForm,
     stocktakeReversalReasons
   } = state
+
+  // 调整审批与仓库确认分步执行，每一步都由服务端检查状态与操作者。
+  async function createStockAdjustment(): Promise<void> {
+    if (!window.nexora) return
+    await perform(async () => {
+      await window.nexora!.callApi('createStockAdjustment', {
+        ...adjustmentForm.value,
+        lines: adjustmentForm.value.lines.map((line) => ({ ...line }))
+      })
+      adjustmentForm.value = { warehouse_id: adjustmentForm.value.warehouse_id,
+        reason: '', reference: '', lines: [{ material_id: 0, quantity: '1' }] }
+    }, '库存调整草稿已创建。')
+  }
+
+  async function submitStockAdjustment(adjustmentId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('submitStockAdjustment', { adjustmentId }),
+      `调整单 #${adjustmentId} 已提交审批。`)
+  }
+
+  async function approveStockAdjustment(adjustmentId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('approveStockAdjustment', { adjustmentId }),
+      `调整单 #${adjustmentId} 已审批。`)
+  }
+
+  async function rejectStockAdjustment(adjustmentId: number): Promise<void> {
+    if (!window.nexora) return
+    const reason = adjustmentDecisionReasons.value[adjustmentId]?.trim() ?? ''
+    await perform(() => window.nexora!.callApi('rejectStockAdjustment', { adjustmentId, reason }),
+      `调整单 #${adjustmentId} 已驳回。`)
+  }
+
+  async function cancelStockAdjustment(adjustmentId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('cancelStockAdjustment', { adjustmentId }),
+      `调整单 #${adjustmentId} 已取消。`)
+  }
+
+  async function postStockAdjustment(adjustmentId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('postStockAdjustment', { adjustmentId }),
+      `调整单 #${adjustmentId} 已由仓库确认。`)
+  }
+
+  async function reverseStockAdjustment(adjustmentId: number): Promise<void> {
+    if (!window.nexora) return
+    const reason = adjustmentReversalReasons.value[adjustmentId]?.trim() ?? ''
+    await perform(() => window.nexora!.callApi('reverseStockAdjustment', { adjustmentId, reason }),
+      `调整单 #${adjustmentId} 已冲销。`)
+  }
 
   async function queryLedger(): Promise<void> {
     if (!window.nexora) return
@@ -210,6 +264,13 @@ export function createWarehouseActions(
   }
 
   return {
+    createStockAdjustment,
+    submitStockAdjustment,
+    approveStockAdjustment,
+    rejectStockAdjustment,
+    cancelStockAdjustment,
+    postStockAdjustment,
+    reverseStockAdjustment,
     queryLedger,
     createOtherInbound,
     postOtherInbound,

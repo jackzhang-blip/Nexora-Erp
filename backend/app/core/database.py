@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 33:
+        if version > 34:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -1071,3 +1071,57 @@ def migrate() -> None:
                 SELECT role_code, 'purchase_return.submit' FROM role_permissions
                 WHERE permission_code = 'purchase_return.create'""")
             db.execute("PRAGMA user_version = 33")
+
+        if version < 34:
+            # 调整单与盘点分离，只有异人审批后的仓库确认才能产生库存流水。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE stock_adjustments (
+                id INTEGER PRIMARY KEY,
+                warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+                reason TEXT NOT NULL,
+                reference TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
+                    ('draft', 'submitted', 'approved', 'rejected', 'cancelled', 'posted')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                submitted_by INTEGER REFERENCES users(id),
+                reviewed_by INTEGER REFERENCES users(id),
+                posted_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                review_reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                submitted_at TEXT, reviewed_at TEXT, posted_at TEXT, cancelled_at TEXT
+            )""")
+            db.execute("""CREATE TABLE stock_adjustment_lines (
+                id INTEGER PRIMARY KEY,
+                adjustment_id INTEGER NOT NULL REFERENCES stock_adjustments(id),
+                material_id INTEGER NOT NULL REFERENCES materials(id),
+                quantity TEXT NOT NULL,
+                UNIQUE (adjustment_id, material_id)
+            )""")
+            db.execute("""CREATE TABLE stock_adjustment_reversals (
+                id INTEGER PRIMARY KEY,
+                adjustment_id INTEGER NOT NULL UNIQUE REFERENCES stock_adjustments(id),
+                reason TEXT NOT NULL,
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.execute("""INSERT INTO permission_groups(code, label, parent_code, sort_order)
+                VALUES ('warehouse.adjustment', '库存调整', 'warehouse', 140)""")
+            adjustment_permissions = (
+                ('adjustment.view', '查看库存调整'),
+                ('adjustment.create', '创建库存调整'),
+                ('adjustment.submit', '提交库存调整'),
+                ('adjustment.review', '审批库存调整'),
+                ('adjustment.cancel', '取消库存调整'),
+                ('adjustment.post', '确认库存调整'),
+                ('adjustment.reverse', '冲销库存调整'),
+            )
+            db.executemany("INSERT INTO permissions(code, label, group_code) VALUES (?, ?, 'warehouse.adjustment')",
+                           adjustment_permissions)
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, code) for role in ('admin', 'warehouse')
+                            for code in ('adjustment.view', 'adjustment.create', 'adjustment.submit',
+                                         'adjustment.review', 'adjustment.cancel', 'adjustment.post')])
+            db.execute("INSERT INTO role_permissions(role_code, permission_code) VALUES ('admin', 'adjustment.reverse')")
+            db.execute("PRAGMA user_version = 34")

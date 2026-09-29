@@ -45,3 +45,5 @@
 采购退货页提交后展示待出库单号；仓库出库页复用列表确认采购退货，确认后才更新库存与应付。
 
 `warehouse/InventoryLedgerView.vue` 复用工作台表格展示服务端筛选后的期初、逐笔流水与期末。
+
+`warehouse/InventoryAdjustmentsView.vue` 管理独立库存调整的提交、异人审批、仓库确认、取消与冲销。
