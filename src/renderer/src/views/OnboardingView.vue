@@ -5,6 +5,7 @@ import { useAppStore } from '../store/app-store'
 import type { Screen } from '../store/types'
 import { nexoraLogo } from '../assets/brand'
 import { onboardingCopy } from '../i18n/zh-CN'
+import AppStatusFooter from '../components/AppStatusFooter.vue'
 import LoadingView from './onboarding/LoadingView.vue'
 import WelcomeView from './onboarding/WelcomeView.vue'
 import ManualConnectionView from './onboarding/ManualConnectionView.vue'
@@ -16,7 +17,7 @@ import ConnectionReadyView from './onboarding/ConnectionReadyView.vue'
 import ConnectionOfflineView from './onboarding/ConnectionOfflineView.vue'
 
 // 引导外壳只决定当前页面；各阶段的输入和操作由对应页面处理。
-const { screen, version, notice, error, candidate, server } = useAppStore()
+const { screen, version, candidate, server } = useAppStore()
 const onboardingViews: Partial<Record<Screen, Component>> = {
   loading: LoadingView,
   welcome: WelcomeView,
@@ -54,19 +55,6 @@ const currentView = computed(() => {
       </div>
       <component :is="currentView" v-if="currentView" />
     </main>
-    <footer class="onboard-footer">
-      <span class="onboard-footer-copy">联光 ERP · 让业务流转有据可查</span>
-      <!-- 连接结果统一占用底栏右端；错误优先，避免成功提示掩盖当前失败。 -->
-      <span
-        v-if="error || notice"
-        class="onboard-footer-status"
-        :class="{ 'is-error': !!error }"
-        :role="error ? 'alert' : 'status'"
-        :title="error || notice"
-      >
-        <span class="onboard-footer-status-text">{{ error || notice }}</span>
-      </span>
-      <span v-else class="onboard-footer-copy">局域网内连接 · 账号权限由服务端管理</span>
-    </footer>
+    <AppStatusFooter />
   </div>
 </template>

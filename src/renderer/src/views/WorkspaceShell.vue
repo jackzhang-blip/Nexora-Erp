@@ -4,6 +4,7 @@ import { useAppStore } from '../store/app-store'
 import type { Component } from 'vue'
 import WorkspaceSidebar from '../components/WorkspaceSidebar.vue'
 import WorkspaceTabs from '../components/WorkspaceTabs.vue'
+import AppStatusFooter from '../components/AppStatusFooter.vue'
 import AuthView from './AuthView.vue'
 import type { WorkspaceRouteKey } from '../router/workspace-routes'
 import InventoryOverviewView from './workspace/warehouse/InventoryOverviewView.vue'
@@ -62,8 +63,6 @@ const {
   username,
   password,
   roles,
-  server,
-  connectionLost,
   visibleGroups,
   visibleTabs,
   openedTabs,
@@ -76,23 +75,15 @@ const {
   logout
 } = useAppStore()
 
-// 登录与管理员初始化共用底部状态栏，切换到工作台后恢复原有页面提示。
+// 登录、初始化和工作台共用内容区域与底栏。
 const isAuthScreen = computed(() => screen.value === 'setup' || screen.value === 'login')
-// 登录页始终在右下角交代连接状态；断线优先于旧的成功消息。
-const authConnectionMessage = computed(() => {
-  if (connectionLost.value) return '服务端连接已中断，正在重试。恢复连接前无法保存更改。'
-  if (notice.value) return notice.value
-  if (!server.value) return '等待连接服务端'
-  // 服务端名称和版本已固定在左下角，右侧只承担连接结果的提示。
-  return '已连接'
-})
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'auth-shell': isAuthScreen }">
+  <div class="app-shell">
     <WorkspaceSidebar />
 
-    <main class="content" :class="{ 'auth-content': isAuthScreen }">
+    <main class="content">
       <div class="content-body">
         <WorkspaceTabs v-if="screen === 'app'" />
 
@@ -108,7 +99,7 @@ const authConnectionMessage = computed(() => {
             </h1>
           </div>
           <div v-if="user" class="account">
-            <!-- 窄窗口隐藏侧栏时，右上角继续提供账号身份。 -->
+            <!-- 侧栏在窄窗口收起时，顶部保留账号和退出操作。 -->
             <span class="account-identity"
               >{{ user.username
               }}<small>{{ user.roles.join(' · ') }}</small></span
@@ -119,10 +110,7 @@ const authConnectionMessage = computed(() => {
         </header>
 
         <div v-if="error" class="message error" role="alert">{{ error }}</div>
-        <div v-if="connectionLost && !isAuthScreen" class="message error" role="alert">
-          服务端连接已中断，正在重试。恢复连接前无法保存更改。
-        </div>
-        <div v-if="notice && !isAuthScreen" class="message success" role="status">
+        <div v-if="notice" class="message success" role="status">
           {{ notice }}
         </div>
 
@@ -132,18 +120,7 @@ const authConnectionMessage = computed(() => {
           <component :is="workspaceViews[activeTab]" />
         </template>
       </div>
-      <footer v-if="isAuthScreen" class="onboard-footer auth-footer">
-        <span class="onboard-footer-copy">联光 ERP · 团队工作台</span>
-        <!-- 连接结果固定在右端；账号与密码错误仍在表单上方方便处理。 -->
-        <span
-          class="onboard-footer-status"
-          :class="{ 'is-error': connectionLost }"
-          :role="connectionLost ? 'alert' : 'status'"
-          :title="authConnectionMessage"
-        >
-          <span class="onboard-footer-status-text">{{ authConnectionMessage }}</span>
-        </span>
-      </footer>
+      <AppStatusFooter />
     </main>
   </div>
 </template>

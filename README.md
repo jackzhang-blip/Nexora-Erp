@@ -26,7 +26,7 @@ Windows 可把 `python3` 改为 `python`。如果 Python 不在默认路径，�
 
 渲染页面已接入 Naive UI 和 Tailwind CSS 4。Vue 组件可从 `naive-ui` 按需导入；`App.vue` 的 `NConfigProvider` 统一提供中文语言与主题色。Tailwind 工具类可直接写在 Vue 模板中，入口为 `src/renderer/src/style.css`。项目保留原有基础样式，因此未启用 Tailwind Preflight 全局重置。
 
-前端目录按职责组织：`views/` 放启动、登录及按业务分组的工作台页面，`components/` 放共享侧栏与标签栏，`store/` 放会话状态、数据刷新和各业务操作，`router/` 放地址与权限规则，`utils/` 放纯工具函数，`assets/` 引用窗口品牌资源，`i18n/` 保存启动引导的中文文案。当前界面只提供中文；增加其他语言时需补齐所有页面文案，不能仅凭目录存在宣称已支持多语言。各页面的文件位置和用途见 [启动引导页面目录](src/renderer/src/views/onboarding/README.md)与[工作台页面目录](src/renderer/src/views/workspace/README.md)。
+前端目录按职责组织：`views/` 放启动、登录及按业务分组的工作台页面，`components/` 放共享侧栏、标签栏与状态底栏，`store/` 放会话状态、数据刷新和各业务操作，`router/` 放地址与权限规则，`utils/` 放纯工具函数，`assets/` 引用窗口品牌资源，`i18n/` 保存启动引导的中文文案。当前界面只提供中文；增加其他语言时需补齐所有页面文案，不能仅凭目录存在宣称已支持多语言。各页面的文件位置和用途见 [启动引导页面目录](src/renderer/src/views/onboarding/README.md)与[工作台页面目录](src/renderer/src/views/workspace/README.md)。
 
 仓库根目录的 `tsconfig.json` 为编辑器关联网页端和 Electron 端类型项目；命令行仍由 `npm run typecheck` 分别检查。页面重命名后，编辑器里仍打开的“已删除”旧标签可能继续显示 TS2307，应关闭旧标签并从文件树打开现用页面；现用页面的相对导入会在测试中检查。
 

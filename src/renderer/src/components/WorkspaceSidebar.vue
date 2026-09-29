@@ -6,14 +6,14 @@ import IconArrowDownSLine from '~icons/ri/arrow-down-s-line'
 // 侧栏只负责导航展示，权限过滤和当前路由来自共享 store。
 const {
   screen,
+  server,
   activeTab,
   expandedGroupKey,
-  version,
-  server,
   user,
   visibleGroups,
   toggleRouteGroup,
-  navigateToRoute
+  navigateToRoute,
+  logout
 } = useAppStore()
 </script>
 
@@ -74,16 +74,12 @@ const {
         </div>
       </div>
     </div>
-    <!-- 左下角保留服务端身份；登录阶段不显示表示连接状态的绿点。 -->
-    <div class="sidebar-bottom" :class="{ 'auth-server-details': screen !== 'app' }">
-      <!-- 账号信息只属于当前登录会话，退出后立即从侧栏消失。 -->
-      <div v-if="screen === 'app' && user" class="sidebar-account">
-        <span class="sidebar-account-label">当前账号</span>
-        <strong class="sidebar-account-name">{{ user.username }}</strong>
-        <span class="sidebar-account-roles">{{ user.roles.join(' · ') }}</span>
-      </div>
-      <span v-if="screen === 'app'" class="status-dot"></span>{{ server?.name || 'Nexora ERP' }}
-      <small v-if="version">v{{ version }}</small>
+    <!-- 侧栏底部只放当前会话；服务端身份和连接状态统一交给公共底栏。 -->
+    <div v-if="screen === 'app' && user" class="sidebar-bottom sidebar-account">
+      <span class="sidebar-account-label">当前账号</span>
+      <strong class="sidebar-account-name">{{ user.username }}</strong>
+      <span class="sidebar-account-roles">{{ user.roles.join(' · ') }}</span>
+      <button class="sidebar-logout" type="button" @click="logout">退出登录</button>
     </div>
   </aside>
 </template>
