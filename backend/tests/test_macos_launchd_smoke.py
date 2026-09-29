@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.host_service import MAC_LABEL
+from app.service.host_service import MAC_LABEL
 
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "smoke-macos-launchd.py"

@@ -16,9 +16,9 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 
-from .backup import create_backup
-from .discovery import lan_addresses
-from .server import create_server
+from app.service.backup import create_backup
+from app.service.discovery import lan_addresses
+from app.server import create_server
 
 
 SERVICE_NAME = "NexoraERPHost"

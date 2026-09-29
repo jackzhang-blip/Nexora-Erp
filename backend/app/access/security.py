@@ -8,7 +8,7 @@ import time
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .database import connection
+from app.core.database import connection
 
 bearer = HTTPBearer(auto_error=False)
 

@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from app import discovery
+from app.service import discovery
 
 
 def test_only_lan_ipv4_addresses_are_announced(monkeypatch):

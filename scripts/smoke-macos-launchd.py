@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
-from app.host_service import MAC_LABEL, mac_plist  # noqa: E402
+from app.service.host_service import MAC_LABEL, mac_plist  # noqa: E402
 
 
 def available_port() -> int:

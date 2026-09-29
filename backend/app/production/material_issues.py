@@ -6,11 +6,11 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from .database import connection
-from .inventory import balance, require_warehouse
-from .security import require
-from .material_returns import returned_quantity
-from .work_orders import issued_quantity
+from app.core.database import connection
+from app.inventory.warehouse import balance, require_warehouse
+from app.access.security import require
+from app.production.material_returns import returned_quantity
+from app.production.work_orders import issued_quantity
 
 router = APIRouter(prefix="/api/v1")
 

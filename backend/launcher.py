@@ -2,8 +2,8 @@
 
 import sys
 
-from app.backup import main as backup_main
-from app.host_service import main as host_main
+from app.service.backup import main as backup_main
+from app.service.host_service import main as host_main
 from app.server import main
 
 
@@ -25,11 +25,11 @@ if __name__ == "__main__":
         host_main(sys.argv[1:])
     elif len(sys.argv) > 1 and sys.argv[1] == "service" and sys.platform == "win32":
         try:
-            from app.windows_service import run_service
+            from app.service.windows_service import run_service
             run_service()
         except Exception:
             # SCM 启动期间尚无控制台，导入或派发错误也必须落到受限的本机日志。
-            from app.host_service import record_service_failure
+            from app.service.host_service import record_service_failure
             record_service_failure()
             raise
     else:

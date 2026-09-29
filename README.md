@@ -30,6 +30,8 @@ Windows 可把 `python3` 改为 `python`。如果 Python 不在默认路径，�
 
 前端目录按职责组织：`views/` 放引导、登录及按业务分组的工作台页面，`components/` 按 `app/` 公共区域、`feedback/` 消息反馈和 `workspace/` 工作台组件分类，`composables/` 放组件级组合式逻辑，`store/` 放 Pinia 会话状态、数据刷新和各业务操作，`router/` 用 Vue Router Hash 模式管理工作台地址、页面组件与查看权限，`utils/` 放辅助函数，`assets/` 引用窗口品牌资源，`i18n/` 保存当前引导页的中文文案。当前界面只提供中文；增加其他语言时需补齐所有页面文案，不能仅凭目录存在宣称已支持多语言。目录职责和新增文件放置规则见 [前端项目树规范](AGENTS.md#前端项目树规范)，各页面的位置和用途见 [启动引导页面目录](src/renderer/src/views/onboarding/README.md)与[工作台页面目录](src/renderer/src/views/workspace/README.md)。
 
+后端代码按账号权限、基础资料、采购、库存、销售、生产、财务和系统服务分类，`backend/app/main.py` 只负责应用生命周期与路由装配。目录职责和新增模块放置规则见 [后端项目树规范](AGENTS.md#后端项目树规范) 与 [后端说明](backend/README.md#代码目录)。
+
 仓库根目录的 `tsconfig.json` 为编辑器关联网页端和 Electron 端类型项目；命令行仍由 `npm run typecheck` 分别检查。页面重命名后，编辑器里仍打开的“已删除”旧标签可能继续显示 TS2307，应关闭旧标签并从文件树打开现用页面；现用页面的相对导入会在测试中检查。
 
 界面图标使用 [Remix Icon](https://icones.js.org/collection/ri)。在 Vue 组件中按需导入，例如 `import IconRefreshLine from '~icons/ri/refresh-line'`；构建时将 SVG 编入页面，运行时无需请求在线图标服务。
