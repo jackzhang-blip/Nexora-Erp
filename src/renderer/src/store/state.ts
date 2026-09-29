@@ -43,7 +43,7 @@ import type { Screen } from './types'
 // 表单草稿与服务端快照按应用实例创建，切换页面时保留输入。
 export function createAppState() {
   const screen = ref<Screen>('loading')
-  const activeTab = ref<WorkspaceRouteKey>('stock')
+  const activeTab = ref<WorkspaceRouteKey>('home')
   const openedRouteKeys = ref<WorkspaceRouteKey[]>([])
   // 日常默认全部收起，点击分类时最多展开一个。
   const expandedGroupKey = ref<WorkspaceRouteGroupKey | null>(null)

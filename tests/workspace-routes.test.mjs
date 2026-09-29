@@ -13,7 +13,7 @@ test('每个工作台页面只有一个路由，且都对应实际页面', () =>
   const pageKeys = pageEntries.map(([, key]) => key)
 
   // 路由、组件映射和实际文件必须同步，避免侧栏出现空白页面。
-  assert.equal(workspaceRoutes.length, 20)
+  assert.equal(workspaceRoutes.length, 21)
   assert.deepEqual(new Set(workspaceRoutes.map(route => route.key)), new Set(pageKeys))
   assert.match(shell, /<component :is="workspaceViews\[activeTab\]" \/>/)
   assert.equal(viewImports.size, workspaceRoutes.length)
@@ -29,21 +29,30 @@ test('每个工作台页面只有一个路由，且都对应实际页面', () =>
 
 test('侧栏按查看权限分类，隐藏空分类及未授权页面', () => {
   const groups = visibleRouteGroups(['sales.view', 'production_cost.view'])
-  assert.deepEqual(groups.map(group => group.label), ['销售管理', '生产管理', '系统管理'])
+  assert.deepEqual(groups.map(group => group.label), ['工作台', '销售管理', '生产管理', '系统管理'])
   assert.deepEqual(groups.flatMap(group => group.routes.map(route => route.key)), [
-    'sales', 'shipments', 'salesReturns', 'productionCosts', 'settings'
+    'home', 'sales', 'shipments', 'salesReturns', 'productionCosts', 'settings'
   ])
+  assert.equal(canVisitRoute(routeByKey('home'), []), true)
   assert.equal(canVisitRoute(routeByKey('stock'), ['sales.view']), false)
   assert.equal(canVisitRoute(routeByKey('settings'), []), true)
+})
+
+test('首页是登录账号均可见的固定入口与默认页面', () => {
+  const sidebar = readFileSync(new URL('../src/renderer/src/components/WorkspaceSidebar.vue', import.meta.url), 'utf8')
+  const state = readFileSync(new URL('../src/renderer/src/store/state.ts', import.meta.url), 'utf8')
+  assert.equal(routeByKey('home').path, '/workspace/home')
+  assert.match(sidebar, /v-if="group\.key === 'home'"[\s\S]*?@click="navigateToRoute\('home'\)"/)
+  assert.match(state, /const activeTab = ref<WorkspaceRouteKey>\('home'\)/)
 })
 
 test('直接访问未授权或未知地址时回退到可访问页面', () => {
   const permissions = ['sales.view']
   assert.equal(resolveWorkspaceRoute('#/workspace/shipments', permissions).key, 'shipments')
-  assert.equal(resolveWorkspaceRoute('#/workspace/users', permissions).key, 'sales')
-  assert.equal(resolveWorkspaceRoute('#/workspace/roles', permissions).key, 'sales')
-  assert.equal(resolveWorkspaceRoute('#/workspace/missing', permissions).key, 'sales')
-  assert.equal(resolveWorkspaceRoute('#/workspace/stock', []).key, 'settings')
+  assert.equal(resolveWorkspaceRoute('#/workspace/users', permissions).key, 'home')
+  assert.equal(resolveWorkspaceRoute('#/workspace/roles', permissions).key, 'home')
+  assert.equal(resolveWorkspaceRoute('#/workspace/missing', permissions).key, 'home')
+  assert.equal(resolveWorkspaceRoute('#/workspace/stock', []).key, 'home')
 })
 
 test('用户管理与权限管理有独立入口，且都要求用户管理权限', () => {
@@ -68,7 +77,7 @@ test('权限被撤销后，当前地址也必须重新核对', () => {
   const route = routeByKey('finance')
   assert.equal(canVisitRoute(route, ['finance.view']), true)
   assert.equal(canVisitRoute(route, []), false)
-  assert.equal(resolveWorkspaceRoute('#/workspace/finance', []).key, 'settings')
+  assert.equal(resolveWorkspaceRoute('#/workspace/finance', []).key, 'home')
 })
 
 test('分类默认收起，同一时间只能展开一个分类', () => {

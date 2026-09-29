@@ -15,6 +15,7 @@ import IconFileList3Line from '~icons/ri/file-list-3-line'
 import IconHistoryLine from '~icons/ri/history-line'
 import IconTeamLine from '~icons/ri/team-line'
 import IconSettings3Line from '~icons/ri/settings-3-line'
+import IconDashboardLine from '~icons/ri/dashboard-line'
 import type {
   ConnectionCandidate,
   DiscoveryResult,
@@ -79,6 +80,7 @@ function createAppStore() {
   const can = (permission: string): boolean =>
     user.value?.permissions.includes(permission) ?? false
   const routeIcons = {
+    dashboard: IconDashboardLine,
     stack: IconStackLine,
     archive: IconArchiveLine,
     file: IconFileList3Line,

@@ -48,6 +48,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .nav-panel.expanded .nav-list { transform: translateY(0); }
 /* 导航图标只辅助文字，固定尺寸以免不同 SVG 改变侧栏行高。 */
 .nav-item { display: flex; align-items: center; gap: 11px; width: 100%; margin: 5px 0; border: 0; border-radius: 9px; padding: 13px 15px; background: none; color: #b8c6d9; text-align: left; font-size: 14px; }
+.nav-home { margin: 0 0 15px; font-weight: 700; }
 .nav-icon { width: 18px; height: 18px; flex: none; }
 .nav-item:hover { background: #1d304f; color: #fff; }
 .nav-item.active { background: #223b5b; color: #8de2d8; font-weight: 700; box-shadow: inset 3px 0 #70d8cc; }
@@ -328,6 +329,7 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
   .account-identity { display: block; }
   .nav-list { padding-left: 0; }
   .nav-item { white-space: nowrap; }
+  .nav-home { margin: 5px 0; }
   .workspace-tabs { margin: -26px -17px 25px; padding: 7px 17px 0 6px; }
   .topbar { align-items: flex-start; }
   .account { display: flex; }
