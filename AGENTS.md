@@ -29,11 +29,22 @@
 
 - 默认使用 TypeScript 严格类型，避免 `any`；共享数据优先定义明确的接口或类型。
 - Vue 组件使用现有项目的 Vue 3 写法和样式组织方式，保持页面状态、业务逻辑和进程通信边界清晰。
+  - 新增的组件状态管理使用 Pinia；现有共享状态仍由 `provide/inject` 维护，迁移须作为独立需求处理。避免直接操作 `this.$store`。
 - 主进程与渲染进程之间只通过预加载层暴露必要能力，不直接把 Node.js 或 Electron 高权限对象暴露给渲染进程。
 - 用户输入、文件路径、网络响应和 IPC 参数都要在边界处校验；错误需要提供可诊断的信息，同时避免泄露敏感数据。
 - Python 代码遵循现有 FastAPI 结构，路由、业务逻辑和数据访问不要无理由混在同一个函数中。
 - 开发注释尽量使用中文。注释说明原因、约束或不明显的决策，不重复描述代码本身。
 - 命名使用清晰、稳定的英文标识符；面向用户的界面文案遵循项目现有语言和产品术语。
+- 前端项目树规范：
+  - `src/renderer` 放 Vue 渲染层代码；
+    - `src/renderer/src/assets` 放 Vue 组件的静态资源，如图片、字体等；
+    - `src/renderer/src/components` 放 Vue 组件代码，需要根据功能模块分类组织；
+    - `src/renderer/src/composables` 放 Vue 组件的可组合逻辑代码，根据功能模块分类组织；
+    - `src/renderer/src/i18n` 放 Vue 组件的国际化配置，如语言文件、翻译函数等；
+    - `src/renderer/src/router` 放 Vue 路由配置，根据页面功能分类组织；
+    - `src/renderer/src/store` 放 Vue 组件的状态管理配置，根据功能模块分类组织；
+    - `src/renderer/src/utils` 放 Vue 组件的工具函数，如日期格式化、字符串处理等；
+    - `src/renderer/src/views` 放 Vue 视图代码，根据页面功能分类组织；
 
 ## Electron 安全
 
