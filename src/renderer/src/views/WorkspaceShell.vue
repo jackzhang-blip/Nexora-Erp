@@ -7,6 +7,7 @@ import WorkspaceTabs from '../components/WorkspaceTabs.vue'
 import AppStatusFooter from '../components/AppStatusFooter.vue'
 import AuthView from './AuthView.vue'
 import type { WorkspaceRouteKey } from '../router/workspace-routes'
+import { accountRoleText } from '../utils/account-role'
 import InventoryOverviewView from './workspace/warehouse/InventoryOverviewView.vue'
 import WarehouseTransfersView from './workspace/warehouse/WarehouseTransfersView.vue'
 import InventoryStocktakesView from './workspace/warehouse/InventoryStocktakesView.vue'
@@ -77,6 +78,8 @@ const {
 
 // 登录、初始化和工作台共用内容区域与底栏。
 const isAuthScreen = computed(() => screen.value === 'setup' || screen.value === 'login')
+// 窄窗口与侧栏账号卡片共用角色名称规则，避免同一用户显示两种称呼。
+const accountRole = computed(() => accountRoleText(user.value?.roles ?? [], roles.value))
 </script>
 
 <template>
@@ -102,7 +105,7 @@ const isAuthScreen = computed(() => screen.value === 'setup' || screen.value ===
             <!-- 侧栏在窄窗口收起时，顶部保留账号和退出操作。 -->
             <span class="account-identity"
               >{{ user.username
-              }}<small>{{ user.roles.join(' · ') }}</small></span
+              }}<small>{{ accountRole }}</small></span
             ><button class="text-button" type="button" @click="logout">
               退出登录
             </button>

@@ -2,6 +2,7 @@
 import { useAppStore } from '../store/app-store'
 import { nexoraLogo } from '../assets/brand'
 import IconArrowDownSLine from '~icons/ri/arrow-down-s-line'
+import SidebarAccountCard from './SidebarAccountCard.vue'
 
 // 侧栏只负责导航展示，权限过滤和当前路由来自共享 store。
 const {
@@ -12,8 +13,7 @@ const {
   user,
   visibleGroups,
   toggleRouteGroup,
-  navigateToRoute,
-  logout
+  navigateToRoute
 } = useAppStore()
 </script>
 
@@ -74,12 +74,9 @@ const {
         </div>
       </div>
     </div>
-    <!-- 侧栏底部只放当前会话；服务端身份和连接状态统一交给公共底栏。 -->
-    <div v-if="screen === 'app' && user" class="sidebar-bottom sidebar-account">
-      <span class="sidebar-account-label">当前账号</span>
-      <strong class="sidebar-account-name">{{ user.username }}</strong>
-      <span class="sidebar-account-roles">{{ user.roles.join(' · ') }}</span>
-      <button class="sidebar-logout" type="button" @click="logout">退出登录</button>
+    <!-- 侧栏底部只放当前账号卡片；服务端身份由公共底栏展示。 -->
+    <div v-if="screen === 'app' && user" class="sidebar-bottom">
+      <SidebarAccountCard />
     </div>
   </aside>
 </template>
