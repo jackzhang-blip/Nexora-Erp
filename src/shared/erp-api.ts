@@ -526,6 +526,8 @@ export interface ErpOperations {
   me: { input: undefined; output: User }
   changePassword: { input: { current_password: string; new_password: string }; output: void }
   permissions: { input: undefined; output: Permission[] }
+  // 仅修改权限目录的展示文案；授权仍以 code 为准。
+  updatePermissionLabel: { input: { code: string; label: string }; output: Permission }
   roles: { input: undefined; output: Role[] }
   createRole: { input: { code: string; label: string; permissions: string[] }; output: Role }
   updateRole: { input: { code: string; label: string; permissions: string[] }; output: Role }

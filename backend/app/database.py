@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+from .permission_catalog import DEFAULT_PERMISSION_LABELS
+
 
 def database_path() -> Path:
     # 测试和部署可覆盖路径；默认数据放在用户目录，避免写入安装目录。
@@ -37,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 24:
+        if version > 25:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -758,3 +760,18 @@ def migrate() -> None:
             db.execute("""INSERT INTO role_permissions(role_code, permission_code)
                 VALUES ('admin', 'shipment.reverse')""")
             db.execute("PRAGMA user_version = 24")
+        if version < 25:
+            # 先给旧权限补齐名称，再强制后续权限登记携带名称；授权关系仍引用稳定代码。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("ALTER TABLE permissions ADD COLUMN label TEXT NOT NULL DEFAULT ''")
+            db.executemany("UPDATE permissions SET label = ? WHERE code = ?",
+                           [(label, code) for code, label in DEFAULT_PERMISSION_LABELS.items()])
+            db.execute("UPDATE permissions SET label = '未命名权限' WHERE label = ''")
+            db.execute("""CREATE TRIGGER permissions_label_required_insert
+                          BEFORE INSERT ON permissions WHEN TRIM(NEW.label) = ''
+                          BEGIN SELECT RAISE(ABORT, '权限名称不能为空'); END""")
+            db.execute("""CREATE TRIGGER permissions_label_required_update
+                          BEFORE UPDATE OF label ON permissions WHEN TRIM(NEW.label) = ''
+                          BEGIN SELECT RAISE(ABORT, '权限名称不能为空'); END""")
+            db.execute("PRAGMA user_version = 25")

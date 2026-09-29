@@ -25,10 +25,12 @@
 :root[data-theme='dark'] td small,
 :root[data-theme='dark'] .user-row small,
 :root[data-theme='dark'] .role-row small { color: #9aadc5; }
+:root[data-theme='dark'] .permission-catalog-row small { color: #9aadc5; }
 :root[data-theme='dark'] th { background: #203047; }
 :root[data-theme='dark'] td,
 :root[data-theme='dark'] .user-row,
 :root[data-theme='dark'] .role-row,
+:root[data-theme='dark'] .permission-catalog-row,
 :root[data-theme='dark'] .receipt { border-color: #2d3e57; }
 :root[data-theme='dark'] label,
 :root[data-theme='dark'] legend { color: #c4d0e1; }

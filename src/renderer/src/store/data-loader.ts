@@ -34,6 +34,7 @@ export function createDataLoader(
     selectedWarehouseId,
     roles,
     permissions,
+    permissionLabelDrafts,
     users,
     roleDrafts,
     rolePermissionDrafts,
@@ -144,6 +145,9 @@ export function createDataLoader(
         window.nexora.callApi('roles', undefined),
         window.nexora.callApi('users', undefined)
       ])
+      permissionLabelDrafts.value = Object.fromEntries(
+        permissions.value.map((entry) => [entry.code, entry.label])
+      )
       roleDrafts.value = Object.fromEntries(
         users.value.map((entry) => [entry.id, [...entry.roles]])
       )
@@ -155,6 +159,7 @@ export function createDataLoader(
       )
     } else {
       permissions.value = []
+      permissionLabelDrafts.value = {}
       roles.value = []
       users.value = []
     }

@@ -184,6 +184,13 @@ test('桌面业务接口只转发固定操作且令牌留在主进程', async (t
   await assert.rejects(callBackend('reverseShipment', { shipmentId: '../users', reason: '无效' }), /记录编号无效/)
   await assert.rejects(callBackend('confirmSalesOrder', { orderId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('updateRole', { code: '../users', label: '错误', permissions: [] }), /角色代码无效/)
+  // 权限名称更新仍经过固定操作和受限代码，页面不能拼接任意服务端路径。
+  const permissionCallIndex = calls.length
+  await callBackend('updatePermissionLabel', { code: 'inventory.view', label: '查看各仓库存量' })
+  assert.equal(calls[permissionCallIndex].path, '/api/v1/permissions/inventory.view/label')
+  assert.equal(calls[permissionCallIndex].method, 'PUT')
+  assert.deepEqual(JSON.parse(calls[permissionCallIndex].body), { label: '查看各仓库存量' })
+  await assert.rejects(callBackend('updatePermissionLabel', { code: '../users', label: '错误' }), /权限代码无效/)
   await assert.rejects(callBackend('postReceipt', { receiptId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('unknown-operation', undefined), /不允许的业务操作/)
   await callBackend('logout', undefined)
