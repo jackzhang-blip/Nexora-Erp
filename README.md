@@ -32,7 +32,7 @@ Windows 可把 `python3` 改为 `python`。如果 Python 不在默认路径，�
 
 界面图标使用 [Remix Icon](https://icones.js.org/collection/ri)。在 Vue 组件中按需导入，例如 `import IconRefreshLine from '~icons/ri/refresh-line'`；构建时将 SVG 编入页面，运行时无需请求在线图标服务。
 
-品牌标志使用 `resources/nexora-nexus-aurora-logo.png`。需要重新生成 macOS、Windows 和托盘图标时，安装 Pillow 后运行 `python3 scripts/create-icons.py`；页面页眉与侧栏使用生成的 `resources/icon.png`。
+品牌标志使用 `resources/nexora-nexus-aurora-logo.png`。需要重新生成 macOS、Windows 和托盘图标时，安装 Pillow 后运行 `python3 scripts/create-icons.py`；菜单栏托盘图标分别使用 16×16 的 `resources/tray.png` 和供高清屏选用的 32×32 `resources/tray@2x.png`，页面页眉与侧栏使用生成的 `resources/icon.png`。
 
 新增或修改前端界面时，请遵循 [前端 UI 开发规范](docs/frontend-ui-guidelines.md)。
 
