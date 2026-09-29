@@ -32,6 +32,25 @@ test('页面内容滚动时，公共底栏仍固定在视口底部', () => {
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.content \{ height: auto; min-height: 0; flex: 1; \}/)
 })
 
+test('登录页占满窗口，进入工作台后侧栏与底栏同步过渡', () => {
+  const shell = readFileSync(new URL('../src/renderer/src/views/WorkspaceShell.vue', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../src/renderer/src/style.css', import.meta.url), 'utf8')
+
+  // 未登录时不挂载侧栏，内容始终占第二列；同一个底栏随列宽变化移动。
+  assert.match(shell, /:class="\{ 'has-sidebar': screen === 'app' \}"/)
+  assert.match(shell, /<Transition name="sidebar-slide">\s*<WorkspaceSidebar v-if="screen === 'app'" \/>/)
+  assert.match(shell, /:class="\{ 'auth-screen': isAuthScreen \}"/)
+  assert.match(shell, /import \{ nexoraLogo \} from '\.\.\/assets\/brand'/)
+  assert.match(shell, /<span v-if="isAuthScreen" class="auth-header-mark" aria-hidden="true">\s*<img :src="nexoraLogo" alt="" \/>/)
+  assert.match(css, /\.app-shell \{[^}]*grid-template-columns: 0px minmax\(0, 1fr\);[^}]*transition: grid-template-columns/)
+  assert.match(css, /\.app-shell\.has-sidebar \{ grid-template-columns: 238px minmax\(0, 1fr\); \}/)
+  assert.match(css, /\.content \{ grid-column: 2;/)
+  assert.match(css, /\.auth-screen \.auth-card \{ margin: auto; \}/)
+  assert.match(css, /\.auth-header-mark \{ width: 52px; height: 52px;/)
+  assert.match(css, /\.sidebar-slide-enter-from, \.sidebar-slide-leave-to \{ transform: translateX\(-100%\); \}/)
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.app-shell, \.sidebar-slide-enter-active, \.sidebar-slide-leave-active,[^}]*\{ transition: none;/)
+})
+
 test('侧栏底部显示当前用户、角色和退出，服务端身份交给公共底栏', () => {
   const sidebar = readFileSync(new URL('../src/renderer/src/components/WorkspaceSidebar.vue', import.meta.url), 'utf8')
   const card = readFileSync(new URL('../src/renderer/src/components/SidebarAccountCard.vue', import.meta.url), 'utf8')
