@@ -47,3 +47,5 @@
 `warehouse/InventoryLedgerView.vue` 复用工作台表格展示服务端筛选后的期初、逐笔流水与期末。
 
 `warehouse/InventoryAdjustmentsView.vue` 管理独立库存调整的提交、异人审批、仓库确认、取消与冲销。
+
+`purchase/PurchaseReportsView.vue` 与 `warehouse/InventoryReportsView.vue` 共用报表表格，查询和 CSV 使用同一份服务端结果。

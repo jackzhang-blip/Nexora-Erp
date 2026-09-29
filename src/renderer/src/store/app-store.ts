@@ -43,6 +43,7 @@ import { createConnectionActions } from './connection-actions'
 import { createCatalogActions } from './modules/catalog-actions'
 import { createPurchaseActions } from './modules/purchase-actions'
 import { createWarehouseActions } from './modules/warehouse-actions'
+import { createReportActions } from './modules/report-actions'
 import { createFinanceActions } from './modules/finance-actions'
 import { createSalesActions } from './modules/sales-actions'
 import { createProductionActions } from './modules/production-actions'
@@ -206,6 +207,7 @@ function createAppStore() {
   const catalogActions = createCatalogActions(state, perform)
   const purchaseActions = createPurchaseActions(state, perform)
   const warehouseActions = createWarehouseActions(state, perform)
+  const reportActions = createReportActions(state, perform)
   const financeActions = createFinanceActions(state, perform)
 
   const salesActions = createSalesActions(state, perform)
@@ -258,6 +260,7 @@ function createAppStore() {
     ...catalogActions,
     ...purchaseActions,
     ...warehouseActions,
+    ...reportActions,
     ...financeActions,
     ...salesActions,
     ...productionActions,

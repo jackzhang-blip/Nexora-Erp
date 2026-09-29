@@ -322,6 +322,7 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
       ? `/api/v1/stock?warehouse_id=${positiveId(payload, 'warehouseId')}` : '/api/v1/stock' }
     case 'movements': return { method: 'GET', path: '/api/v1/movements' }
     case 'inventoryLedger': return { method: 'POST', path: '/api/v1/inventory-ledger/query', body: payload }
+    case 'queryReport': return { method: 'POST', path: '/api/v1/reports/query', body: payload }
     default: throw new Error('不允许的业务操作')
   }
 }
