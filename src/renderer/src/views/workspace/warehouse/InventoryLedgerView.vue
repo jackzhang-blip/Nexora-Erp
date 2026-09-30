@@ -46,22 +46,15 @@ onMounted(() => { void runLedgerQuery() })
 
 <template>
   <section class="stack">
-    <WorkspaceTable v-if="!ledgerError && ledgerResult.groups.length" title="期初期末" :columns="groupColumns" :data="ledgerResult.groups" :min-table-width="680">
-      <template #cell-material="{ row }">{{ row.sku }} · {{ row.material_name }}</template>
-      <template #cell-opening="{ row }">{{ row.opening_quantity }} {{ row.unit }}</template>
-      <template #cell-closing="{ row }">{{ row.closing_quantity }} {{ row.unit }}</template>
-    </WorkspaceTable>
-    <WorkspaceTable :data="ledgerResult.rows" title="库存台账" description="按仓库和物料核对期初、每笔变动及期末。选择来源后显示该来源范围内的累计数量。"
+    <WorkspaceTable :show-title="false" :data="ledgerResult.rows" title="库存台账" description="按仓库和物料核对期初、每笔变动及期末。选择来源后显示该来源范围内的累计数量。"
       :columns="columns" :error="ledgerError" :loading="busy" :min-table-width="1000">
       <template #filters>
-        <div class="ledger-filter-grid">
-          <label>仓库<select v-model.number="ledgerQuery.warehouse_id"><option :value="null">全部仓库</option><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
-          <label>物料<select v-model.number="ledgerQuery.material_id"><option :value="null">全部物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label>
-          <label>开始日期<input v-model="ledgerQuery.from_date" type="date" /></label>
-          <label>结束日期<input v-model="ledgerQuery.to_date" type="date" /></label>
-          <label>来源<select v-model="ledgerQuery.source_type"><option :value="null">全部来源</option><option v-for="[key, label] in sourceOptions" :key="key" :value="key">{{ label }}</option></select></label>
-          <button class="primary" :disabled="busy || connectionLost" @click="runLedgerQuery">查询台账</button>
-        </div>
+        <label>仓库<select v-model.number="ledgerQuery.warehouse_id"><option :value="null">全部仓库</option><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+        <label>物料<select v-model.number="ledgerQuery.material_id"><option :value="null">全部物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label>
+        <label>开始日期<input v-model="ledgerQuery.from_date" type="date" /></label>
+        <label>结束日期<input v-model="ledgerQuery.to_date" type="date" /></label>
+        <label>来源<select v-model="ledgerQuery.source_type"><option :value="null">全部来源</option><option v-for="[key, label] in sourceOptions" :key="key" :value="key">{{ label }}</option></select></label>
+        <button class="primary" :disabled="busy || connectionLost" @click="runLedgerQuery">查询台账</button>
       </template>
       <template #cell-time="{ row: item }">{{ localTime(item.created_at) }}<small>{{ item.created_by_name }}</small></template>
       <template #cell-warehouse="{ row: item }">{{ item.warehouse_name }}</template>
@@ -77,26 +70,11 @@ onMounted(() => { void runLedgerQuery() })
         <button class="secondary small" :disabled="busy || connectionLost" @click="runLedgerQuery">重新查询</button>
       </template>
     </WorkspaceTable>
+    <!-- 先筛选再查看流水与汇总，避免期初期末把查询入口挤到页面下方。 -->
+    <WorkspaceTable v-if="!ledgerError && ledgerResult.groups.length" title="期初期末" :columns="groupColumns" :data="ledgerResult.groups" :min-table-width="680">
+      <template #cell-material="{ row }">{{ row.sku }} · {{ row.material_name }}</template>
+      <template #cell-opening="{ row }">{{ row.opening_quantity }} {{ row.unit }}</template>
+      <template #cell-closing="{ row }">{{ row.closing_quantity }} {{ row.unit }}</template>
+    </WorkspaceTable>
   </section>
 </template>
-
-<style scoped>
-/* 筛选控件在宽屏平铺、窄屏逐级换行，查询按钮始终与输入框底边对齐。 */
-.ledger-filter-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; align-items: end; gap: 12px; width: 100%; padding: 16px; border: 1px solid #e4ebee; border-radius: 11px; background: #f8fafb; }
-.ledger-filter-grid label { min-width: 0; }
-.ledger-filter-grid button { white-space: nowrap; }
-@media (max-width: 1120px) {
-  .ledger-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-@media (max-width: 640px) {
-  .ledger-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ledger-filter-grid button { width: 100%; }
-}
-@media (max-width: 420px) {
-  .ledger-filter-grid { grid-template-columns: minmax(0, 1fr); }
-}
-</style>
-
-<style>
-:root[data-theme='dark'] .ledger-filter-grid { border-color: #30445b; background: #192a40; }
-</style>

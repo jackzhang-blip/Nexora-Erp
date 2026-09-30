@@ -31,7 +31,7 @@ async function submitCreate(): Promise<void> {
 
 <template>
   <section class="stack">
-    <WorkspaceTable :data="filtered" title="库存调整" description="调整量可正可负；建单人不能审批自己的单据。审批通过后由仓库确认才记库存流水。"
+    <WorkspaceTable :show-title="false" :data="filtered" title="库存调整" description="调整量可正可负；建单人不能审批自己的单据。审批通过后由仓库确认才记库存流水。"
       :columns="columns" :min-table-width="1050">
       <template #actions>
         <button v-if="can('adjustment.create')" class="primary" :disabled="busy || connectionLost" @click="showForm = true">新建调整</button>

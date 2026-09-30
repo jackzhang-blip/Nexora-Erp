@@ -49,3 +49,5 @@
 `warehouse/InventoryAdjustmentsView.vue` 管理独立库存调整的提交、异人审批、仓库确认、取消与冲销。
 
 `purchase/PurchaseReportsView.vue` 与 `warehouse/InventoryReportsView.vue` 共用报表表格，查询和 CSV 使用同一份服务端结果。
+
+仓库管理八个页面统一使用公共表格及台账式筛选面板。顶部保留 `NEXORA WORKSPACE` 和页面主标题，主列表设置 `showTitle=false`，仅保留说明与操作，避免重复标题；表格仍保留可访问名称，期初期末等次级列表继续显示标题。筛选面板的间距、底色、换行和明暗主题由 `WorkspaceTable` 统一管理，其他业务表格也沿用该样式。库存总览的汇总卡片放在筛选与表格之间；台账先显示筛选和流水，再显示期初期末。调拨与盘点以单据表格展示，支持按单号、仓库或物料搜索，并保留新增弹窗、权限控制、确认、取消（盘点）与冲销记录。
