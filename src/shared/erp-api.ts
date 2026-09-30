@@ -1,5 +1,7 @@
 // 桌面端与本地服务共用的数据契约；渲染进程不能自行指定请求地址。
-export interface User {
+// 账号资料与登录名分开，工号可为空；非空工号由服务端保证唯一。
+export interface UserProfile { full_name: string; employee_no: string; phone: string }
+export interface User extends UserProfile {
   id: number
   username: string
   is_active: boolean
@@ -768,7 +770,8 @@ export interface ErpOperations {
   createRole: { input: { code: string; label: string; permissions: string[] }; output: Role }
   updateRole: { input: { code: string; label: string; permissions: string[] }; output: Role }
   users: { input: undefined; output: User[] }
-  createUser: { input: { username: string; password: string; roles: string[] }; output: User }
+  createUser: { input: UserProfile & { username: string; password: string; roles: string[] }; output: User }
+  updateUser: { input: UserProfile & { userId: number; roles: string[] }; output: User }
   setUserRoles: { input: { userId: number; roles: string[] }; output: User }
   setUserStatus: { input: { userId: number; is_active: boolean }; output: User }
   resetUserPassword: { input: { userId: number; password: string }; output: void }

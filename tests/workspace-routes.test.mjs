@@ -64,8 +64,8 @@ test('用户、职务授权与权限目录分别有入口，且都要求用户�
   const catalogPage = readFileSync(new URL('../src/renderer/src/views/workspace/system/PermissionCatalogView.vue', import.meta.url), 'utf8')
   // 用户、职务和名称维护分属三页，避免权限目录把职务表格重新撑成长页。
   assert.match(userPage ?? '', /<NModal\b/)
-  assert.match(userPage ?? '', /@submit\.prevent="submitCreate"/)
-  assert.match(userPage ?? '', /submitCreateDialog\(createUser/)
+  assert.match(userPage ?? '', /@submit\.prevent="submitEditor"/)
+  assert.match(userPage ?? '', /editingId.value === null \? createUser\(\) : updateUser/)
   // 用户列表已统一为表格，职务授权和权限名称维护仍保留独立入口。
   assert.match(userPage ?? '', /<WorkspaceTable/)
   assert.match(rolePage ?? '', /<WorkspaceTable/)

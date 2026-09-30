@@ -1,5 +1,5 @@
 import type { AppState } from '../state'
-import type { User } from '../../../../shared/erp-api'
+import type { User, UserProfile } from '../../../../shared/erp-api'
 
 // 账号与角色操作集中在业务模块；写入后仍由统一入口刷新服务端快照。
 export function createAccessActions(
@@ -24,12 +24,27 @@ export function createAccessActions(
     if (!window.nexora) return
     await perform(async () => {
       await window.nexora!.callApi('createUser', {
+        full_name: newUser.value.full_name,
+        employee_no: newUser.value.employee_no,
+        phone: newUser.value.phone,
         username: newUser.value.username,
         password: newUser.value.password,
         roles: [...newUser.value.roles]
       })
-      newUser.value = { username: '', password: '', roles: ['viewer'] }
+      newUser.value = { username: '', password: '', roles: ['viewer'], full_name: '', employee_no: '', phone: '' }
     }, '用户已创建。')
+  }
+
+  // 复制表单字段为普通对象，避免将 Vue 代理传入 Electron IPC。
+  async function updateUser(userId: number, profile: UserProfile & { roles: string[] }): Promise<void> {
+    if (!window.nexora) return
+    await perform(async () => {
+      const updated = await window.nexora!.callApi('updateUser', {
+        userId, full_name: profile.full_name, employee_no: profile.employee_no,
+        phone: profile.phone, roles: [...profile.roles]
+      })
+      if (user.value?.id === userId) user.value = updated
+    }, '用户资料和角色已更新。')
   }
 
   async function saveRoles(userId: number): Promise<void> {
@@ -106,6 +121,7 @@ export function createAccessActions(
   }
   return {
     createUser,
+    updateUser,
     saveRoles,
     createRole,
     saveRole,

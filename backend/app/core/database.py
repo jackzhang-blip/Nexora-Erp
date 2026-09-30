@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 36:
+        if version > 37:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -1169,3 +1169,25 @@ def migrate() -> None:
                            [(role, code) for role in ('admin', 'finance')
                             for code in ('inventory_valuation.view', 'inventory_valuation.record')])
             db.execute("PRAGMA user_version = 36")
+
+
+        if version < 37:
+            # 为已有账号补空资料，不改变账号、密码和角色；工号仅在填写时要求唯一。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            columns = {row[1] for row in db.execute("PRAGMA table_info(users)")}
+            if columns:
+                for column in ("full_name", "employee_no", "phone"):
+                    if column not in columns:
+                        db.execute(f"ALTER TABLE users ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+                db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_employee_no ON users(employee_no COLLATE NOCASE) WHERE employee_no != ''")
+            # 资料修改保存前后快照与操作者，便于追溯账号信息变更。
+            db.execute("""CREATE TABLE IF NOT EXISTS user_profile_changes (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                changed_by INTEGER NOT NULL REFERENCES users(id),
+                before_json TEXT NOT NULL,
+                after_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.execute("PRAGMA user_version = 37")

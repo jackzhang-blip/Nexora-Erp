@@ -1,6 +1,8 @@
 """账号、角色与权限管理接口。"""
 
 import ipaddress
+import json
+import re
 import secrets
 import sqlite3
 import time
@@ -25,7 +27,37 @@ class LoginInput(BaseModel):
     password: str
 
 
-class UserInput(AccountInput):
+class UserProfileInput(BaseModel):
+    # 兼容旧账号和旧客户端；资料可逐步补齐，空工号不参与唯一性约束。
+    full_name: str = Field(default="", max_length=60)
+    employee_no: str = Field(default="", max_length=40)
+    phone: str = Field(default="", max_length=24)
+
+    @field_validator("full_name", "employee_no", "phone", mode="before")
+    @classmethod
+    def trim_profile(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("employee_no")
+    @classmethod
+    def validate_employee_no(cls, value: str) -> str:
+        if value and not re.fullmatch(r"[A-Za-z0-9_-]+", value):
+            raise ValueError("工号仅支持英文、数字、下划线和短横线")
+        return value
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str) -> str:
+        if value and not re.fullmatch(r"\+?[0-9][0-9 ()-]{5,22}[0-9]", value):
+            raise ValueError("请输入有效的手机号或带区号的联系电话")
+        return value
+
+
+class UserUpdate(UserProfileInput):
+    roles: list[str] = Field(min_length=1)
+
+
+class UserInput(AccountInput, UserProfileInput):
     roles: list[str] = Field(min_length=1)
 
 
@@ -260,13 +292,43 @@ def create_user(payload: UserInput, _: dict = Depends(require("users.manage"))) 
     with connection() as db:
         roles = validate_roles(db, payload.roles)
         try:
-            cursor = db.execute("INSERT INTO users(username, password_hash) VALUES (?, ?)",
-                                (payload.username.lower(), hash_password(payload.password)))
+            cursor = db.execute("""INSERT INTO users(username, password_hash, full_name, employee_no, phone)
+                                VALUES (?, ?, ?, ?, ?)""",
+                                (payload.username.lower(), hash_password(payload.password),
+                                 payload.full_name, payload.employee_no, payload.phone))
         except sqlite3.IntegrityError:
-            raise HTTPException(409, "用户名已存在") from None
+            raise HTTPException(409, "用户名或工号已存在") from None
         db.executemany("INSERT INTO user_roles(user_id, role_code) VALUES (?, ?)",
                        [(cursor.lastrowid, role) for role in roles])
         return user_details(db, cursor.lastrowid)
+
+
+@router.put("/users/{user_id}")
+def update_user(user_id: int, payload: UserUpdate,
+                actor: dict = Depends(require("users.manage"))) -> dict:
+    with connection() as db:
+        # 资料和角色一次提交；任一校验失败都回滚，避免只保存一半。
+        db.execute("BEGIN IMMEDIATE")
+        if not db.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone():
+            raise HTTPException(404, "用户不存在")
+        before = user_details(db, user_id)
+        roles = validate_roles(db, payload.roles)
+        if "admin" not in roles:
+            ensure_active_admin_remains(db, user_id)
+        try:
+            db.execute("UPDATE users SET full_name = ?, employee_no = ?, phone = ? WHERE id = ?",
+                       (payload.full_name, payload.employee_no, payload.phone, user_id))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, "工号已存在") from None
+        db.execute("DELETE FROM user_roles WHERE user_id = ?", (user_id,))
+        db.executemany("INSERT INTO user_roles(user_id, role_code) VALUES (?, ?)",
+                       [(user_id, role) for role in roles])
+        after = user_details(db, user_id)
+        db.execute("""INSERT INTO user_profile_changes(user_id, changed_by, before_json, after_json)
+                      VALUES (?, ?, ?, ?)""",
+                   (user_id, actor["id"], json.dumps(before, ensure_ascii=False),
+                    json.dumps(after, ensure_ascii=False)))
+        return after
 
 
 @router.put("/users/{user_id}/roles")

@@ -271,6 +271,7 @@ export function createAppState() {
     lines: [] as { shipment_line_id: number; quantity: string }[]
   })
   const newUser = ref({
+    full_name: '', employee_no: '', phone: '',
     username: '',
     password: '',
     roles: ['viewer'] as string[]

@@ -116,9 +116,13 @@ test('财务冲销、生产质检与账号操作在表格迁移后保留原权�
 
   const users='system/UserManagementView.vue'
   const userButtons=buttons(await render(users))
-  for(const label of ['重置密码','停用账号']) assert.deepEqual(userButtons.filter(b=>b.label===label).map(b=>b.disabled),[true,false])
+  assert.deepEqual(userButtons.filter(b=>b.label==='重置密码').map(b=>b.disabled),[true,false])
+  const userHtml = await render(users)
+  assert.doesNotMatch(userHtml, /type="password"|type="checkbox"|保存角色/)
+  assert.match(userHtml, /role="switch"/)
+  // 重置入口不依赖密码草稿；只有弹窗提交需要校验密码长度。
   state.resetPasswords.value[2]='short'
-  assert.ok(buttons(await render(users)).filter(b=>b.label==='重置密码').every(b=>b.disabled))
+  assert.deepEqual(buttons(await render(users)).filter(b=>b.label==='重置密码').map(b=>b.disabled),[true,false])
   state.busy.value=true
   assert.ok(buttons(await render(completions)).every(b=>b.disabled))
   assert.ok(buttons(await render(users)).every(b=>b.disabled))
