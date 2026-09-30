@@ -4,7 +4,7 @@ import type {
   DiscoveryResult,
   ServerProfile
 } from '../../../shared/desktop-api'
-import { displayError } from '../utils/formatters'
+import { displayError } from '../utils/formatters.ts'
 import type { Screen } from './types'
 
 // 连接、发现、主机控制与身份状态在同一生命周期内管理，退出时会释放扫描订阅。
@@ -53,7 +53,25 @@ export function createConnectionActions(
       connectionNotice.value = ''
       if (state.status === 'connected') {
         server.value = state.server
-        screen.value = 'login'
+        try {
+          // Pinia 在页面刷新后重新创建；从服务端核验主进程会话再恢复账号和权限。
+          user.value = await window.nexora.callApi('me', undefined)
+          screen.value = 'app'
+        } catch (cause) {
+          // 主进程没有令牌或服务端已撤销会话时，不展示旧账号的数据。
+          user.value = null
+          screen.value = 'login'
+          const message = displayError(cause)
+          if (message !== '请先登录') error.value = message
+        }
+        if (user.value) {
+          // 业务数据读取失败时保留已验证的登录状态，并显示具体错误供重试。
+          try {
+            await refreshData()
+          } catch (cause) {
+            error.value = displayError(cause)
+          }
+        }
       } else if (state.status === 'needs_setup') {
         server.value = state.server
         screen.value = 'setup'
