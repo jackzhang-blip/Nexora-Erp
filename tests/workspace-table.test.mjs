@@ -48,6 +48,17 @@ test('公共表格加载真实 vxe 组件并渲染功能区、加载和空状态
 
   const empty = await render({ data: [] })
   assert.match(empty, /没有匹配的资料/)
+  assert.match(empty, /workspace-table-empty-icon/)
+
+  // 查询失败时即使保留了旧数据，也应显示错误和重试入口，不能误报为空结果。
+  const failed = await render({ data: [{ name: '旧物料' }], error: '查询失败' }, {
+    ...slots,
+    errorActions: () => h('button', '重新查询')
+  })
+  assert.match(failed, /数据加载失败/)
+  assert.match(failed, /查询失败/)
+  assert.match(failed, /重新查询/)
+  assert.doesNotMatch(failed, /没有匹配的资料/)
 
   const loading = await render({ data: [{ name: '物料 A' }], loading: true })
   assert.match(loading, /正在加载…/)
@@ -85,5 +96,7 @@ test('新增入口打开弹窗，失败时保留草稿', () => {
 test('公共 vxe 表格匹配工作台明暗主题与单元格高度', () => {
   const source = readFileSync(new URL('../src/renderer/src/components/workspace/WorkspaceTable.vue', import.meta.url), 'utf8')
   assert.match(source, /\.workspace-vxe-table :is\(th, td\) \{[^}]*vertical-align: middle;/)
+  // 首列标题和数据使用同一规则，防止只有表头向内缩而内容仍贴边。
+  assert.match(source, /:is\(\.vxe-header--column, \.vxe-body--column\):first-child > \.vxe-cell \{ padding-left: 18px; \}/)
   assert.match(source, /:root\[data-theme='dark'\] \.workspace-vxe-table/)
 })

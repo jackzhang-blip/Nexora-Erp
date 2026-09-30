@@ -42,6 +42,27 @@ test('后端连接契约与失败处理', async (t) => {
   assert.match((await getBackendHealth()).message, /配置无效/)
 })
 
+test('服务端缺少当前功能时显示可处理的中文提示', async (t) => {
+  const originalUrl = process.env.NEXORA_API_URL
+  t.after(() => {
+    if (originalUrl === undefined) delete process.env.NEXORA_API_URL
+    else process.env.NEXORA_API_URL = originalUrl
+  })
+  process.env.NEXORA_API_URL = 'http://127.0.0.1:8123'
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.pathname.endsWith('/login')) {
+      return Response.json({ token: 'test-token', user: { id: 1 } })
+    }
+    assert.equal(url.pathname, '/api/v1/inventory-ledger/query')
+    return Response.json({ detail: 'Not Found' }, { status: 404 })
+  })
+  await callBackend('login', {})
+  // 保留状态码和版本排查建议，避免直接把英文框架提示展示给用户。
+  await assert.rejects(callBackend('inventoryLedger', {
+    warehouse_id: null, material_id: null, from_date: null, to_date: null, source_type: null
+  }), /服务端未找到此功能（HTTP 404）。请确认桌面端与服务端版本一致。/)
+})
+
 test('桌面业务接口只转发固定操作且令牌留在主进程', async (t) => {
   const originalUrl = process.env.NEXORA_API_URL
   t.after(() => {

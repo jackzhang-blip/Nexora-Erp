@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
 import { usePiniaAppStore } from '../../../store/app-store'
 
 const store = usePiniaAppStore()
-const { busy, connectionLost, warehouses, materials, ledgerQuery, ledgerResult } = storeToRefs(store)
+const { busy, connectionLost, error, warehouses, materials, ledgerQuery, ledgerResult } = storeToRefs(store)
 const { queryLedger, localTime } = store
+const ledgerError = ref('')
 const columns = [
   { key: 'time', title: '时间' }, { key: 'warehouse', title: '仓库' },
   { key: 'material', title: '物料' }, { key: 'source', title: '来源单据' },
@@ -32,26 +33,35 @@ const sourceLabels: Record<string, string> = {
   production_completion: '生产完工', production_completion_reversal: '生产完工冲销'
 }
 const sourceOptions = Object.entries(sourceLabels)
+// 查询失败时隐藏上次筛选的结果，避免把旧流水误读为本次查询结果。
+async function runLedgerQuery(): Promise<void> {
+  ledgerError.value = ''
+  await queryLedger()
+  ledgerError.value = error.value
+}
+
 // 页面首次打开读取服务端结果；筛选和表格使用同一份台账快照。
-onMounted(() => { void queryLedger() })
+onMounted(() => { void runLedgerQuery() })
 </script>
 
 <template>
   <section class="stack">
-    <WorkspaceTable v-if="ledgerResult.groups.length" title="期初期末" :columns="groupColumns" :data="ledgerResult.groups" :min-table-width="680">
+    <WorkspaceTable v-if="!ledgerError && ledgerResult.groups.length" title="期初期末" :columns="groupColumns" :data="ledgerResult.groups" :min-table-width="680">
       <template #cell-material="{ row }">{{ row.sku }} · {{ row.material_name }}</template>
       <template #cell-opening="{ row }">{{ row.opening_quantity }} {{ row.unit }}</template>
       <template #cell-closing="{ row }">{{ row.closing_quantity }} {{ row.unit }}</template>
     </WorkspaceTable>
     <WorkspaceTable :data="ledgerResult.rows" title="库存台账" description="按仓库和物料核对期初、每笔变动及期末。选择来源后显示该来源范围内的累计数量。"
-      :columns="columns" :loading="busy" :min-table-width="1000">
+      :columns="columns" :error="ledgerError" :loading="busy" :min-table-width="1000">
       <template #filters>
-        <label>仓库<select v-model.number="ledgerQuery.warehouse_id"><option :value="null">全部仓库</option><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
-        <label>物料<select v-model.number="ledgerQuery.material_id"><option :value="null">全部物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label>
-        <label>开始日期<input v-model="ledgerQuery.from_date" type="date" /></label>
-        <label>结束日期<input v-model="ledgerQuery.to_date" type="date" /></label>
-        <label>来源<select v-model="ledgerQuery.source_type"><option :value="null">全部来源</option><option v-for="[key, label] in sourceOptions" :key="key" :value="key">{{ label }}</option></select></label>
-        <button class="primary" :disabled="busy || connectionLost" @click="queryLedger">查询</button>
+        <div class="ledger-filter-grid">
+          <label>仓库<select v-model.number="ledgerQuery.warehouse_id"><option :value="null">全部仓库</option><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+          <label>物料<select v-model.number="ledgerQuery.material_id"><option :value="null">全部物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label>
+          <label>开始日期<input v-model="ledgerQuery.from_date" type="date" /></label>
+          <label>结束日期<input v-model="ledgerQuery.to_date" type="date" /></label>
+          <label>来源<select v-model="ledgerQuery.source_type"><option :value="null">全部来源</option><option v-for="[key, label] in sourceOptions" :key="key" :value="key">{{ label }}</option></select></label>
+          <button class="primary" :disabled="busy || connectionLost" @click="runLedgerQuery">查询台账</button>
+        </div>
       </template>
       <template #cell-time="{ row: item }">{{ localTime(item.created_at) }}<small>{{ item.created_by_name }}</small></template>
       <template #cell-warehouse="{ row: item }">{{ item.warehouse_name }}</template>
@@ -59,7 +69,34 @@ onMounted(() => { void queryLedger() })
       <template #cell-source="{ row: item }">{{ sourceLabels[item.source_type] ?? item.source_type }} #{{ item.source_id }}<small>明细 #{{ item.source_line_id }}</small></template>
       <template #cell-quantity="{ row: item }">{{ item.quantity.startsWith('-') ? '' : '+' }}{{ item.quantity }} {{ item.unit }}</template>
       <template #cell-balance="{ row: item }">{{ item.balance_quantity }} {{ item.unit }}</template>
-      <template #empty>筛选范围内暂无库存流水。</template>
+      <template #empty>
+        <strong>筛选范围内暂无库存流水</strong>
+        <span>可调整仓库、物料或日期后重新查询。</span>
+      </template>
+      <template #errorActions>
+        <button class="secondary small" :disabled="busy || connectionLost" @click="runLedgerQuery">重新查询</button>
+      </template>
     </WorkspaceTable>
   </section>
 </template>
+
+<style scoped>
+/* 筛选控件在宽屏平铺、窄屏逐级换行，查询按钮始终与输入框底边对齐。 */
+.ledger-filter-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; align-items: end; gap: 12px; width: 100%; padding: 16px; border: 1px solid #e4ebee; border-radius: 11px; background: #f8fafb; }
+.ledger-filter-grid label { min-width: 0; }
+.ledger-filter-grid button { white-space: nowrap; }
+@media (max-width: 1120px) {
+  .ledger-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .ledger-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ledger-filter-grid button { width: 100%; }
+}
+@media (max-width: 420px) {
+  .ledger-filter-grid { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+
+<style>
+:root[data-theme='dark'] .ledger-filter-grid { border-color: #30445b; background: #192a40; }
+</style>

@@ -34,7 +34,7 @@
 
 页面组件处理展示与表单绑定；跨页面草稿和服务端快照放在 `store/state.ts`，业务写操作放在 `store/modules/`。权限与地址规则只在 `router/workspace-routes.ts` 维护。
 
-工作台中的表格统一由 `components/workspace/WorkspaceTable.vue` 封装的 vxe-table 渲染。页面传入 `columns`、`data` 和可选的最小宽度，通过 `cell-<列键>` 插槽填写业务单元格；标题、筛选、操作、表前说明、空状态和页脚分别使用 `heading`、`filters`、`actions`、`beforeTable`、`empty`、`footer` 插槽。采购与库存报表也使用同一组件，CSV 继续基于相同的服务端查询结果。列表新增入口以按钮打开 Naive UI 弹窗，保存失败保留草稿；复杂单据的确认、冲销仍保留原有操作流程。职务仍沿用现有角色与操作权限数据，内置角色只读；授权树由 `components/workspace/PermissionTreePicker.vue` 提供。权限目录在系统管理下使用单独路由，避免职务列表下方再展开很长的名称维护区域。权限目录可独立重试读取服务端数据，其他业务列表加载失败时不会使目录一直空白。
+工作台中的表格统一由 `components/workspace/WorkspaceTable.vue` 封装的 vxe-table 渲染。页面传入 `columns`、`data` 和可选的最小宽度，通过 `cell-<列键>` 插槽填写业务单元格；标题、筛选、操作、表前说明、空状态和页脚分别使用 `heading`、`filters`、`actions`、`beforeTable`、`empty`、`footer` 插槽。表格超出可视宽度时，底部提供始终可见的横向滚动条；查询失败可用 `error` 和 `errorActions` 显示失败原因与重试入口。采购与库存报表也使用同一组件，CSV 继续基于相同的服务端查询结果。列表新增入口以按钮打开 Naive UI 弹窗，保存失败保留草稿；复杂单据的确认、冲销仍保留原有操作流程。职务仍沿用现有角色与操作权限数据，内置角色只读；授权树由 `components/workspace/PermissionTreePicker.vue` 提供。权限目录在系统管理下使用单独路由，避免职务列表下方再展开很长的名称维护区域。权限目录可独立重试读取服务端数据，其他业务列表加载失败时不会使目录一直空白。
 
 应用业务状态和主题状态由 Pinia 管理。`store/app-store.ts` 的 `useAppStore()` 保留页面现有的响应式 `ref` 取值接口；应用启动与监听器清理由根组件负责。
 
@@ -44,7 +44,7 @@
 
 采购退货页提交后展示待出库单号；仓库出库页复用列表确认采购退货，确认后才更新库存与应付。
 
-`warehouse/InventoryLedgerView.vue` 复用工作台表格展示服务端筛选后的期初、逐笔流水与期末。
+`warehouse/InventoryLedgerView.vue` 复用工作台表格展示服务端筛选后的期初、逐笔流水与期末。公共表格以完整占位区展示空结果或加载失败；台账查询失败时隐藏上次结果，并提供重新查询。服务端若返回默认 `Not Found`，桌面端会提示核对两端版本，不将失败误当作无流水。
 
 `warehouse/InventoryAdjustmentsView.vue` 管理独立库存调整的提交、异人审批、仓库确认、取消与冲销。
 
