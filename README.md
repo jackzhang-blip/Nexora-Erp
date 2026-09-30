@@ -1,104 +1,51 @@
 # Nexora ERP（联光 ERP）
 
-面向企业内部的桌面 ERP。当前版本已具备用户与角色权限管理、物料、供应商与客户资料、采购订单及分批入库与退货、销售订单及分批出库与退货、生产 BOM、工单与分批领料、多仓库库存、调拨与盘点流水，以及局域网服务端的创建、发现和连接。
+[English](README.en.md) · [官网源码](docs/site/) · [中文开发文档](docs/development.zh-CN.md)
 
-## 当前工作方式
+面向企业内部的桌面 ERP，将采购、仓库、销售、生产与业务财务连接到同一套可追溯的单据和库存流水。桌面端使用 Electron、Vue 3、TypeScript 与 Pinia，服务端使用 FastAPI、SQLAlchemy 与 SQLite。
 
-首次打开客户端，可选择**手动连接**、**扫描局域网**或**在本机新建服务端**。服务端由 FastAPI 管理 SQLite 数据库和权限；其他客户端通过 HTTPS 访问同一个服务端。客户端重启后会尝试重连上次选择的服务端；保存的局域网地址失效时，会搜索同一实例并核验原证书指纹，再更新连接地址。断线期间不能提交业务修改；地址变化后的恢复可能需要重新登录。
+当前处于**单公司、多仓库、在线局域网内部试用阶段**。Windows 和 macOS 客户端通过 HTTPS 访问服务端，数据集中保存；断网后不能提交业务修改。文档和官网提供中英文版本，应用界面目前仍为中文。官网代码已准备，GitHub Pages 暂未启用。
 
-创建服务端时填写实例名称、数据目录、监听端口和首位管理员账号。已有数据库不会被覆盖。安装版会以 Windows 服务或 macOS LaunchDaemon 运行固定主机；关闭窗口后桌面程序保留在托盘，双击图标或选“打开 Nexora ERP”可恢复窗口。托盘菜单显示本机服务状态，并可手动刷新或停止服务；“退出桌面应用”只退出桌面程序，已安装的系统服务仍可在无人登录时运行。开发模式仍由桌面进程临时启动服务，明确退出应用后停止。首次安装系统服务与手动启停需要管理员授权。
+## 项目功能
 
-首次连接其他电脑时，请将客户端展示的 SHA-256 指纹与服务端电脑“服务端已就绪”页面中的指纹完整核对，再输入账号密码。连接记录只保存地址、服务端身份和证书，不保存密码。证书变化时，自动重连会被阻止，需重新核验。自动查找新地址依赖局域网广播；广播受阻时可手动输入地址并再次核对指纹。
+| 业务领域 | 当前功能 |
+| --- | --- |
+| 账号与权限 | 用户、内置及自定义角色、单据操作授权、账号启停、密码重置、权限树与菜单图标配置。 |
+| 基础资料 | 物料、供应商、客户、仓库和供应商供货关系；供应商列表支持服务端分页。 |
+| 采购 | 采购申请审批与拆单、订单、分批收货、仓库确认入库、退货待出库确认及冲销。 |
+| 仓库 | 多仓库存、其他入出库、调拨、盘点、异人审批的库存调整、来源流水与库存台账。 |
+| 销售 | 订单、分批出库、关联退货与冲销；确认时核对订单余量与库存。 |
+| 生产 | BOM 版本、工单需求快照、分批领退料、报工、基础质检与合格成品入库。 |
+| 成本与业务财务 | 库存移动平均、缺价人工核价、材料/人工/制造费用归集、完工成本分摊、应收应付来源及手工收付款与冲销。 |
+| 总账 | 科目、期间、正式期初独立审核/确认、手工凭证独立审核/过账/冲销、已过账科目明细和试算平衡；期间资料尚不锁定业务。 |
+| 报表与运行 | 基础采购/库存报表及 CSV；局域网发现、证书指纹信任、系统服务、备份恢复和升级备份。 |
 
-局域网扫描和已保存连接的地址恢复会分别通过当前各局域网 IPv4 网卡发送 mDNS 查询，避免 Windows 的 VPN 或虚拟网卡占用默认组播出口导致搜索不到服务。重新扫描时会重新读取网卡并释放上一轮的发现连接。手动连接成功但扫描无结果时，仍需检查两端防火墙和路由器是否允许 UDP 5353 组播；HTTPS 端口可达并不代表发现通道可达。
+库存及金额变更保留来源、操作者和更正记录，确认与流水在同一事务内提交。缺价显示待核价，不以零代替未知金额；人工收付款和基础质检不表示已完成银行或现场实物核验。
 
-**当前数据集中保存在服务端。**远程客户端断网后不能继续编辑；工作台会提示断线并重试，连接恢复后重新读取服务端数据。没有本地数据合并或离线同步。应收应付来源清单、手工收付款记录及按公司物料计算的基础库存移动平均计价已实现；缺少来源价格的入库可人工核价并保留修订记录。生产领料自动读取库存平均成本，工单全部报工后可结算并按合格数量分摊到完工批次，保存来源与冲销历史。总账科目、会计期间、正式期初余额独立审核确认、手工凭证独立审核过账、冲销审计及已过账科目明细和试算平衡已实现；正式销售成本凭证、业务自动凭证、结账、MySQL、跨设备数据同步、人力资源与 CRM 是后续阶段的工作。
+## 开发进度
 
-## 开发
+状态基准：**2026-10-01，本次正式期初余额交付版本**。开发中不属于已交付主线能力，进度按可用功能描述，不提供未经定义的完成百分比。
 
-需要 Node.js 22.12+、Python 3.11+。在仓库根目录运行：
+| 阶段 | 状态 | 已做 / 下一步 |
+| --- | --- | --- |
+| 采购—库存—销售—生产闭环 | 已实现基础流程 | 分批收发、退货、更正和来源追溯已具备，复杂场景继续完善。 |
+| 后端数据访问 | 迁移完成 | 现有业务统一 ORM；结构迁移、SQLite 配置和在线备份保留必要底层操作。 |
+| 库存与完工成本 | 已实现基础能力 | 移动平均与完工批次分摊已有；价差、在制品和跨期成本待补。 |
+| 总账基础资料 | 已合并 | 科目、期间和审计可用；业务锁期与结账待实现。 |
+| 正式期初余额 | 已实现 | 首次无过账总账启用、独立审核确认、版本与审计、启用前撤销；不计本期发生额。 |
+| 手工凭证 | 已合并 | 借贷平衡、异人审核、过账、关联冲销与审计已具备；业务自动凭证和正式报表待补。 |
+| 已过账总账报表 | 已合并 | 科目明细、试算平衡、凭证下钻与 CSV；正式期初及同快照来源已提供；资产负债表和利润表待实现。 |
+| 完整财务 | 计划 | 业务自动凭证、正式销售成本凭证、业务分户期初勾稽、结账和正式财务报表。 |
+| 业务扩展 | 计划 | MRP、排产、返工、质量售后、CRM、设备、人力及多组织。 |
+| 数据与设备扩展 | 计划 / 待验收 | MySQL、离线同步未实现；跨平台实机、无人登录启动和恢复演练待验收。 |
 
-```bash
-npm install
-python3 -m pip install -r backend/requirements-dev.txt
-npm run dev
-```
+候选实施顺序和进入条件见 [后续模块评估](docs/erp-expansion-assessment.md)。构建通过不等于真实设备或业务验收完成。
 
-Windows 可把 `python3` 改为 `python`。如果 Python 不在默认路径，可设置 `NEXORA_PYTHON` 指向解释器。桌面应用会在“新建服务端”时自动启动 Python 服务。单独调试后端见 [后端说明](backend/README.md)。
+## 开发入口
 
-渲染页面已接入 Naive UI 和 Tailwind CSS 4。Vue 组件可从 `naive-ui` 按需导入；`App.vue` 的 `NConfigProvider` 统一提供中文语言与主题色。Tailwind 工具类可直接写在 Vue 模板中，入口为 `src/renderer/src/style.css`。项目保留原有基础样式，因此未启用 Tailwind Preflight 全局重置。
+需要 Node.js 22.12+、Python 3.11+。环境配置、架构、业务约束、验证、**构建说明**、备份恢复和官网发布已移到详细开发文档：
 
-渲染层的应用会话和主题状态由 Pinia 管理，每个桌面窗口有独立的 store 实例。现有页面通过 `useAppStore()` 取得响应式 `ref` 与业务操作；根组件负责启动和清理连接检查、发现订阅及窗口监听器，渲染层仍只通过预加载接口调用桌面能力。
+- [中文开发文档](docs/development.zh-CN.md)
+- [English development guide](docs/development.en.md)
 
-前端目录按职责组织：`views/` 放引导、登录及按业务分组的工作台页面，`components/` 按 `app/` 公共区域、`feedback/` 消息反馈和 `workspace/` 工作台组件分类，`composables/` 放组件级组合式逻辑，`store/` 放 Pinia 会话状态、数据刷新和各业务操作，`router/` 用 Vue Router Hash 模式管理工作台地址、页面组件与查看权限，`utils/` 放辅助函数，`assets/` 引用窗口品牌资源，`i18n/` 保存当前引导页的中文文案。当前界面只提供中文；增加其他语言时需补齐所有页面文案，不能仅凭目录存在宣称已支持多语言。目录职责和新增文件放置规则见 [前端项目树规范](AGENTS.md#前端项目树规范)，各页面的位置和用途见 [启动引导页面目录](src/renderer/src/views/onboarding/README.md)与[工作台页面目录](src/renderer/src/views/workspace/README.md)。
-
-后端代码按账号权限、基础资料、采购、库存、销售、生产、财务和系统服务分类，`backend/app/main.py` 只负责应用生命周期与路由装配。目录职责和新增模块放置规则见 [后端项目树规范](AGENTS.md#后端项目树规范) 与 [后端说明](backend/README.md#代码目录)。
-
-仓库根目录的 `tsconfig.json` 为编辑器关联网页端和 Electron 端类型项目；命令行仍由 `npm run typecheck` 分别检查。页面重命名后，编辑器里仍打开的“已删除”旧标签可能继续显示 TS2307，应关闭旧标签并从文件树打开现用页面；现用页面的相对导入会在测试中检查。
-
-界面图标使用 [Remix Icon](https://icones.js.org/collection/ri)。在 Vue 组件中按需导入，例如 `import IconRefreshLine from '~icons/ri/refresh-line'`；构建时将 SVG 编入页面，运行时无需请求在线图标服务。
-
-品牌标志使用 `resources/nexora-nexus-aurora-logo.png`。需要重新生成 macOS、Windows 和托盘图标时，安装 Pillow 后运行 `python3 scripts/create-icons.py`；菜单栏托盘图标分别使用 16×16 的 `resources/tray.png` 和供高清屏选用的 32×32 `resources/tray@2x.png`，页面页眉与侧栏使用生成的 `resources/icon.png`。
-
-新增或修改前端界面时，请遵循 [前端 UI 开发规范](docs/frontend-ui-guidelines.md)。
-
-工作台各业务模块统一使用 `WorkspaceTable` 展示列表：青色 Nexora 标识、页面大标题和说明位于卡片外，卡片内将筛选与操作合并成工具栏，随后展示明细及空状态；窄窗口中条件自动换行，查询与功能按钮成组靠右。辅助列表保留各自标题；系统权限目录继续使用权限树，连接设置和成本录入保留表单。明暗主题与窄窗口横向滚动由公共组件统一处理。
-
-工作台页面按仓库、基础资料、采购、销售、财务、生产及系统分类；各页面地址与查看权限见 [工作台路由表](docs/workspace-routing.md)。
-
-完整财务、质量、售后、CRM 等后续模块的现状、候选顺序和进入条件见 [ERP 后续模块评估](docs/erp-expansion-assessment.md)；该文档不代表相应功能已实现。
-
-常用检查：
-
-```bash
-PYTHONPATH=backend python3 -m pytest backend/tests -q
-node --experimental-strip-types --test tests/backend.test.mjs
-node --test tests/branding.test.mjs
-node --experimental-strip-types --test tests/workspace-routes.test.mjs
-npm run build
-```
-
-## 内部安装包
-
-在 Apple Silicon Mac 上安装 PyInstaller 和后端依赖后运行 `npm run dist:mac`；在 Windows x64 上运行 `npm run dist:win`。两个平台都需先执行 `npm install`。打包时优先使用项目 `.venv` 中的 Python，没有虚拟环境才使用系统 Python；可用 `NEXORA_PYTHON` 显式指定。命令会先核对所选 Python 能导入服务端运行依赖，缺失时直接报错；须为该解释器安装 `backend/requirements-dev.txt` 和 PyInstaller 后重试。仓库中的 GitHub Actions 工作流可在 Windows 和 Apple 芯片 Mac 运行器上分别构建并上传内部测试安装包；Mac 流程还会从应用包中取出服务程序，检查当前用户域的后台启动和异常恢复。PyInstaller 必须在目标操作系统上分别构建服务程序。产物位于忽略 Git 的 `release/`。
-
-内部包尚未签名或公证，macOS Gatekeeper 或 Windows SmartScreen 可能提示开发者身份未验证。macOS 首次扫描可能要求授予本地网络权限；Windows 应允许应用在专用网络通信。mDNS 受路由器或防火墙限制时，可改用手动地址连接。系统服务可从设置使用当前安装包升级；升级前会在系统服务目录生成数据库与证书的成组备份。具体恢复步骤见 [后端说明](backend/README.md)。跨 Windows 与 macOS 的真实设备组合、无人登录开机启动和恢复演练仍需按 [实机验收清单](docs/lan-host-acceptance.md) 检查。
-
-## 安全与数据
-
-- 首位管理员只能从服务端电脑本机创建；后续用户和角色由管理员管理。业务接口在服务端校验权限。
-- 管理员可停用账号、重置密码并配置自定义角色的权限；修改密码后旧登录立即失效。系统始终保留至少一位启用的内置管理员。
-- 服务端为每个实例生成独立 HTTPS 证书，私钥保存在数据目录。使用成组备份命令保存 `nexora.db`、`server.crt` 和 `server.key`；丢失私钥会要求客户端重新核验身份。
-- 采购订单确认后可关联多张入库单，服务端按有效已确认入库量计算剩余数量并阻止超量。管理员可在原仓库存足够、且关联退货均已冲销时一次性冲销误确认入库，追加负库存与负应付更正，恢复订单可入库数量；旧入库流程继续可用。
-- 采购退货关联已确认入库明细；确认时重新核对累计可退量和原入库仓库库存，并记录负向库存流水。管理员可一次性冲销已确认退货，追加原仓正库存和正应付更正，原退货与流水保留，可退量和净入库恢复。未关联订单的历史入库无单价，金额仍显示待核对。
-- 财务管理中的应收应付、收付款记录、应收应付来源分别使用独立页面：应收应付保留汇总及订单核对，登记和冲销集中在收付款记录页，业务来源明细在来源页查看。原应收应付地址保留，三个页面共用服务端快照与现有财务权限。
-- 应收应付清单从已确认出库、入库及对应退货逐行计算，保留单据、物料、往来单位和确认人来源。按订单核对业务净额、收付款净额和未结金额；历史无价入库列为待核价，不计入已知应付总额。
-- 财务员可按订单登记客户收款、供应商付款及退货后的退款，保存外部参考号和操作人。金额超出未结或可退余额会被拒绝；录错的记录通过新冲销记录更正，原记录不删除。当前是手工登记，不会自动连接银行账户或确认资金实际到账。
-- 生产计划员可建立 BOM 草稿并启用版本；同一成品只允许一个启用版本，启用时阻止物料循环引用。工单创建时固定 BOM 版本、目标报工数量及组件需求。下达后可分批领料；退料更正按原领料明细核对累计可退量并回到原仓库。生产中的工单可分批报工，仓库员记录基础质检的合格与不合格数量；确认时核对累计报工目标和按比例应领组件，仅将合格成品入目标仓库。已用于报工的需料不能退回。管理员可按原因冲销已确认完工单，目标仓库库存足够时追加反向流水并恢复工单待报工量，原报工和质检记录保留。返工仍待实现。
-- 材料成本优先沿用领料发生时的库存移动平均单价；仅无库存价格时可人工核定单价。财务员按工单登记人工、制造费用；已确认退料减少净材料成本。全部报工后的工单可结算，将总成本按合格入库数量分摊到各完工批次，含不合格品消耗；尾分保证各批次金额合计与总额相等。结算保存材料、费用和分摊快照，成品库存及后续出库、生产领料自动沿用该成本。更正费用、完工或来源价格前须先冲销相关结算；后续工单已结算时须先冲销后续结算。尚无期间结账、正式销售成本或业务自动凭证，详见 [完工成本规则](docs/production-cost-settlement.md)。
-- 销售订单可分批出库；确认出库时在同一写事务中检查订单剩余数量和指定仓库的可用库存，记录带单据来源的负库存流水。管理员可按原因冲销误确认出库，在原仓追加正库存和负应收更正，并恢复订单可出库数量；有效销售退货须先冲销，原出库记录与流水保留。
-- 销售退货关联已确认出库明细；确认时重新核对累计可退量，在所选仓库记录正库存流水。管理员可在退回仓库存充足时一次性冲销已确认退货，追加负库存和正应收更正来源，原退货与流水保留，可退数量恢复。退货金额按原销售单价展示；实际退款需另行登记。
-- 一张入库单、调拨单或盘点单只允许确认一次。确认状态与库存流水在同一个事务中写入，当前库存可按仓库或全部仓库从流水汇总；调拨前检查来源仓库可用量。管理员可按原因冲销已确认调拨，原目标仓库存不足时拒绝，冲销另记双向反向流水。盘点在建单时保存账面量，确认前如有库存变化须重新盘点。管理员也可按原因冲销已确认盘点；冲销只追加反向差异流水，若盘盈已被消耗至库存不足则拒绝冲销。原单据及流水始终可查。
-- 切换服务端会退出当前账号；不同服务端的数据保持独立，不会自动合并。
-
-## English summary
-
-Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, user and role administration, approved purchase requests that can be split across purchase orders, purchase orders with partial goods receiving, warehouse-confirmed receipts, and linked returns, sales orders with partial shipments and linked returns, versioned production BOMs, work orders with partial material issues and linked returns, partial production completion reports with basic quality inspection, accepted-goods receipts, and audited reversals, inventory moving-weighted-average valuation, automatic material cost collection, finished-goods cost settlement with auditable allocations and reversals, a source-linked receivables/payables list, multi-warehouse stock, document-based other inbounds, transfers, stocktakes, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Packaged hosts use an OS service; remote clients require a live connection. Payment records are entered manually and reconciled to orders. Posted material returns restore stock to the original issue warehouse and adjust net issued quantity. Material costs use inventory issue prices with manual valuation only when inventory costs are unknown. Manual journals support independent approval, posting, and audited reversals; posted account ledgers and trial balance are available. Formal opening balances support first-time setup with independent approval and confirmation, and remain separate from current-period journal activity. Automatic business journal generation, period closing, formal cost of goods sold, and rework remain future work. Offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Cross-platform device acceptance remains pending.
-
-### 基础资料管理
-
-基础资料包含物料管理、供应商管理、客户资料和仓库管理。物料、供应商和仓库提供列表搜索及增删改；客户资料提供搜索与新增，从销售订单页独立出来。客户页沿用 `sales.view` 查看权限，新增要求 `customer.manage`；订单弹窗提供前往客户资料的入口，切换后保留订单草稿。供应商页可绑定、解绑现有物料，同一物料可由多家供应商供应；物料列表展示关联供应商。被业务记录引用的资料和默认主仓库不能删除。供货关系暂不包含报价、历史采购价格计算或采购选料限制；使用前需要同时升级并重启服务端。
-
-Windows 客户端不显示窗口内的默认菜单栏（File / Edit / View / Window），标题栏和窗口控制按钮保留；macOS 继续使用系统菜单。开发模式修改后需重启 `npm run dev`。
-
-仓库其他出库支持报废、样品及其他用途，确认后扣减库存，保留单据与流水，并支持冲销。
-
-采购退货提交后生成待仓库确认的出库单；出库确认时才扣库存并确认退货。
-
-库存总览与库存台账分开：台账支持按仓库、物料、日期和来源核对期初、逐笔变动及期末数量。
-
-独立库存调整单支持正负调整量，需异人审批和仓库确认，确认前不改变库存。
-
-基础采购与库存报表提供采购申请执行、订单执行、收退货、库存余额和收发存查询，支持 CSV 导出。
-
-供应商主列表支持服务端分页搜索：`POST /api/v1/suppliers/query` 接收 `query`、`page`（从 1 开始）与 `page_size`（1–100，默认 20），返回 `items`、筛选后 `total`、有效 `page` 和 `page_size`；查看仍要求 `inventory.view`。总数与分页统一显示在表格底部，可选每页 10/20/50/100 条，搜索回到首页，删除造成的越界页自动回退。查询失败提供重试入口，过期响应不覆盖新结果。原 GET 供应商接口仍供业务选项使用，其他列表及供货物料明细尚未改为服务端分页。客户端与服务端需同时升级。
+运行 `npm run docs:build` 生成可本地查看的 HTML 官网和双语开发文档。官网使用 GitHub Pages 发布配置，目前按要求暂不启用。安装包产物在 `release/`，尚未签名或公证；详细命令见开发文档。

@@ -1,0 +1,64 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { mkdtempSync, readFileSync, existsSync, readdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { resolve, dirname } from 'node:path'
+import { buildSite, renderMarkdown, resolveLink } from '../scripts/build-docs-site.mjs'
+import { mountScene, sceneAt, focusLayout } from '../docs/site/motion.mjs'
+
+test('双语页面和文档在 GitHub Pages 子路径下保持资源、语言、目录链接有效', () => {
+  const prefix = resolve(tmpdir(), 'nexora-docs-test-')
+  const output = mkdtempSync(prefix)
+  try {
+    buildSite(output)
+    for (const language of ['zh-CN', 'en']) {
+      for (const page of ['index.html', 'development.html']) {
+        const path = resolve(output, language, page)
+        const html = readFileSync(path, 'utf8')
+        assert.ok(html.includes(`<html lang="${language}">`))
+        assert.ok(html.includes(`../${language === 'en' ? 'zh-CN' : 'en'}/${page === 'index.html' ? './' : page}`))
+        assert.match(html, /<h1[ >]/)
+        assert.match(html, /scope="col"/)
+        if (page === 'index.html') {
+          const pauseButton = html.match(/<button[^>]*data-pause[^>]*>/)?.[0]
+          assert.ok(pauseButton)
+          assert.equal([...pauseButton.matchAll(/\bdata-pause(?=[ =])/g)].length, 1)
+          assert.match(pauseButton, /data-pause="[^\"]+"/)
+        }
+        for (const match of html.matchAll(/(?:href|src)="([^"#]+)(?:#([^" ]+))?"/g)) {
+          const href = match[1]
+          if (/^https?:/.test(href)) continue
+          const target = resolve(dirname(path), href, href.endsWith('/') ? 'index.html' : '')
+          assert.ok(existsSync(target), `${page}: ${href}`)
+          if (match[2]) assert.ok(readFileSync(target, 'utf8').includes(`id="${match[2]}"`), href)
+        }
+        for (const [, id] of html.matchAll(/href="#([^"]+)"/g)) assert.ok(html.includes(`id="${id}"`), id)
+      }
+    }
+    assert.equal(readdirSync(resolve(output, 'sources')).length, 4)
+    assert.ok(existsSync(resolve(output, 'assets/webgl-stage.mjs')))
+    const cn = readFileSync(resolve(output, 'zh-CN/development.html'), 'utf8')
+    const en = readFileSync(resolve(output, 'en/development.html'), 'utf8')
+    for (const text of ['dist:win', 'dist:mac', 'NEXORA_PYTHON', 'PAGES_ENABLED', '0a834fd']) {
+      assert.ok(cn.includes(text)); assert.ok(en.includes(text))
+    }
+    assert.equal([...cn.matchAll(/<h2 /g)].length, [...en.matchAll(/<h2 /g)].length)
+    assert.ok(!cn.includes('src="../assets/motion.mjs"'))
+  } finally {
+    // 只删除本测试创建的临时目录，校验绝对路径后执行清理。
+    assert.ok(output.startsWith(prefix))
+    rmSync(output, { recursive: true, force: true })
+  }
+})
+
+test('Markdown 使用真实仓库路径，拒绝可执行协议及越界链接，原始 HTML 不执行', () => {
+  assert.equal(resolveLink('../README.en.md', 'docs/development.zh-CN.md', 'zh-CN'), '../en/')
+  assert.match(resolveLink('ledger-foundation.md', 'docs/development.en.md', 'en'), /\/blob\/main\/docs\/ledger-foundation.md$/)
+  assert.match(resolveLink('docs/site/', 'README.md', 'zh-CN'), /\/tree\/main\/docs\/site\/$/)
+  for (const href of ['javascript:alert(1)', 'data:text/html,test', '//evil.example', '../../secret']) {
+    assert.throws(() => resolveLink(href, 'README.md', 'en'))
+  }
+  const rendered = renderMarkdown('# Title\n\n<script>alert(1)</script>\n\n## One\n\n## One', 'README.md', 'en')
+  assert.ok(!rendered.html.includes('<script>'))
+  assert.equal(new Set(rendered.headings.map(h => h.id)).size, 2)
+})
