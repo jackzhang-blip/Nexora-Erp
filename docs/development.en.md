@@ -2,7 +2,7 @@
 
 [简体中文](development.zh-CN.md) · [Project overview](../README.en.md)
 
-This guide covers setup, architecture, business boundaries, testing and building. Status reflects verified main commit `273a39f` on 2026-10-01, including merged manual journals. Bilingual documentation does not mean the application supports an English UI.
+This guide covers setup, architecture, business boundaries, testing and building. Status reflects verified main commit `0a834fd` on 2026-10-01, including merged manual journals and ledger reports. Bilingual documentation does not mean the application supports an English UI.
 
 ## Environment and startup
 
@@ -101,8 +101,11 @@ Put new APIs in their feature directory and assemble them in `main.py`, using ex
 | Operational finance | Sources produce receivables/payables and order balances; manual settlements/refunds have limits, reversals append inverse records. | Does not prove bank receipt; RMB scope, taxes/multiple currencies/opening balances remain. |
 | Ledger foundations | Flat account structures are fixed; inclusive periods cannot overlap. Name/activation changes carry versions, reasons and transactional auditing. | No auxiliary accounting, opening balances or closing. “Open” period records do not lock operations. |
 | Reports | Purchasing execution, receiving/returns, stock balances/movements and CSV. | Business summaries are not formal financial statements. Dashboard demo charts are not actual business metrics. |
+| Posted ledger reports | Trial balance, account ledgers, journal/reversal drill-down and snapshot CSV, counting posted journals only. | Opening amounts accumulate historical posted entries and do not represent formal opening-balance acceptance; no balance sheet or income statement. |
 
 See [cost settlement rules (Chinese)](production-cost-settlement.md), [ledger foundations (Chinese)](ledger-foundation.md) and [manual journals (Chinese)](manual-journals.md). Manual journals support balanced entries, independent review, posting and linked reversals, with fixed posted snapshots and auditing. Automatic business journals, closing, formal statements, quality/after-sales, CRM, equipment, HR, multiple organizations, MySQL and offline synchronization remain future work. Entry conditions are in the [expansion assessment (Chinese)](erp-expansion-assessment.md).
+
+Posted ledger query rules and source tracing are described in [posted ledger reports (Chinese)](ledger-reports.md).
 
 ## Connections, services and backups
 

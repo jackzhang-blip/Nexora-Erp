@@ -23,6 +23,7 @@
 | `sales/` | `SalesReturnsView.vue` | 处理销售退货 |
 | `finance/` | `ReceivablesPayablesView.vue` | 应收应付汇总及订单金额核对 |
 | `finance/` | `PaymentRecordsView.vue` | 独立查询、登记收付款及冲销，保留审计记录 |
+| `finance/` | `LedgerReportsView.vue` | 已过账科目明细、试算平衡、CSV 和凭证下钻 |
 | `finance/` | `FinancialSourcesView.vue` | 查看应收应付的业务来源明细 |
 | `finance/` | `InventoryValuationView.vue` | 查看移动平均库存金额、待核价来源和核价修订历史 |
 | `production/` | `ProductionBomsView.vue` | 管理生产 BOM 版本 |

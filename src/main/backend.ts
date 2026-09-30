@@ -237,6 +237,12 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
         body: { name: fields.name, version: fields.version, reason: fields.reason } }
     }
     case 'journals': return { method: 'GET', path: '/api/v1/finance/journals' }
+    case 'journalDetail': return { method: 'GET', path: `/api/v1/finance/journals/${positiveId(payload, 'id')}` }
+    case 'ledgerReportOptions': return { method: 'GET', path: '/api/v1/finance/ledger-reports/options' }
+    case 'queryLedgerReport': {
+      const { kind, from_date, to_date, account_id } = payload as ErpOperations['queryLedgerReport']['input']
+      return { method: 'POST', path: '/api/v1/finance/ledger-reports/query', body: { kind, from_date, to_date, account_id } }
+    }
     case 'journalOptions': return { method: 'GET', path: '/api/v1/finance/journals/options' }
     case 'journalChanges': return { method: 'GET', path: `/api/v1/finance/journals/${positiveId(payload, 'id')}/changes` }
     case 'createJournal': return { method: 'POST', path: '/api/v1/finance/journals', body: payload }
