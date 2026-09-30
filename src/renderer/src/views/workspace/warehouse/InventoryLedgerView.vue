@@ -54,8 +54,8 @@ onMounted(() => { void runLedgerQuery() })
         <label>开始日期<input v-model="ledgerQuery.from_date" type="date" /></label>
         <label>结束日期<input v-model="ledgerQuery.to_date" type="date" /></label>
         <label>来源<select v-model="ledgerQuery.source_type"><option :value="null">全部来源</option><option v-for="[key, label] in sourceOptions" :key="key" :value="key">{{ label }}</option></select></label>
-        <button class="primary" :disabled="busy || connectionLost" @click="runLedgerQuery">查询台账</button>
       </template>
+      <template #filterActions><button class="primary" :disabled="busy || connectionLost" @click="runLedgerQuery">查询台账</button></template>
       <template #cell-time="{ row: item }">{{ localTime(item.created_at) }}<small>{{ item.created_by_name }}</small></template>
       <template #cell-warehouse="{ row: item }">{{ item.warehouse_name }}</template>
       <template #cell-material="{ row: item }">{{ item.sku }} · {{ item.material_name }}</template>

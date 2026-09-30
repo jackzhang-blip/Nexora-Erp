@@ -3,6 +3,3 @@
 .catalog-editor { display: grid; gap: 16px; }
 .catalog-editor h3 { margin: 0; }
 .catalog-page .catalog-actions { display: flex; gap: 12px; flex-wrap: wrap; }
-/* 供货物料的说明、绑定表单和搜索保持原有的纵向顺序。 */
-.catalog-page .catalog-filter-content { display: grid; gap: 16px; width: 100%; }
-.catalog-page .catalog-filter-content > p { margin: 0; }

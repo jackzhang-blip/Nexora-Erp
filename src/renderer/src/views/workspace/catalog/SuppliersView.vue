@@ -63,8 +63,8 @@ async function submitBinding(): Promise<void> {
         <button v-if="can('catalog.manage')" class="primary" :disabled="busy || connectionLost" @click="edit()">新增供应商</button>
       </template>
       <template #filters>
-        <span class="muted">共 {{ suppliers.length }} 条</span>
         <label class="catalog-search">搜索供应商<input v-model="query" placeholder="输入名称搜索" /></label>
+        <span class="muted">共 {{ suppliers.length }} 条</span>
       </template>
       <template #beforeTable>
         <NModal v-model:show="showForm" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
@@ -90,14 +90,16 @@ async function submitBinding(): Promise<void> {
           </div></template>
       <template #empty>{{ query ? '没有匹配的供应商。' : '暂无供应商，请先新增。' }}</template>
     </WorkspaceTable>
-    <WorkspaceTable :data="boundMaterials" v-if="selectedSupplier" :title="`${selectedSupplier.name} · 供货物料`" :columns="materialColumns" :min-table-width="580">
+    <WorkspaceTable :data="boundMaterials" v-if="selectedSupplier" :title="`${selectedSupplier.name} · 供货物料`" description="绑定现有物料；同一物料可以同时绑定多家供应商。解绑只移除供货关系。" :columns="materialColumns" :min-table-width="580">
       <template #actions>
         <button v-if="can('catalog.manage')" class="primary" type="button" :disabled="busy || connectionLost" @click="bindOpen = true">绑定物料</button>
         <button class="text-button" type="button" @click="selectedId = 0">关闭</button>
       </template>
+      <!-- 辅助列表也使用同一工具栏，说明和弹窗不占用筛选条件区域。 -->
       <template #filters>
-        <div class="catalog-filter-content">
-          <p class="muted">绑定现有物料；同一物料可以同时绑定多家供应商。解绑只移除供货关系。</p>
+        <label class="catalog-search">搜索已绑定物料<input v-model="boundQuery" placeholder="物料编码、名称或规格" /></label>
+      </template>
+      <template #beforeTable>
           <NModal v-model:show="bindOpen" preset="card" title="绑定物料" :mask-closable="!busy" :style="{ width: 'min(760px, calc(100vw - 32px))' }">
           <form v-if="can('catalog.manage')" class="inline-form" @submit.prevent="submitBinding">
             <label>搜索可绑定物料<input v-model="materialQuery" placeholder="物料编码、名称或规格" /></label>
@@ -109,8 +111,6 @@ async function submitBinding(): Promise<void> {
             <span v-if="!availableMaterials.length" class="muted">没有匹配的未绑定物料，可先到物料管理添加。</span>
           </form>
           </NModal>
-          <label class="catalog-search">搜索已绑定物料<input v-model="boundQuery" placeholder="物料编码、名称或规格" /></label>
-        </div>
       </template>
       <template #cell-sku="{ row: item }">{{ item.sku }}</template>
       <template #cell-name="{ row: item }">{{ item.name }}</template>

@@ -43,8 +43,8 @@ onMounted(() => { void run() })
       <label>物料<select v-model.number="query.material_id"><option :value="null">全部物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label>
       <label v-if="query.kind !== 'inventory_balance'">开始日期<input v-model="query.from_date" type="date" /></label>
       <label>{{ query.kind === 'inventory_balance' ? '截至日期' : '结束日期' }}<input v-model="query.to_date" type="date" /></label>
-      <button class="primary" :disabled="busy || connectionLost" @click="run">查询</button>
     </template>
+    <template #filterActions><button class="primary" :disabled="busy || connectionLost" @click="run">查询</button></template>
     <template #empty>筛选范围内暂无记录。</template>
   </WorkspaceTable>
 </template>
