@@ -330,3 +330,24 @@ test('其他入库冲销只转发固定路径与原因', async (t) => {
   assert.deepEqual(JSON.parse(calls.at(-1).body), { reason: '误录' })
   await assert.rejects(callBackend('postOtherInbound', { inboundId: '../users' }), /记录编号无效/)
 })
+
+test('供应商分页通过桌面接口原样发送查询参数并保留分页元数据', async t => {
+  // 验证 IPC 到 HTTP 的契约，不依赖前端预览中的临时桥接。
+  const originalUrl = process.env.NEXORA_API_URL
+  t.after(() => {
+    if (originalUrl === undefined) delete process.env.NEXORA_API_URL
+    else process.env.NEXORA_API_URL = originalUrl
+  })
+  process.env.NEXORA_API_URL = 'http://127.0.0.1:8123'
+  const query = { query: '工厂', page: 2, page_size: 10 }
+  const result = { items: [{ id: 11, name: '工厂 11' }], total: 11, page: 2, page_size: 10 }
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url.pathname.endsWith('/login')) return Response.json({ token: 'test-token', user: { id: 1 } })
+    assert.equal(url.pathname, '/api/v1/suppliers/query')
+    assert.equal(options.method, 'POST')
+    assert.deepEqual(JSON.parse(options.body), query)
+    return Response.json(result)
+  })
+  await callBackend('login', {})
+  assert.deepEqual(await callBackend('querySuppliers', query), result)
+})

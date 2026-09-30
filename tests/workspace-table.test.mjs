@@ -71,6 +71,15 @@ test('公共表格加载真实 vxe 组件并渲染功能区、加载和空状态
   assert.match(actionsOnly, /新增/)
   assert.doesNotMatch(actionsOnly, /workspace-table-toolbar/)
 
+  // 页脚总数使用筛选后的服务端总数；空页仍显示分页并禁用前后翻页。
+  const paged = await render({ pagination: { page: 2, pageSize: 20, total: 45 } })
+  assert.match(paged, /共 <strong[^>]*>45<\/strong> 条/)
+  assert.match(paged, /aria-current="page"/)
+  assert.ok(paged.indexOf('workspace-pagination') > paged.indexOf('workspace-vxe-table'))
+  const zero = await render({ pagination: { page: 1, pageSize: 20, total: 0 } })
+  assert.match(zero, /disabled[^>]*aria-label="上一页"/)
+  assert.match(zero, /disabled[^>]*aria-label="下一页"/)
+
   const empty = await render({ data: [] })
   assert.match(empty, /没有匹配的资料/)
   assert.match(empty, /workspace-table-empty-icon/)

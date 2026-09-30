@@ -149,6 +149,8 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'supplierMaterials': return { method: 'GET', path: '/api/v1/supplier-materials' }
     case 'bindSupplierMaterial': return { method: 'PUT', path: `/api/v1/suppliers/${positiveId(payload, 'supplierId')}/materials/${positiveId(payload, 'materialId')}` }
     case 'unbindSupplierMaterial': return { method: 'DELETE', path: `/api/v1/suppliers/${positiveId(payload, 'supplierId')}/materials/${positiveId(payload, 'materialId')}` }
+    // 分页搜索经由受限 IPC 转发，权限和参数范围由服务端再次校验。
+    case 'querySuppliers': return { method: 'POST', path: '/api/v1/suppliers/query', body: payload }
     case 'suppliers': return { method: 'GET', path: '/api/v1/suppliers' }
     case 'createSupplier': return { method: 'POST', path: '/api/v1/suppliers', body: payload }
     case 'customers': return { method: 'GET', path: '/api/v1/customers' }

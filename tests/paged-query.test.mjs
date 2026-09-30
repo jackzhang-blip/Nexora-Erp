@@ -1,0 +1,57 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { effectScope } from 'vue'
+import { usePagedQuery } from '../src/renderer/src/composables/use-paged-query.ts'
+
+// 用可控请求验证乱序响应、失败重试与卸载，避免只验证模板文字。
+test('分页查询忽略旧响应，失败后可重试，并使用服务端纠正页码', async () => {
+  const pending = []
+  const scope = effectScope()
+  const state = scope.run(() => usePagedQuery(params => new Promise((resolve, reject) => pending.push({ params, resolve, reject }))))
+  try {
+    const old = state.load(2)
+    const current = state.load(3, 10)
+    pending[1].resolve({ items: [{ id: 20 }], total: 11, page: 2, page_size: 10 })
+    await current
+    pending[0].resolve({ items: [{ id: 1 }], total: 100, page: 2, page_size: 20 })
+    await old
+    assert.deepEqual(state.rows.value, [{ id: 20 }])
+    assert.equal(state.page.value, 2)
+    assert.equal(state.pageSize.value, 10)
+    const failed = state.load()
+    pending[2].reject(new Error('网络中断'))
+    await failed
+    assert.equal(state.error.value, '网络中断')
+    assert.equal(state.loading.value, false)
+    assert.deepEqual(state.rows.value, [])
+    const retry = state.load()
+    pending[3].resolve({ items: [], total: 0, page: 1, page_size: 10 })
+    await retry
+    assert.equal(state.error.value, '')
+    assert.equal(state.page.value, 1)
+    const disposed = state.load()
+    scope.stop()
+    pending[4].resolve({ items: [{ id: 99 }], total: 1, page: 1, page_size: 10 })
+    await disposed
+    assert.deepEqual(state.rows.value, [])
+  } finally { scope.stop() }
+})
+
+test('搜索防抖并回到第一页，输入变化立即拒绝旧结果', async () => {
+  const requests = []
+  const scope = effectScope()
+  const state = scope.run(() => usePagedQuery(params => new Promise(resolve => requests.push({ params, resolve }))))
+  try {
+    const old = state.load(4)
+    state.search(' 旧词 ')
+    state.search(' 新词 ')
+    requests[0].resolve({ items: [{ id: 9 }], total: 90, page: 4, page_size: 20 })
+    await old
+    assert.deepEqual(state.rows.value, [])
+    await new Promise(resolve => setTimeout(resolve, 300))
+    assert.equal(requests.length, 2)
+    assert.deepEqual(requests[1].params, { query: '新词', page: 1, page_size: 20 })
+    requests[1].resolve({ items: [], total: 0, page: 1, page_size: 20 })
+    await Promise.resolve()
+  } finally { scope.stop() }
+})

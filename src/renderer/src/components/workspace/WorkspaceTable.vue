@@ -11,6 +11,7 @@ import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import VxeColumn from 'vxe-table/es/column'
 import VxeTable from 'vxe-table/es/table'
 import 'vxe-table/es/table/style.css'
+import WorkspacePagination from './WorkspacePagination.vue'
 import { tableScrollbarMetrics } from '../../utils/table-scrollbar'
 
 interface WorkspaceTableColumn {
@@ -29,6 +30,8 @@ const props = withDefaults(defineProps<{
   emptyText?: string
   error?: string
   loading?: boolean
+  // 开启分页时只展示当前页数据，不在组件内切割完整数组。
+  pagination?: { page: number; pageSize: number; total: number; disabled?: boolean }
   minTableWidth?: number
 }>(), {
   showTitle: true,
@@ -40,6 +43,8 @@ const props = withDefaults(defineProps<{
   loading: false,
   minTableWidth: 580
 })
+
+const emit = defineEmits<{ pageChange: [page: number, pageSize: number] }>()
 
 const scrollContainer = ref<HTMLElement | null>(null)
 const scrollMax = ref(0)
@@ -155,7 +160,8 @@ defineSlots<{
     </div>
     <input v-if="scrollMax > 0" class="workspace-table-scrollbar" type="range" min="0" :max="scrollMax" :value="scrollPosition"
       :style="{ '--scroll-thumb-width': `${scrollThumbWidth}px` }" :aria-label="`${title}表格横向滚动`" @input="scrollFromControl" />
-    <footer v-if="$slots.footer" class="workspace-table-footer">
+    <footer v-if="pagination || $slots.footer" class="workspace-table-footer">
+      <WorkspacePagination v-if="pagination" v-bind="pagination" :disabled="loading || pagination.disabled" @change="(page, size) => emit('pageChange', page, size)" />
       <slot name="footer" />
     </footer>
   </section>

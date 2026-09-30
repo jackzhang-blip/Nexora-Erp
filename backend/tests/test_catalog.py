@@ -135,3 +135,43 @@ def test_v27_migration_preserves_existing_materials(client):
         assert db.execute("PRAGMA user_version").fetchone()[0] == 36
         assert db.execute("SELECT name FROM materials WHERE id = ?", (material,)).fetchone()[0] == "旧物料"
         assert db.execute("SELECT COUNT(*) FROM supplier_materials").fetchone()[0] == 0
+
+
+def test_supplier_pagination_search_and_deleted_last_page(client):
+    # 真实接口覆盖稳定分页、字面量搜索、空集和删除后的页码纠正。
+    ids = [create(client, "suppliers", {"name": f"供应商 {index:02}"}) for index in range(23)]
+    endpoint = "/api/v1/suppliers/query"
+    first = client.post(endpoint, json={"page": 1, "page_size": 10}).json()
+    second = client.post(endpoint, json={"page": 2, "page_size": 10}).json()
+    assert first["total"] == 23
+    assert len(first["items"]) == len(second["items"]) == 10
+    assert {item["id"] for item in first["items"]}.isdisjoint(item["id"] for item in second["items"])
+    filtered = client.post(endpoint, json={"query": " 供应商 2 ", "page_size": 10}).json()
+    assert filtered["total"] == 3
+    assert [item["id"] for item in filtered["items"]] == ids[20:]
+    for record in ids[20:]:
+        assert client.delete(f"/api/v1/suppliers/{record}").status_code == 204
+    last = client.post(endpoint, json={"page": 3, "page_size": 10}).json()
+    assert (last["page"], last["total"], len(last["items"])) == (2, 20, 10)
+    create(client, "suppliers", {"name": "A%_Company"})
+    literal = client.post(endpoint, json={"query": "%_company"}).json()
+    assert literal["total"] == 1
+    empty = client.post(endpoint, json={"query": "没有匹配", "page": 9}).json()
+    assert empty == {"items": [], "total": 0, "page": 1, "page_size": 20}
+    # 原选项接口保持数组结构，避免采购等表单只拿到第一页。
+    assert len(client.get('/api/v1/suppliers').json()) == 21
+
+
+@pytest.mark.parametrize("payload", [{"page": 0}, {"page": -1}, {"page_size": 0},
+                                     {"page_size": 101}, {"query": "字" * 121}])
+def test_supplier_pagination_rejects_invalid_bounds(client, payload):
+    assert client.post('/api/v1/suppliers/query', json=payload).status_code == 422
+
+
+def test_supplier_pagination_requires_permission(client):
+    create(client, "users", {"username": "finance", "password": "secure-pass-123", "roles": ["finance"]})
+    token = client.post('/api/v1/auth/login', json={"username": "finance", "password": "secure-pass-123"}).json()['token']
+    client.headers['Authorization'] = f'Bearer {token}'
+    assert client.post('/api/v1/suppliers/query', json={}).status_code == 403
+    client.headers.pop('Authorization')
+    assert client.post('/api/v1/suppliers/query', json={}).status_code == 401
