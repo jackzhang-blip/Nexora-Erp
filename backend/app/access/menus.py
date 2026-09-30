@@ -22,6 +22,8 @@ MENU_KEYS = {
     'route:finance',
     'route:financePayments',
     'route:financeSources',
+    'route:ledgerAccounts',
+    'route:accountingPeriods',
     'route:goodsReceipts',
     'route:home',
     'route:inventoryLedger',

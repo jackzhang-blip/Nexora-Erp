@@ -17,6 +17,8 @@
 | 销售管理 | 销售出库 | `#/workspace/shipments` | `sales.view` |
 | 销售管理 | 销售退货 | `#/workspace/sales-returns` | `sales.view` |
 | 财务管理 | 应收应付 | `#/workspace/finance` | `finance.view` |
+| 财务管理 | 总账科目 | `#/workspace/ledger-accounts` | `ledger_account.view`；维护要求 `ledger_account.manage` |
+| 财务管理 | 会计期间 | `#/workspace/accounting-periods` | `accounting_period.view`；维护要求 `accounting_period.manage` |
 | 财务管理 | 收付款记录 | `#/workspace/payment-records` | `finance.view`；登记、冲销分别要求 `finance.record`、`finance.reverse` |
 | 财务管理 | 应收应付来源 | `#/workspace/financial-sources` | `finance.view` |
 | 财务管理 | 库存计价 | `#/workspace/inventory-valuation` | `inventory_valuation.view` |

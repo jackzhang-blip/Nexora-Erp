@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 39:
+        if version > 40:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -1261,3 +1261,49 @@ def migrate() -> None:
                            [(role, code) for role in ('admin', 'finance')
                             for code in ('production_cost.settle', 'production_cost.reopen')])
             db.execute("PRAGMA user_version = 39")
+
+        if version < 40:
+            # 总账基础资料独立于业务往来余额；不猜测旧业务的科目或会计期间。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE ledger_accounts (
+                id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL CHECK (category IN ('asset','liability','equity','income','expense','cost')),
+                normal_balance TEXT NOT NULL CHECK (normal_balance IN ('debit','credit')),
+                is_active INTEGER NOT NULL CHECK (is_active IN (0,1)),
+                version INTEGER NOT NULL CHECK (version > 0),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.execute("""CREATE TABLE accounting_periods (
+                id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+                start_date TEXT NOT NULL, end_date TEXT NOT NULL CHECK (end_date >= start_date),
+                status TEXT NOT NULL CHECK (status IN ('open','closed')),
+                version INTEGER NOT NULL CHECK (version > 0),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            for table, source, key in (
+                ('ledger_account_changes', 'ledger_accounts', 'account_id'),
+                ('accounting_period_changes', 'accounting_periods', 'period_id'),
+            ):
+                db.execute(f"""CREATE TABLE {table} (
+                    id INTEGER PRIMARY KEY, {key} INTEGER NOT NULL REFERENCES {source}(id),
+                    before_json TEXT, after_json TEXT NOT NULL, reason TEXT NOT NULL,
+                    changed_by INTEGER NOT NULL REFERENCES users(id),
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )""")
+            groups = [('finance.ledger_accounts', '总账科目'), ('finance.accounting_periods', '会计期间')]
+            db.executemany("INSERT INTO permission_groups(code, label, parent_code, sort_order) VALUES (?, ?, 'finance', ?)",
+                           [(code, label, 50 + index) for index, (code, label) in enumerate(groups)])
+            operations = [
+                ('ledger_account.view', '查看总账科目', 'finance.ledger_accounts'),
+                ('ledger_account.manage', '维护总账科目', 'finance.ledger_accounts'),
+                ('accounting_period.view', '查看会计期间', 'finance.accounting_periods'),
+                ('accounting_period.manage', '维护会计期间', 'finance.accounting_periods'),
+            ]
+            db.executemany("INSERT INTO permissions(code, label, group_code) VALUES (?, ?, ?)", operations)
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, code) for role in ('admin', 'finance') for code, _, _ in operations])
+            db.execute("PRAGMA user_version = 40")

@@ -1,0 +1,5 @@
+.ledger-metadata-page .ledger-search { display: grid; gap: 8px; width: min(100%, 440px); }
+.ledger-metadata-page .ledger-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+/* 弹窗挂载到页面外，编辑器样式不依赖页面祖先。 */
+.ledger-editor { display: grid; gap: 16px; }
+.ledger-editor p { margin: 0; line-height: 1.6; }

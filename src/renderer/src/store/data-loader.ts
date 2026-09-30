@@ -25,6 +25,8 @@ export function createDataLoader(
     purchaseReturns,
     receivablesPayables,
     financeAccounts,
+    ledgerAccounts,
+    accountingPeriods,
     paymentRecords,
     boms,
     workOrders,
@@ -70,6 +72,9 @@ export function createDataLoader(
     if (!window.nexora || !user.value) return
     // 每次写操作后重新读取服务端权限；角色变化立即反映到当前页面。
     user.value = await window.nexora.callApi('me', undefined)
+    // 先清理已撤销查看授权的数据，避免其他模块读取失败留下旧的财务快照。
+    if (!can('ledger_account.view')) ledgerAccounts.value = []
+    if (!can('accounting_period.view')) accountingPeriods.value = []
     syncWorkspaceRoute()
     await loadPermissions()
     state.menuIcons.value = await window.nexora.callApi('menuIcons', undefined)
@@ -154,6 +159,10 @@ export function createDataLoader(
       financeAccounts.value = []
       paymentRecords.value = []
     }
+    ledgerAccounts.value = can('ledger_account.view')
+      ? await window.nexora.callApi('ledgerAccounts', undefined) : []
+    accountingPeriods.value = can('accounting_period.view')
+      ? await window.nexora.callApi('accountingPeriods', undefined) : []
     if (can('production.view')) {
       ;[
         boms.value,

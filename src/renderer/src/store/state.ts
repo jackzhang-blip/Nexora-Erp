@@ -4,6 +4,10 @@ import type {
   Bom,
   Customer,
   FinanceAccount,
+  LedgerAccount,
+  LedgerAccountInput,
+  AccountingPeriod,
+  AccountingPeriodInput,
   FinancialEntry,
   GoodsReceipt,
   InventoryCostInput,
@@ -94,6 +98,14 @@ export function createAppState() {
   const purchaseReturns = ref<PurchaseReturn[]>([])
   const receivablesPayables = ref<ReceivablesPayables | null>(null)
   const financeAccounts = ref<FinanceAccount[]>([])
+  const ledgerAccounts = ref<LedgerAccount[]>([])
+  const accountingPeriods = ref<AccountingPeriod[]>([])
+  const ledgerAccountForm = ref<LedgerAccountInput & { id: number | null; version: number; is_active: boolean }>({
+    id: null, version: 1, code: '', name: '', category: 'asset', normal_balance: 'debit', is_active: true, reason: ''
+  })
+  const accountingPeriodForm = ref<AccountingPeriodInput & { id: number | null; version: number }>({
+    id: null, version: 1, code: '', name: '', start_date: '', end_date: '', reason: ''
+  })
   const paymentRecords = ref<PaymentRecord[]>([])
   const boms = ref<Bom[]>([])
   const workOrders = ref<WorkOrder[]>([])
@@ -373,6 +385,10 @@ export function createAppState() {
     purchaseReturns,
     receivablesPayables,
     financeAccounts,
+    ledgerAccounts,
+    accountingPeriods,
+    ledgerAccountForm,
+    accountingPeriodForm,
     paymentRecords,
     boms,
     workOrders,
