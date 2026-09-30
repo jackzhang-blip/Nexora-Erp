@@ -47,3 +47,19 @@ def test_return_requires_warehouse_outbound_confirmation(monkeypatch, tmp_path):
         assert Decimal(client.get(f"{base}/stock?warehouse_id=1", headers=auth).json()[0]["quantity"]) == 1
         assert client.get(f"{base}/purchase-returns", headers=auth).json()[0]["status"] == "posted"
         assert client.post(f"{base}/purchase-returns/{return_id}/cancel", headers=auth).status_code == 409
+
+        # 取消一张新的待出库退货后释放原入库可退量，且不追加库存流水。
+        pending = client.post(f"{base}/purchase-returns", headers=auth, json={
+            **payload, "lines": [{"receipt_line_id": receipt["lines"][0]["id"], "quantity": "1"}]
+        }).json()["id"]
+        pending_outbound = client.post(f"{base}/purchase-returns/{pending}/submit",
+                                       headers=auth).json()["outbound_id"]
+        movement_count = len(client.get(f"{base}/movements", headers=auth).json())
+        assert client.post(f"{base}/purchase-returns/{pending}/cancel", headers=auth).status_code == 200
+        assert client.post(f"{base}/warehouse-outbounds/{pending_outbound}/post",
+                           headers=auth).status_code == 409
+        assert len(client.get(f"{base}/movements", headers=auth).json()) == movement_count
+        replacement = client.post(f"{base}/purchase-returns", headers=auth, json={
+            **payload, "lines": [{"receipt_line_id": receipt["lines"][0]["id"], "quantity": "1"}]
+        }).json()["id"]
+        assert client.post(f"{base}/purchase-returns/{replacement}/submit", headers=auth).status_code == 200

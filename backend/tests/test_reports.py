@@ -6,6 +6,7 @@ from io import StringIO
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.reports.routes import csv_value
 
 
 def test_report_csv_matches_filtered_rows(monkeypatch, tmp_path):
@@ -58,3 +59,5 @@ def test_report_csv_matches_filtered_rows(monkeypatch, tmp_path):
         assert flow["rows"][0]["closing"] == "3"
         assert client.post(f"{base}/reports/query", headers=admin, json={
             "kind": "stock_flow", "from_date": "2026-10-01", "to_date": "2026-09-30"}).status_code == 422
+        assert client.post(f"{base}/reports/query", json={"kind": "stock_flow"}).status_code == 401
+        assert csv_value("=HYPERLINK('unsafe')").startswith("'")
