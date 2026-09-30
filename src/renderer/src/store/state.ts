@@ -5,6 +5,8 @@ import type {
   FinanceAccount,
   FinancialEntry,
   GoodsReceipt,
+  InventoryCostInput,
+  InventoryValuationReport,
   LedgerResult,
   LedgerQuery,
   Material,
@@ -67,6 +69,9 @@ export function createAppState() {
   const supplierMaterials = ref<SupplierMaterial[]>([])
   const suppliers = ref<Supplier[]>([])
   const stock = ref<Stock[]>([])
+  const inventoryValuation = ref<InventoryValuationReport | null>(null)
+  const inventoryCostInputs = ref<InventoryCostInput[]>([])
+  const inventoryCostForm = ref({ movement_id: 0, unit_cost: '', reference: '', reason: '' })
   const movements = ref<Movement[]>([])
   const ledgerResult = ref<LedgerResult>({ groups: [], rows: [] })
   const stockAdjustments = ref<StockAdjustment[]>([])
@@ -341,6 +346,9 @@ export function createAppState() {
     suppliers,
     supplierMaterials,
     stock,
+    inventoryValuation,
+    inventoryCostInputs,
+    inventoryCostForm,
     movements,
     ledgerResult,
     stockAdjustments,

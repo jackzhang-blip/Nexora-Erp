@@ -92,6 +92,40 @@ export interface StockAdjustment {
   lines: ReceiptLine[]
 }
 export interface Stock extends Material { quantity: string }
+export interface InventoryValuationMovement {
+  id: number
+  warehouse_id: number
+  material_id: number
+  quantity: string
+  source_type: string
+  source_id: number
+  source_line_id: number
+  created_at: string
+  unit_cost: string | null
+  amount: string | null
+  cost_source: 'purchase_order' | 'manual' | 'linked_movement' | 'moving_average' | 'unpriced'
+  cost_input_id: number | null
+}
+export interface InventoryValuationReport {
+  currency: 'CNY'
+  method: 'moving_weighted_average'
+  scope: 'company'
+  total_amount: string | null
+  materials: (Material & { quantity: string; amount: string | null;
+    average_unit_cost: string | null })[]
+  movements: InventoryValuationMovement[]
+  unpriced_movement_ids: number[]
+}
+export interface InventoryCostInput {
+  id: number
+  movement_id: number
+  unit_cost: string
+  reference: string
+  reason: string
+  created_by: number
+  created_by_name: string
+  created_at: string
+}
 export interface ReceiptLine {
   id: number
   material_id: number
@@ -854,6 +888,10 @@ export interface ErpOperations {
   cancelStocktake: { input: { stocktakeId: number }; output: Stocktake }
   reverseStocktake: { input: { stocktakeId: number; reason: string }; output: Stocktake }
   stock: { input: { warehouseId?: number } | undefined; output: Stock[] }
+  inventoryValuation: { input: undefined; output: InventoryValuationReport }
+  inventoryCostInputs: { input: undefined; output: InventoryCostInput[] }
+  recordInventoryCost: { input: { movement_id: number; unit_cost: string;
+    reference: string; reason: string }; output: InventoryCostInput }
   movements: { input: undefined; output: Movement[] }
   inventoryLedger: { input: LedgerQuery; output: LedgerResult }
   queryReport: { input: ReportQuery; output: ReportResult }

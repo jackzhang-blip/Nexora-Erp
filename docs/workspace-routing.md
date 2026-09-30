@@ -16,6 +16,7 @@
 | 销售管理 | 销售出库 | `#/workspace/shipments` | `sales.view` |
 | 销售管理 | 销售退货 | `#/workspace/sales-returns` | `sales.view` |
 | 财务管理 | 应收应付 | `#/workspace/finance` | `finance.view` |
+| 财务管理 | 库存计价 | `#/workspace/inventory-valuation` | `inventory_valuation.view` |
 | 生产管理 | 生产 BOM | `#/workspace/boms` | `production.view` |
 | 生产管理 | 生产工单 | `#/workspace/work-orders` | `production.view` |
 | 生产管理 | 生产领料 | `#/workspace/material-issues` | `production.view` |
