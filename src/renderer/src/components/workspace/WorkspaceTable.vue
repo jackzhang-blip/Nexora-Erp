@@ -212,8 +212,20 @@ defineSlots<{
 /* 表头与内容共用列内边距，首列再多留一点空间，避免标题贴住表格边框。 */
 .workspace-vxe-table :is(.vxe-header--column, .vxe-body--column) > .vxe-cell { padding-inline: 14px; }
 .workspace-vxe-table :is(.vxe-header--column, .vxe-body--column):first-child > .vxe-cell { padding-left: 18px; }
+/* 数据行保留上下留白，表单和多行明细不会贴着分隔线。 */
+.workspace-vxe-table .vxe-body--column > .vxe-cell { padding-block: 12px; }
 /* 单号下的状态、创建人与备注各占一行，避免明细挤成难以扫描的一段文字。 */
 .workspace-vxe-table .vxe-body--column .vxe-cell small { display: block; margin: 4px 0 0; line-height: 1.5; }
+/* 明细逐条排布；行内表单保持纵向阅读，长文本不会撑破固定列宽。 */
+.workspace-vxe-table .workspace-record-lines { display: grid; gap: 8px; }
+.workspace-vxe-table .workspace-record-lines > span + span { padding-top: 8px; border-top: 1px solid var(--vxe-ui-table-border-color); }
+.workspace-vxe-table .vxe-body--column .muted { margin: 6px 0 0; line-height: 1.6; }
+.workspace-vxe-table .vxe-body--column .inline-form { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin-top: 10px; }
+.workspace-vxe-table .vxe-body--column .inline-form { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+.workspace-vxe-table .vxe-body--column .inline-form label { min-width: 0; }
+.workspace-vxe-table .vxe-body--column .form-actions { flex-wrap: wrap; justify-content: flex-start; gap: 8px; margin: 0; }
+.workspace-vxe-table .vxe-body--column button { white-space: nowrap; }
+.workspace-vxe-table .vxe-body--column :is(input,select) { min-width: 0; max-width: 100%; }
 /* 数据表的列标题承担定位作用，提高字号与字重，避免浅色背景上难以辨认。 */
 .workspace-vxe-table .vxe-header--column > .vxe-cell { color: #38516a; font-size: 13px; font-weight: 700; }
 /* 空状态占据完整表格宽度，避免窄小的默认占位字落在第一行下面。 */

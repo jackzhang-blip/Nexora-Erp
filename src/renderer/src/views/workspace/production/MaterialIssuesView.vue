@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
+import { recordColumns, matchesRecordQuery } from '../../../utils/workspace-records'
+import { computed, ref } from 'vue'
 import { NModal } from 'naive-ui'
 import { useAppStore } from '../../../store/app-store'
 import { submitCreateDialog } from '../../../utils/create-dialog'
@@ -28,11 +30,23 @@ const createOpen = ref(false)
 async function submitCreate(): Promise<void> {
   await submitCreateDialog(createMaterialIssue, { busy, error, notice }, createOpen)
 }
+// 只筛选当前列表快照，原有单据状态与跨页面草稿保持不变。
+const recordQuery = ref('')
+const filteredRecords = computed(() =>
+  materialIssues.value.filter((item) =>
+    matchesRecordQuery(recordQuery.value, [
+      item.id,
+      item.warehouse_name,
+      item.created_by_name,
+      item.reference,
+      ...item.lines.map((line) => line.material_name)
+    ])
+  )
+)
 </script>
 
 <template>
   <section class="stack">
-    <div class="form-actions"><button v-if="can('material_issue.create')" class="primary" type="button" :disabled="busy" @click="createOpen = true">新建领料单</button></div>
     <NModal v-if="can('material_issue.create')" v-model:show="createOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
       <div class="section-heading">
         <div>
@@ -140,74 +154,100 @@ async function submitCreate(): Promise<void> {
         </button>
       </form>
     </NModal>
-    <div class="card">
-      <div class="section-heading">
+    <!-- 主标题由工作台提供，列表复用仓库管理的筛选区、状态和单元格布局。 -->
+    <WorkspaceTable
+      :show-title="false"
+      title="生产领料"
+      :data="filteredRecords"
+      :columns="recordColumns"
+      :min-table-width="1100"
+    >
+      <template #actions>
+        <button
+          v-if="can('material_issue.create')"
+          class="primary"
+          type="button"
+          :disabled="busy"
+          @click="createOpen = true"
+        >
+          新建领料单
+        </button>
+      </template>
+      <template #filters>
+        <label>
+          搜索生产领料
+          <input v-model="recordQuery" placeholder="单号、名称或物料" />
+        </label>
+      </template>
+
+      <template #cell-document="{ row: item }">
         <div>
-          <p class="eyebrow">ISSUE HISTORY</p>
-          <h2>领料记录</h2>
+          <strong>#{{ item.id }} · 工单 #{{ item.work_order_id }} · {{ item.warehouse_name }}</strong>
+          <p class="muted">
+            {{ localTime(item.created_at) }} · 创建人
+            {{ item.created_by_name }}
+            <span v-if="item.reference">· {{ item.reference }}</span>
+          </p>
         </div>
-      </div>
-      <div v-if="!materialIssues.length" class="muted">暂无领料单。</div>
-      <article v-for="item in materialIssues" :key="item.id" class="receipt">
-        <div class="receipt-head">
-          <div>
-            <strong
-              >#{{ item.id }} · 工单 #{{ item.work_order_id }} ·
-              {{ item.warehouse_name }}</strong
-            >
-            <p class="muted">
-              {{ localTime(item.created_at) }} · 创建人
-              {{ item.created_by_name }}
-              <span v-if="item.reference">· {{ item.reference }}</span>
-            </p>
-          </div>
-          <div class="receipt-actions">
-            <span class="pill" :class="item.status">{{
-              { draft: '草稿', posted: '已确认', cancelled: '已取消' }[
-                item.status
-              ]
-            }}</span
-            ><button
-              v-if="item.status === 'draft' && can('material_issue.post')"
-              class="primary small"
-              type="button"
-              :disabled="busy"
-              @click="postMaterialIssue(item.id)"
-            >
-              确认领料</button
-            ><button
-              v-if="item.status === 'draft' && can('material_issue.cancel')"
-              class="secondary small"
-              type="button"
-              :disabled="busy"
-              @click="cancelMaterialIssue(item.id)"
-            >
-              取消</button
-            ><button
-              v-if="
-                item.status === 'posted' &&
-                item.lines.some(
-                  (line) => Number(line.returnable_quantity) > 0
-                ) &&
-                can('material_return.create')
-              "
-              class="secondary small"
-              type="button"
-              :disabled="busy"
-              @click="selectReturnIssue(item.id)"
-            >
-              创建退料单
-            </button>
-          </div>
+      </template>
+      <template #cell-status="{ row: item }">
+        <span class="pill" :class="item.status">
+          {{ { draft: '草稿', posted: '已确认', cancelled: '已取消' }[item.status] }}
+        </span>
+      </template>
+      <template #cell-details="{ row: item }">
+        <div class="workspace-record-lines">
+          <span v-for="line in item.lines" :key="line.id">
+            {{ line.material_name }} · 已领 {{ line.quantity }} · 已退 {{ line.returned_quantity }} ·
+            可退 {{ line.returnable_quantity }} {{ line.unit }}
+          </span>
         </div>
-        <div class="receipt-lines">
-          <span v-for="line in item.lines" :key="line.id"
-            >{{ line.material_name }} · 已领 {{ line.quantity }} · 已退
-            {{ line.returned_quantity }} · 可退 {{ line.returnable_quantity }}
-            {{ line.unit }}</span
+      </template>
+      <template #cell-actions="{ row: item }">
+        <div class="form-actions">
+          <button
+            v-if="item.status === 'draft' && can('material_issue.post')"
+            class="primary small"
+            type="button"
+            :disabled="busy"
+            @click="postMaterialIssue(item.id)"
           >
+            确认领料
+          </button>
+          <button
+            v-if="item.status === 'draft' && can('material_issue.cancel')"
+            class="secondary small"
+            type="button"
+            :disabled="busy"
+            @click="cancelMaterialIssue(item.id)"
+          >
+            取消
+          </button>
+          <button
+            v-if="
+              item.status === 'posted' &&
+              item.lines.some((line) => Number(line.returnable_quantity) > 0) &&
+              can('material_return.create')
+            "
+            class="secondary small"
+            type="button"
+            :disabled="busy"
+            @click="selectReturnIssue(item.id)"
+          >
+            创建退料单
+          </button>
         </div>
-      </article>
-    </div>
+      </template>
+      <template #empty>
+        <strong>{{ recordQuery ? '没有匹配的记录' : '暂无生产领料记录' }}</strong>
+        <span>
+          {{
+            recordQuery
+              ? '可调整单号、名称或物料关键词后重新搜索。'
+              : '业务记录生成后，可在这里查看明细与处理状态。'
+          }}
+        </span>
+      </template>
+    </WorkspaceTable>
   </section>
 </template>

@@ -56,9 +56,9 @@ async function submitRole(): Promise<void> {
 
 <template>
   <section class="stack">
-    <WorkspaceTable :data="visibleRoles"
+    <WorkspaceTable :show-title="false" :data="visibleRoles"
       title="职务与权限"
-      description="新增职务后可按模块、单据和操作分别授权；内置职务仅供查看。"
+
       :columns="roleColumns"
       empty-text="没有符合条件的职务"
     >

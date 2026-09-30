@@ -1,0 +1,103 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { createSSRApp, h } from 'vue'
+import { renderToString } from '@vue/server-renderer'
+import { createServer } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { matchesRecordQuery } from '../src/renderer/src/utils/workspace-records.ts'
+import { workspacePageDescriptions } from '../src/renderer/src/utils/workspace-page-copy.ts'
+import { workspaceRoutes } from '../src/renderer/src/router/workspace-routes.ts'
+
+test('所有业务页具备卡片外说明，搜索兼容空关键词、编号和空字段', () => {
+  for (const route of workspaceRoutes.filter(route => route.key !== 'home')) {
+    assert.ok(workspacePageDescriptions[route.key]?.trim(), route.key)
+  }
+  assert.equal(matchesRecordQuery('   ', []), true)
+  assert.equal(matchesRecordQuery(' mat-01 ', [null, undefined, 'MAT-01', '铝材']), true)
+  assert.equal(matchesRecordQuery('71', [71]), true)
+  assert.equal(matchesRecordQuery('不存在', ['铝材']), false)
+  assert.equal(matchesRecordQuery('undefined', [undefined]), false)
+})
+
+// 展开真实业务插槽，验证换成表格后仍遵循状态、权限和当前账号保护规则。
+const storeModule = `
+import {ref} from 'vue'
+export const permissions = new Set()
+export const state = {
+  busy:ref(false), error:ref(''), notice:ref(''), user:ref({id:1}), activeTab:ref('finance'),
+  roles:ref([{code:'admin',label:'管理员'}]), users:ref([{id:1,username:'当前账号',is_active:true,roles:['admin']},{id:2,username:'其他账号',is_active:true,roles:['admin']}]),
+  roleDrafts:ref({1:['admin'],2:['admin']}), resetPasswords:ref({1:'sample-password-1',2:'sample-password-2'}), newUser:ref({roles:[]}),
+  financeAccounts:ref([]), paymentForm:ref({kind:'receivable'}), reversalReasons:ref({}),
+  receivablesPayables:ref({receivable_amount:'100',payable_amount:'0',unpriced_count:0,entries:[]}),
+  paymentRecords:ref([{id:1,action:'settlement',party_name:'客户A',amount:'100'},{id:2,action:'settlement',party_name:'客户B',amount:'20'},{id:3,action:'reversal',reverses_id:2,amount:'-20'}]),
+  workOrders:ref([]), completionForm:ref({}), selectedCompletionOrder:ref(null), completionReversalReasons:ref({}),
+  productionCompletions:ref(['draft','inspected','posted','reversed','cancelled'].map((status,i)=>({id:i+1,status,product_name:'测试成品',reported_quantity:'5',accepted_quantity:status==='draft'?null:'4',rejected_quantity:status==='draft'?null:'1'}))),
+  inspectionDrafts:ref({1:{accepted_quantity:'4',qc_note:'测试质检'}}),
+  productionCostReport:ref({orders:[{work_order_id:1,product_name:'待核价成品',work_order_status:'released',known_material_amount:'0',labor_amount:'0',overhead_amount:'0',total_amount:null,unpriced_issue_count:1}],entries:[{id:1,kind:'labor',status:'active',current_amount:'20'},{id:2,kind:'material',status:'reversed',current_amount:null,reversal_id:3,reversal_reason:'重复核价',material_name:'铝材'}],unpriced_lines:[]}),
+  materialValuationForm:ref({}), productionChargeForm:ref({}), costReversalReasons:ref({}),
+  can:p=>permissions.has(p), localTime:v=>v, paymentActionLabel:item=>item.action==='reversal'?'冲销':'收款', financialSource:()=>''
+}
+export const useAppStore=()=>state
+`
+const tableModule = `
+import {defineComponent,h} from 'vue'
+export default defineComponent({props:['data','columns'],setup(props,{slots}) {
+ return ()=>h('section',[slots.actions?.(),slots.filters?.(),slots.beforeTable?.(),...props.data.map(row=>h('article',{'data-id':row.id},props.columns.map(col=>slots['cell-'+col.key]?.({row})))),props.data.length?null:slots.empty?.()])
+}})
+`
+
+test('财务冲销、生产质检与账号操作在表格迁移后保留原权限和状态限制', async t => {
+  const server = await createServer({configFile:false,plugins:[{
+    name:'record-view-fixtures', enforce:'pre',
+    resolveId(id,importer) {
+      if(!importer?.includes('/views/workspace/')) return
+      if(id.endsWith('/store/app-store')) return '\0record-view-store'
+      if(id.endsWith('/WorkspaceTable.vue')) return '\0record-view-table'
+    },
+    load(id) {
+      if(id==='\0record-view-store') return storeModule
+      if(id==='\0record-view-table') return tableModule
+    }
+  },vue()],optimizeDeps:{noDiscovery:true,include:[]},server:{middlewareMode:true,hmr:false},appType:'custom'})
+  t.after(()=>server.close())
+  const {state,permissions}=await server.ssrLoadModule('\0record-view-store')
+  const render = async file => {
+    const {default:View}=await server.ssrLoadModule('/src/renderer/src/views/workspace/'+file)
+    return renderToString(createSSRApp({render:()=>h(View)}))
+  }
+  const buttons = html => [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)].map(m=>({disabled:m[1].includes('disabled'),label:m[2].trim()}))
+  const finance='finance/ReceivablesPayablesView.vue'
+  assert.doesNotMatch(await render(finance),/冲销此记录/)
+  permissions.add('finance.reverse')
+  assert.equal(buttons(await render(finance)).filter(b=>b.label==='冲销此记录').length,1)
+  // 已有反向记录时不允许再次冲销，判断依据始终是完整记录集。
+  state.paymentRecords.value.push({id:4,action:'reversal',reverses_id:1})
+  assert.equal(buttons(await render(finance)).filter(b=>b.label==='冲销此记录').length,0)
+
+  const completions='production/ProductionCompletionsView.vue'
+  assert.doesNotMatch(await render(completions),/记录质检结果|确认合格品入库|冲销已确认完工/)
+  for(const p of ['inspect','post','cancel','reverse']) permissions.add('production_completion.'+p)
+  const completionHtml=await render(completions)
+  for(const label of ['记录质检结果','确认合格品入库','冲销已确认完工']) {
+    assert.equal(buttons(completionHtml).filter(b=>b.label===label).length,1,label)
+  }
+  assert.equal(buttons(completionHtml).filter(b=>b.label==='取消').length,2)
+  assert.match(completionHtml,/max="5"/)
+  assert.match(completionHtml,/required maxlength="200"/)
+
+  const costs='production/ProductionCostsView.vue'
+  permissions.add('production_cost.reverse')
+  const costHtml=await render(costs)
+  assert.match(costHtml,/总成本\s*待核价/)
+  assert.match(costHtml,/重复核价/)
+  assert.equal(buttons(costHtml).filter(b=>b.label==='冲销记录').length,1)
+
+  const users='system/UserManagementView.vue'
+  const userButtons=buttons(await render(users))
+  for(const label of ['重置密码','停用账号']) assert.deepEqual(userButtons.filter(b=>b.label===label).map(b=>b.disabled),[true,false])
+  state.resetPasswords.value[2]='short'
+  assert.ok(buttons(await render(users)).filter(b=>b.label==='重置密码').every(b=>b.disabled))
+  state.busy.value=true
+  assert.ok(buttons(await render(completions)).every(b=>b.disabled))
+  assert.ok(buttons(await render(users)).every(b=>b.disabled))
+})

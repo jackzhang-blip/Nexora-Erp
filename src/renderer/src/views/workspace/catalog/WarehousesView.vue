@@ -33,14 +33,13 @@ async function save(): Promise<void> {
 
 <template>
   <section class="stack catalog-page">
-    <WorkspaceTable :data="filtered" title="仓库列表" :columns="columns" :min-table-width="440">
-      <template #heading>
-        <p class="eyebrow">WAREHOUSES</p><h2>仓库列表 <span class="pill">{{ warehouses.length }}</span></h2>
-      </template>
+    <!-- 主标题和说明统一由工作台外壳展示。 -->
+    <WorkspaceTable :show-title="false" :data="filtered" title="仓库列表" :columns="columns" :min-table-width="440">
       <template #actions>
         <button v-if="can('warehouse.manage')" class="primary" :disabled="busy || connectionLost" @click="edit()">新增仓库</button>
       </template>
       <template #filters>
+        <span class="muted">共 {{ warehouses.length }} 条</span>
         <label class="catalog-search">搜索仓库<input v-model="query" placeholder="输入名称或编码搜索" /></label>
       </template>
       <template #beforeTable>
@@ -54,7 +53,7 @@ async function save(): Promise<void> {
           <div class="form-actions"><button class="primary" :disabled="busy || connectionLost">保存</button><button class="secondary" type="button" :disabled="busy" @click="showForm = false">取消</button></div>
         </form>
         </NModal>
-        <p class="muted">默认主仓库以及已被业务单据引用的仓库不能删除。</p>
+
       </template>
       <template #cell-code="{ row: item }">{{ item.code }}</template>
       <template #cell-name="{ row: item }">{{ item.name }}</template>

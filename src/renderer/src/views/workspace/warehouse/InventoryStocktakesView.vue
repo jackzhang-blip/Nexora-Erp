@@ -127,7 +127,7 @@ async function submitCreate(): Promise<void> {
       </form>
     </NModal>
     <!-- 单据列表与台账共用表格，原有权限检查和冲销明细完整保留。 -->
-    <WorkspaceTable :show-title="false" title="库存盘点" description="核对账面与实盘数量，确认差异后更新库存；库存变化时需重新盘点。"
+    <WorkspaceTable :show-title="false" title="库存盘点"
       :columns="columns" :data="filtered" :min-table-width="1050">
       <template #actions>
         <button v-if="can('stocktake.create')" class="primary" type="button" :disabled="busy || connectionLost" @click="createOpen = true">新建盘点单</button>

@@ -39,14 +39,13 @@ function supplierNames(id: number): string {
 
 <template>
   <section class="stack catalog-page">
-    <WorkspaceTable title="物料列表" :columns="columns" :data="filtered" :min-table-width="680">
-      <template #heading>
-        <p class="eyebrow">MATERIALS</p><h2>物料列表 <span class="pill">{{ materials.length }}</span></h2>
-      </template>
+    <!-- 主标题和说明统一由工作台外壳展示。 -->
+    <WorkspaceTable :show-title="false" title="物料列表" :columns="columns" :data="filtered" :min-table-width="680">
       <template #actions>
         <button v-if="can('catalog.manage')" class="primary" :disabled="busy || connectionLost" @click="edit()">新增物料</button>
       </template>
       <template #filters>
+        <span class="muted">共 {{ materials.length }} 条</span>
         <label class="catalog-search">搜索物料<input v-model="query" placeholder="输入名称或编码搜索" /></label>
       </template>
       <template #beforeTable>
@@ -61,7 +60,7 @@ function supplierNames(id: number): string {
           <div class="form-actions"><button class="primary" :disabled="busy || connectionLost">保存</button><button class="secondary" type="button" :disabled="busy" @click="showForm = false">取消</button></div>
         </form>
         </NModal>
-        <p class="muted">请按规格建立独立物料编码，同一规格无需为不同供应商重复建档。</p>
+
       </template>
       <template #cell-suppliers="{ row }">{{ supplierNames(row.id) }}</template>
       <template #cell-actions="{ row }">

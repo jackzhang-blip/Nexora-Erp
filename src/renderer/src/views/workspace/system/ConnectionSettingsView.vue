@@ -21,7 +21,6 @@ const {
     <div class="card">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">CONNECTION</p>
           <h2>当前连接</h2>
         </div>
       </div>
@@ -46,7 +45,6 @@ const {
     <div class="card">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">ACCOUNT</p>
           <h2>修改我的密码</h2>
         </div>
       </div>
@@ -76,7 +74,6 @@ const {
     <div v-if="host.configured" class="card">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">LOCAL HOST</p>
           <h2>本机服务</h2>
         </div>
         <span class="pill" :class="{ posted: host.running }">{{

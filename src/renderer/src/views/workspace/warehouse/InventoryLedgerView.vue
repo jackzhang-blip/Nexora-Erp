@@ -46,7 +46,7 @@ onMounted(() => { void runLedgerQuery() })
 
 <template>
   <section class="stack">
-    <WorkspaceTable :show-title="false" :data="ledgerResult.rows" title="库存台账" description="按仓库和物料核对期初、每笔变动及期末。选择来源后显示该来源范围内的累计数量。"
+    <WorkspaceTable :show-title="false" :data="ledgerResult.rows" title="库存台账"
       :columns="columns" :error="ledgerError" :loading="busy" :min-table-width="1000">
       <template #filters>
         <label>仓库<select v-model.number="ledgerQuery.warehouse_id"><option :value="null">全部仓库</option><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>

@@ -135,7 +135,7 @@ async function submitCreate(): Promise<void> {
       </form>
     </NModal>
     <!-- 单据列表与台账共用表格，原有权限检查和冲销明细完整保留。 -->
-    <WorkspaceTable :show-title="false" title="仓库调拨" description="在仓库之间调拨物料，确认后同时更新来源仓库与目标仓库的库存。"
+    <WorkspaceTable :show-title="false" title="仓库调拨"
       :columns="columns" :data="filtered" :min-table-width="1050">
       <template #actions>
         <button v-if="can('transfer.create')" class="primary" type="button" :disabled="busy || connectionLost" @click="createOpen = true">新建调拨单</button>

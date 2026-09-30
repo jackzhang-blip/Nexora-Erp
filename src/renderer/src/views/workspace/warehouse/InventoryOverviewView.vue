@@ -20,7 +20,7 @@ const columns = [{ key: 'sku', title: '物料编码' }, { key: 'name', title: '�
 
 <template>
   <section class="stack">
-    <WorkspaceTable :show-title="false" title="库存总览" description="按仓库查看物料当前库存，数量随已确认的出入库单据更新。" :columns="columns" :data="stock">
+    <WorkspaceTable :show-title="false" title="库存总览" :columns="columns" :data="stock">
       <template #filters>
         <label>仓库<select v-model.number="selectedWarehouseId" :disabled="busy" @change="perform(refreshData, '库存已切换。')">
           <option :value="0">全部仓库</option>
