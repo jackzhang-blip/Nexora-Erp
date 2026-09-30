@@ -13,6 +13,7 @@ const workspaceRouteComponents = {
   inventoryLedger: () => import('../views/workspace/warehouse/InventoryLedgerView.vue'),
   transfers: () => import('../views/workspace/warehouse/WarehouseTransfersView.vue'),
   stocktakes: () => import('../views/workspace/warehouse/InventoryStocktakesView.vue'),
+  stockAdjustments: () => import('../views/workspace/warehouse/InventoryAdjustmentsView.vue'),
   catalog: () => import('../views/workspace/catalog/MaterialsView.vue'),
   suppliers: () => import('../views/workspace/catalog/SuppliersView.vue'),
   warehouses: () => import('../views/workspace/catalog/WarehousesView.vue'),

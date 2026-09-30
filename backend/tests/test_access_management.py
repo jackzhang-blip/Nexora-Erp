@@ -144,7 +144,7 @@ def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path):
         db.execute("PRAGMA user_version = 24")
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 33
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 34
         labels = dict(db.execute("SELECT code, label FROM permissions").fetchall())
         assert labels["bom.activate"] == "启用生产物料清单版本"
         assert labels["future.view"] == "未命名权限"
@@ -210,6 +210,12 @@ def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, 
         grants = db.execute("SELECT role_code, permission_code FROM role_permissions ORDER BY 1, 2").fetchall()
         db.execute("DELETE FROM role_permissions WHERE permission_code = 'purchase_return.submit'")
         db.execute("DELETE FROM permissions WHERE code = 'purchase_return.submit'")
+        db.execute("DROP TABLE stock_adjustment_reversals")
+        db.execute("DROP TABLE stock_adjustment_lines")
+        db.execute("DROP TABLE stock_adjustments")
+        db.execute("DELETE FROM role_permissions WHERE permission_code LIKE 'adjustment.%'")
+        db.execute("DELETE FROM permissions WHERE code LIKE 'adjustment.%'")
+        db.execute("DELETE FROM permission_groups WHERE code = 'warehouse.adjustment'")
         db.execute("DROP TABLE warehouse_outbound_reversals")
         db.execute("DROP TABLE warehouse_outbound_lines")
         db.execute("DROP TABLE warehouse_outbounds")
@@ -259,6 +265,6 @@ def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, 
 
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 33
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 34
         assert db.execute("SELECT role_code, permission_code FROM role_permissions ORDER BY 1, 2").fetchall() == grants
         assert db.execute("SELECT label FROM permissions WHERE code = 'inventory.view'").fetchone()[0] == "查看仓库实时库存"

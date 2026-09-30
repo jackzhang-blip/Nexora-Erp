@@ -69,6 +69,13 @@ export const workspaceRouteGroups = [
         icon: 'stack'
       },
       {
+        key: 'stockAdjustments',
+        path: '/workspace/stock-adjustments',
+        label: '库存调整',
+        permission: 'adjustment.view',
+        icon: 'file'
+      },
+      {
         key: 'stocktakes',
         path: '/workspace/stocktakes',
         label: '库存盘点',

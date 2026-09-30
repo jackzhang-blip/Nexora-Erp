@@ -40,6 +40,8 @@ def list_movements(_: dict = Depends(require("inventory.view"))) -> list[dict]:
                    CASE WHEN sm.source_type = 'other_outbound_reversal' THEN sm.source_id END AS other_outbound_reversal_id,
                    CASE WHEN sm.source_type IN ('transfer_out', 'transfer_in') THEN sm.source_id END AS transfer_id,
                    CASE WHEN sm.source_type IN ('transfer_reversal_out', 'transfer_reversal_in') THEN sm.source_id END AS transfer_reversal_id,
+                   CASE WHEN sm.source_type = 'adjustment' THEN sm.source_id END AS adjustment_id,
+                   CASE WHEN sm.source_type = 'adjustment_reversal' THEN sm.source_id END AS adjustment_reversal_id,
                    CASE WHEN sm.source_type = 'stocktake' THEN sm.source_id END AS stocktake_id,
                    CASE WHEN sm.source_type = 'stocktake_reversal' THEN sm.source_id END AS stocktake_reversal_id,
                    CASE WHEN sm.source_type = 'shipment' THEN sm.source_id END AS shipment_id,

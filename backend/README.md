@@ -157,3 +157,5 @@ PYTHONPATH=backend python3 -m pytest backend/tests -q
 数据库第 33 版将采购退货提交与仓库出库确认分离。`POST /api/v1/purchase-returns/{id}/submit` 创建唯一待出库单并占用原入库可退量；仓库通过 `/api/v1/warehouse-outbounds/{id}/post` 在同一事务重查原入库可退量和原仓余额，确认一次才写一组退货流水、确认退货及应付冲减。取消待出库退货释放占用。旧客户端的退货 `/post` 在同一事务补建并确认关联出库单；迁移仅为历史已确认退货补单据，不重放流水。
 
 `POST /api/v1/inventory-ledger/query` 以仓库、物料、日期和来源筛选库存流水，返回每个仓库物料组合的期初、逐笔累计结余与期末。来源筛选后数量表示该来源范围内的累计变动；库存总览仍展示所有来源的实际余额。
+
+数据库第 34 版新增独立 `/api/v1/stock-adjustments`。草稿必须填写原因及有符号调整量，依次提交、由非建单人批准、仓库确认后才追加增减库存流水；驳回、取消、重复操作和库存不足均不改库存。确认后可填写原因冲销，负向冲销仍须核对当前余额。权限为 `adjustment.view/create/submit/review/cancel/post/reverse`。

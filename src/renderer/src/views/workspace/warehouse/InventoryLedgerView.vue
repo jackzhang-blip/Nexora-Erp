@@ -21,6 +21,7 @@ const sourceLabels: Record<string, string> = {
   sales_return: '销售退货', sales_return_reversal: '销售退货冲销',
   transfer_in: '调拨入库', transfer_out: '调拨出库',
   transfer_reversal_in: '调拨入库冲销', transfer_reversal_out: '调拨出库冲销',
+  adjustment: '库存调整', adjustment_reversal: '库存调整冲销',
   stocktake: '盘点', stocktake_reversal: '盘点冲销',
   material_issue: '生产领料', material_return: '生产退料',
   production_completion: '生产完工', production_completion_reversal: '生产完工冲销'

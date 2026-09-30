@@ -13,7 +13,7 @@ test('每个工作台页面只有一个路由，且都对应实际页面', () =>
   const registered = router.getRoutes().filter((route) => route.name)
 
   // 路由记录由同一张业务表生成，组件由 Vue Router 装载，避免侧栏出现空白页面。
-  assert.equal(workspaceRoutes.length, 29)
+  assert.equal(workspaceRoutes.length, 30)
   assert.deepEqual(new Set(registered.map(route => route.name)), new Set(workspaceRoutes.map(route => route.key)))
   assert.ok(registered.every((route) => route.components?.default))
   assert.match(shell, /<RouterView \/>/)
@@ -180,6 +180,7 @@ test('其他入库在仓库管理下使用独立查看权限', () => {
   assert.equal(routeByKey('otherInbounds').path, '/workspace/warehouse-inbounds')
   assert.equal(routeByKey('warehouseOutbounds').path, '/workspace/warehouse-outbounds')
   assert.equal(routeByKey('inventoryLedger').path, '/workspace/inventory-ledger')
+  assert.equal(routeByKey('stockAdjustments').path, '/workspace/stock-adjustments')
   assert.equal(canVisitRoute(routeByKey('warehouseOutbounds'), ['other_outbound.view']), true)
   assert.equal(canVisitRoute(routeByKey('otherInbounds'), ['inventory.view']), false)
   assert.equal(canVisitRoute(routeByKey('otherInbounds'), ['other_inbound.view']), true)
