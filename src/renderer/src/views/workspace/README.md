@@ -11,13 +11,14 @@
 | `warehouse/` | `InventoryStocktakesView.vue` | 建立、确认及冲销库存盘点 |
 | `catalog/` | `MaterialsView.vue` | 物料列表、搜索、增删改及关联供应商展示；沿用 `/workspace/catalog` 地址 |
 | `catalog/` | `SuppliersView.vue` | 供应商增删改查及供货物料绑定、解绑 |
+| `catalog/` | `CustomersView.vue` | 客户搜索与新增；销售查看权限可浏览，客户管理权限可新增 |
 | `catalog/` | `WarehousesView.vue` | 仓库增删改查，默认主仓库禁止删除 |
 | `purchase/` | `PurchaseOrdersView.vue` | 建立和管理采购订单 |
 | `purchase/` | `PurchaseRequestsView.vue` | 采购申请、审批、分批转采购订单 |
 | `purchase/` | `PurchaseGoodsReceiptsView.vue` | 分批记录采购合格实收与拒收，确认后生成待入库单 |
 | `purchase/` | `PurchaseReceiptsView.vue` | 建立和确认采购入库单 |
 | `purchase/` | `PurchaseReturnsView.vue` | 处理采购退货 |
-| `sales/` | `SalesOrdersView.vue` | 建立和管理销售订单 |
+| `sales/` | `SalesOrdersView.vue` | 建立和管理销售订单；客户资料独立维护，订单弹窗提供快捷入口并保留草稿 |
 | `sales/` | `SalesShipmentsView.vue` | 处理销售出库 |
 | `sales/` | `SalesReturnsView.vue` | 处理销售退货 |
 | `finance/` | `ReceivablesPayablesView.vue` | 查看应收应付并登记收付款 |

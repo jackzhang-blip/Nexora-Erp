@@ -14,11 +14,10 @@ const {
   materials,
   customers,
   salesOrders,
-  customerForm,
   salesForm,
   can,
   localTime,
-  createCustomer,
+  navigateToRoute,
   createSalesOrder,
   confirmSalesOrder,
   cancelSalesOrder
@@ -26,12 +25,13 @@ const {
 
 // 保存失败时保留弹窗和草稿，方便直接修正后重试。
 const createOpen = ref(false)
-const customerOpen = ref(false)
 async function submitCreate(): Promise<void> {
   await submitCreateDialog(createSalesOrder, { busy, error, notice }, createOpen)
 }
-async function submitCustomer(): Promise<void> {
-  await submitCreateDialog(createCustomer, { busy, error, notice }, customerOpen)
+// 导航前关闭弹窗，订单草稿继续保存在共享状态中，返回后可继续填写。
+function openCustomers(): void {
+  createOpen.value = false
+  navigateToRoute('customers')
 }
 // 只筛选当前列表快照，原有单据状态与跨页面草稿保持不变。
 const recordQuery = ref('')
@@ -45,15 +45,6 @@ const filteredRecords = computed(() =>
       ...item.lines.map((line) => line.material_name)
     ])
   )
-)
-// 客户查询与销售订单查询互不影响。
-const customerQuery = ref('')
-const customerColumns = [
-  { key: 'id', title: '编号', width: '120' },
-  { key: 'name', title: '客户名称' }
-]
-const filteredCustomers = computed(() =>
-  customers.value.filter((item) => matchesRecordQuery(customerQuery.value, [item.id, item.name]))
 )
 </script>
 
@@ -81,6 +72,13 @@ const filteredCustomers = computed(() =>
               v-model.trim="salesForm.reference"
               maxlength="100"
           /></label>
+        </div>
+        <div class="form-actions">
+          <span v-if="!customers.length" class="muted">暂无客户，请先建立客户资料。</span>
+          <button class="text-button" type="button" :disabled="busy" @click="openCustomers">
+            前往客户资料
+          </button>
+          <span class="muted">订单草稿会保留，返回后可继续填写。</span>
         </div>
         <h3>销售明细</h3>
         <div
@@ -234,49 +232,6 @@ const filteredCustomers = computed(() =>
           }}
         </span>
       </template>
-    </WorkspaceTable>
-<!-- 客户资料作为订单的辅助信息，沿用统一表格和权限边界。 -->
-    <WorkspaceTable
-      v-if="can('customer.manage')"
-      title="客户资料"
-      :columns="customerColumns"
-      :data="filteredCustomers"
-      :min-table-width="480"
-    >
-      <template #actions>
-        <button class="primary" type="button" :disabled="busy" @click="customerOpen = true">
-          新增客户
-        </button>
-      </template>
-      <template #filters>
-        <label>
-          搜索客户
-          <input v-model="customerQuery" placeholder="输入编号或名称" />
-        </label>
-      </template>
-      <template #beforeTable>
-        <NModal
-          v-model:show="customerOpen"
-          preset="card"
-          title="新增客户"
-          :mask-closable="!busy"
-          :style="{ width: 'min(560px, calc(100vw - 32px))' }"
-        >
-          <form class="inline-form" @submit.prevent="submitCustomer">
-            <label>
-              客户名称
-              <input
-                v-model.trim="customerForm.name"
-                required
-                maxlength="120"
-                placeholder="输入客户名称"
-              />
-            </label>
-            <button class="primary" type="submit" :disabled="busy">添加客户</button>
-          </form>
-        </NModal>
-      </template>
-      <template #empty>{{ customerQuery ? '没有匹配的客户。' : '暂无客户，请先新增。' }}</template>
     </WorkspaceTable>
   </section>
 </template>

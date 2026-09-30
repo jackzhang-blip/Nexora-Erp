@@ -15,6 +15,7 @@ export const workspacePageDescriptions: Partial<Record<WorkspaceRouteKey, string
   shipments: '按销售订单分批出库，确认后扣减库存并记录应收来源。',
   warehouses: '默认主仓库以及已被业务单据引用的仓库不能删除。',
   catalog: '请按规格建立独立物料编码，同一规格无需为不同供应商重复建档。',
+  customers: '集中查询和新增客户资料，销售订单使用同一份客户名单。',
   suppliers: '选择“供货物料”管理供应商与现有物料的绑定。',
   roles: '新增职务后可按模块、单据和操作分别授权；内置职务仅供查看。',
   materialIssues: '按工单剩余需料分批领料，确认后更新源仓库存。',

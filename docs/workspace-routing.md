@@ -12,6 +12,7 @@
 | 采购管理 | 采购订单 | `#/workspace/purchase-orders` | `inventory.view` |
 | 采购管理 | 采购入库 | `#/workspace/receipts` | `inventory.view` |
 | 采购管理 | 采购退货 | `#/workspace/purchase-returns` | `inventory.view` |
+| 基础资料 | 客户资料 | `#/workspace/customers` | `sales.view`，新增要求 `customer.manage` |
 | 销售管理 | 销售订单 | `#/workspace/sales-orders` | `sales.view` |
 | 销售管理 | 销售出库 | `#/workspace/shipments` | `sales.view` |
 | 销售管理 | 销售退货 | `#/workspace/sales-returns` | `sales.view` |
