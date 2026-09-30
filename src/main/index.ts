@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Tray } from 'electron'
 import { join } from 'node:path'
 import { mkdirSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { callBackend, getBackendHealth } from './backend'
 import type { ErpOperations } from '../shared/erp-api'
 import type { HostInput } from '../shared/desktop-api'
@@ -116,6 +117,21 @@ app.whenReady().then(() => {
     // 业务通道仅接受当前主窗口主框架的调用。
     assertMainWindow(event)
     return callBackend(action, payload)
+  })
+  ipcMain.handle('report:save-csv', async (event, fileName: unknown, csv: unknown) => {
+    assertMainWindow(event)
+    // 仅允许保存报表 CSV；路径由系统文件对话框选择，不接受渲染进程路径。
+    if (typeof fileName !== 'string' || !/^[a-z0-9_-]{1,80}\.csv$/.test(fileName)
+      || typeof csv !== 'string' || csv.length > 10_000_000 || !csv.startsWith('\ufeff')) {
+      throw new Error('报表导出参数无效')
+    }
+    if (!mainWindow) throw new Error('窗口不可用')
+    const selected = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: fileName, filters: [{ name: 'CSV', extensions: ['csv'] }]
+    })
+    if (selected.canceled || !selected.filePath) return null
+    await writeFile(selected.filePath, csv, { encoding: 'utf8' })
+    return selected.filePath
   })
   ipcMain.handle('connection:startup', async (event) => {
     assertMainWindow(event)

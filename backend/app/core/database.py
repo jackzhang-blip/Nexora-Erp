@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 34:
+        if version > 35:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -1125,3 +1125,21 @@ def migrate() -> None:
                                          'adjustment.review', 'adjustment.cancel', 'adjustment.post')])
             db.execute("INSERT INTO role_permissions(role_code, permission_code) VALUES ('admin', 'adjustment.reverse')")
             db.execute("PRAGMA user_version = 34")
+
+        if version < 35:
+            # 采购与库存报表分别授权，避免采购岗位自动获得所有库存统计权限。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""INSERT INTO permission_groups(code, label, parent_code, sort_order)
+                VALUES ('purchase.reports', '采购报表', 'purchase', 150)""")
+            db.execute("""INSERT INTO permission_groups(code, label, parent_code, sort_order)
+                VALUES ('warehouse.reports', '库存报表', 'warehouse', 150)""")
+            db.execute("""INSERT INTO permissions(code, label, group_code)
+                VALUES ('purchase_report.view', '查看采购报表', 'purchase.reports')""")
+            db.execute("""INSERT INTO permissions(code, label, group_code)
+                VALUES ('inventory_report.view', '查看库存报表', 'warehouse.reports')""")
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, 'purchase_report.view') for role in ('admin', 'buyer')])
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, 'inventory_report.view') for role in ('admin', 'warehouse')])
+            db.execute("PRAGMA user_version = 35")

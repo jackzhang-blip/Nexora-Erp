@@ -76,6 +76,13 @@ export const workspaceRouteGroups = [
         icon: 'file'
       },
       {
+        key: 'inventoryReports',
+        path: '/workspace/inventory-reports',
+        label: '库存报表',
+        permission: 'inventory_report.view',
+        icon: 'file'
+      },
+      {
         key: 'stocktakes',
         path: '/workspace/stocktakes',
         label: '库存盘点',
@@ -141,6 +148,13 @@ export const workspaceRouteGroups = [
         path: '/workspace/receipts',
         label: '采购入库',
         permission: 'inventory.view',
+        icon: 'file'
+      },
+      {
+        key: 'purchaseReports',
+        path: '/workspace/purchase-reports',
+        label: '采购报表',
+        permission: 'purchase_report.view',
         icon: 'file'
       },
       {

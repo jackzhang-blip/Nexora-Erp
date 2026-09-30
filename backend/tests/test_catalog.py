@@ -90,6 +90,9 @@ def test_v27_migration_preserves_existing_materials(client):
     with connection() as db:
         db.execute("DELETE FROM role_permissions WHERE permission_code = 'purchase_return.submit'")
         db.execute("DELETE FROM permissions WHERE code = 'purchase_return.submit'")
+        db.execute("DELETE FROM role_permissions WHERE permission_code IN ('purchase_report.view', 'inventory_report.view')")
+        db.execute("DELETE FROM permissions WHERE code IN ('purchase_report.view', 'inventory_report.view')")
+        db.execute("DELETE FROM permission_groups WHERE code IN ('purchase.reports', 'warehouse.reports')")
         db.execute("DROP TABLE stock_adjustment_reversals")
         db.execute("DROP TABLE stock_adjustment_lines")
         db.execute("DROP TABLE stock_adjustments")
@@ -125,6 +128,6 @@ def test_v27_migration_preserves_existing_materials(client):
     migrate()
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 34
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 35
         assert db.execute("SELECT name FROM materials WHERE id = ?", (material,)).fetchone()[0] == "旧物料"
         assert db.execute("SELECT COUNT(*) FROM supplier_materials").fetchone()[0] == 0

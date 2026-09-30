@@ -7,6 +7,7 @@ const desktopApi: DesktopApi = {
   getBackendHealth: () => ipcRenderer.invoke('backend:get-health'),
   // 所有业务请求都由主进程按固定操作表转发，页面不能构造任意 URL。
   callApi: (action, payload) => ipcRenderer.invoke('erp:call', action, payload),
+  saveReportCsv: (fileName, csv) => ipcRenderer.invoke('report:save-csv', fileName, csv),
   startup: () => ipcRenderer.invoke('connection:startup'),
   recentServers: () => ipcRenderer.invoke('connection:recent'),
   prepareConnection: (address, port) => ipcRenderer.invoke('connection:prepare', address, port),

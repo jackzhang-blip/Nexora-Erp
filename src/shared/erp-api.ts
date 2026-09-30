@@ -700,6 +700,22 @@ export interface LedgerQuery {
   source_type: string | null
 }
 
+export type ReportKind = 'purchase_requests' | 'purchase_orders' | 'receiving_returns' | 'inventory_balance' | 'stock_flow'
+export interface ReportQuery {
+  kind: ReportKind
+  warehouse_id: number | null
+  material_id: number | null
+  supplier_id: number | null
+  from_date: string | null
+  to_date: string | null
+}
+export interface ReportResult {
+  kind: ReportKind
+  columns: { key: string; title: string }[]
+  rows: Record<string, string>[]
+  csv: string
+}
+
 export interface ErpOperations {
   setupStatus: { input: undefined; output: { needs_setup: boolean } }
   bootstrap: { input: { username: string; password: string }; output: User }
@@ -840,4 +856,5 @@ export interface ErpOperations {
   stock: { input: { warehouseId?: number } | undefined; output: Stock[] }
   movements: { input: undefined; output: Movement[] }
   inventoryLedger: { input: LedgerQuery; output: LedgerResult }
+  queryReport: { input: ReportQuery; output: ReportResult }
 }

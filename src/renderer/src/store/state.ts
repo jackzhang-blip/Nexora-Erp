@@ -22,6 +22,8 @@ import type {
   PurchaseReturn,
   ReceivablesPayables,
   Receipt,
+  ReportQuery,
+  ReportResult,
   Role,
   SalesOrder,
   SalesReturn,
@@ -68,6 +70,12 @@ export function createAppState() {
   const movements = ref<Movement[]>([])
   const ledgerResult = ref<LedgerResult>({ groups: [], rows: [] })
   const stockAdjustments = ref<StockAdjustment[]>([])
+  const purchaseReportQuery = ref<ReportQuery>({ kind: 'purchase_requests', warehouse_id: null,
+    material_id: null, supplier_id: null, from_date: null, to_date: null })
+  const inventoryReportQuery = ref<ReportQuery>({ kind: 'inventory_balance', warehouse_id: null,
+    material_id: null, supplier_id: null, from_date: null, to_date: null })
+  const purchaseReportResult = ref<ReportResult | null>(null)
+  const inventoryReportResult = ref<ReportResult | null>(null)
   const ledgerQuery = ref<LedgerQuery>({ warehouse_id: null, material_id: null,
     from_date: null, to_date: null, source_type: null })
   const otherInbounds = ref<OtherInbound[]>([])
@@ -336,6 +344,10 @@ export function createAppState() {
     movements,
     ledgerResult,
     stockAdjustments,
+    purchaseReportQuery,
+    inventoryReportQuery,
+    purchaseReportResult,
+    inventoryReportResult,
     ledgerQuery,
     otherInbounds,
     warehouseOutbounds,
