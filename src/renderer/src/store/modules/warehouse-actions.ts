@@ -12,11 +12,25 @@ export function createWarehouseActions(
     otherInboundReversalReasons,
     otherOutboundForm,
     otherOutboundReversalReasons,
+    ledgerResult,
+    ledgerQuery,
     transferForm,
     transferReversalReasons,
     stocktakeForm,
     stocktakeReversalReasons
   } = state
+
+  async function queryLedger(): Promise<void> {
+    if (!window.nexora) return
+    await perform(async () => {
+      // 复制当前筛选条件，避免跨进程发送 Vue 响应式代理对象。
+      ledgerResult.value = await window.nexora!.callApi('inventoryLedger', {
+        ...ledgerQuery.value,
+        from_date: ledgerQuery.value.from_date || null,
+        to_date: ledgerQuery.value.to_date || null
+      })
+    }, '库存台账已更新。')
+  }
 
   async function createOtherInbound(): Promise<void> {
     if (!window.nexora) return
@@ -196,6 +210,7 @@ export function createWarehouseActions(
   }
 
   return {
+    queryLedger,
     createOtherInbound,
     postOtherInbound,
     cancelOtherInbound,

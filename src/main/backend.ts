@@ -305,6 +305,7 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'stock': return { method: 'GET', path: payload && typeof payload === 'object' && 'warehouseId' in payload && payload.warehouseId !== undefined
       ? `/api/v1/stock?warehouse_id=${positiveId(payload, 'warehouseId')}` : '/api/v1/stock' }
     case 'movements': return { method: 'GET', path: '/api/v1/movements' }
+    case 'inventoryLedger': return { method: 'POST', path: '/api/v1/inventory-ledger/query', body: payload }
     default: throw new Error('不允许的业务操作')
   }
 }
