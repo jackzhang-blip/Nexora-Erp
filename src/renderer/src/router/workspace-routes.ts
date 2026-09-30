@@ -218,6 +218,21 @@ export const workspaceRouteGroups = [
         label: '应收应付',
         permission: 'finance.view',
         icon: 'file'
+      },
+      // 页面职责拆分，查看权限和服务端写操作权限继续保持原有边界。
+      {
+        key: 'financePayments',
+        path: '/workspace/payment-records',
+        label: '收付款记录',
+        permission: 'finance.view',
+        icon: 'history'
+      },
+      {
+        key: 'financeSources',
+        path: '/workspace/financial-sources',
+        label: '应收应付来源',
+        permission: 'finance.view',
+        icon: 'file'
       }
     ]
   },

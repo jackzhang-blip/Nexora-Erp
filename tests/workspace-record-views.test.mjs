@@ -24,7 +24,7 @@ const storeModule = `
 import {ref} from 'vue'
 export const permissions = new Set()
 export const state = {
-  busy:ref(false), error:ref(''), notice:ref(''), user:ref({id:1}), activeTab:ref('finance'),
+  busy:ref(false), connectionLost:ref(false), error:ref(''), notice:ref(''), user:ref({id:1}), activeTab:ref('finance'),
   roles:ref([{code:'admin',label:'管理员'}]), users:ref([{id:1,username:'当前账号',is_active:true,roles:['admin']},{id:2,username:'其他账号',is_active:true,roles:['admin']}]),
   roleDrafts:ref({1:['admin'],2:['admin']}), resetPasswords:ref({1:'sample-password-1',2:'sample-password-2'}), newUser:ref({roles:[]}),
   financeAccounts:ref([]), paymentForm:ref({kind:'receivable'}), reversalReasons:ref({}),
@@ -38,11 +38,12 @@ export const state = {
   can:p=>permissions.has(p), localTime:v=>v, paymentActionLabel:item=>item.action==='reversal'?'冲销':'收款', financialSource:()=>''
 }
 export const useAppStore=()=>state
+export const usePiniaAppStore=()=>state
 `
 const tableModule = `
 import {defineComponent,h} from 'vue'
-export default defineComponent({props:['data','columns'],setup(props,{slots}) {
- return ()=>h('section',[slots.actions?.(),slots.filters?.(),slots.beforeTable?.(),...props.data.map(row=>h('article',{'data-id':row.id},props.columns.map(col=>slots['cell-'+col.key]?.({row})))),props.data.length?null:slots.empty?.()])
+export default defineComponent({props:['data','columns','title'],setup(props,{slots}) {
+ return ()=>h('section',{'data-table':props.title},[slots.actions?.(),slots.filters?.(),slots.beforeTable?.(),...props.data.map(row=>h('article',{'data-id':row.id},props.columns.map(col=>slots['cell-'+col.key]?.({row})))),props.data.length?null:slots.empty?.()])
 }})
 `
 
@@ -65,8 +66,29 @@ test('财务冲销、生产质检与账号操作在表格迁移后保留原权�
     const {default:View}=await server.ssrLoadModule('/src/renderer/src/views/workspace/'+file)
     return renderToString(createSSRApp({render:()=>h(View)}))
   }
+  // 每个财务页面只保留自己的列表，不再依赖旧 finance 标签键才能显示。
+  state.activeTab.value = 'financePayments'
+  const financePages = [
+    ['finance/ReceivablesPayablesView.vue', '订单核对'],
+    ['finance/PaymentRecordsView.vue', '收付款与冲销记录'],
+    ['finance/FinancialSourcesView.vue', '应收应付来源']
+  ]
+  for (const [file, title] of financePages) {
+    const html = await render(file)
+    assert.deepEqual([...html.matchAll(/data-table="([^"]+)"/g)].map(match => match[1]), [title])
+  }
+  const accountHtml = await render(financePages[0][0])
+  assert.match(accountHtml, /业务应收净额/)
+  assert.doesNotMatch(accountHtml, /冲销此记录|登记收付款/)
+  permissions.add('finance.record')
+  const paymentHtml = await render(financePages[1][0])
+  assert.match(paymentHtml, /登记收付款/)
+  state.connectionLost.value = true
+  assert.match(await render(financePages[1][0]), /<button[^>]*disabled[^>]*>\s*登记收付款/)
+  state.connectionLost.value = false
+  permissions.delete('finance.record')
   const buttons = html => [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)].map(m=>({disabled:m[1].includes('disabled'),label:m[2].trim()}))
-  const finance='finance/ReceivablesPayablesView.vue'
+  const finance='finance/PaymentRecordsView.vue'
   assert.doesNotMatch(await render(finance),/冲销此记录/)
   permissions.add('finance.reverse')
   assert.equal(buttons(await render(finance)).filter(b=>b.label==='冲销此记录').length,1)
