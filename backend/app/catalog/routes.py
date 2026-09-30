@@ -1,12 +1,15 @@
 """供应商与物料基础资料接口。"""
 
-import sqlite3
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 from app.access.security import require
-from app.core.database import connection
+from app.core.models import Material, Supplier, SupplierMaterial
+from app.core.orm import orm_session, model_data
 
 router = APIRouter(prefix="/api/v1")
 
@@ -34,10 +37,19 @@ class MaterialInput(BaseModel):
             raise ValueError("字段不能为空")
         return value.strip()
 
+
+def flush_catalog(db: Session, message: str) -> None:
+    # 在接口的事务内触发约束，冲突映射为原有 409 语义，外层统一回滚。
+    try:
+        db.flush()
+    except IntegrityError:
+        raise HTTPException(409, message) from None
+
+
 @router.get("/suppliers")
 def list_suppliers(_: dict = Depends(require("inventory.view"))) -> list[dict]:
-    with connection() as db:
-        return [dict(row) for row in db.execute("SELECT id, name FROM suppliers ORDER BY name")]
+    with orm_session() as db:
+        return [{'id': row.id, 'name': row.name} for row in db.scalars(select(Supplier).order_by(Supplier.name))]
 
 
 class SupplierPageQuery(BaseModel):
@@ -50,121 +62,110 @@ class SupplierPageQuery(BaseModel):
 @router.post("/suppliers/query")
 def query_suppliers(payload: SupplierPageQuery,
                     _: dict = Depends(require("inventory.view"))) -> dict:
-    with connection() as db:
-        # 总数和当前页来自同一读事务；删除导致页码越界时回退到最后有效页。
-        db.execute("BEGIN")
-        keyword = payload.query.strip()
-        where = "WHERE instr(lower(name), lower(?)) > 0"
-        total = db.execute(f"SELECT COUNT(*) FROM suppliers {where}", (keyword,)).fetchone()[0]
+    with orm_session() as db:
+        # 总数与当前页使用同一快照，搜索按字面子串匹配，不把通配符当查询语法。
+        match = func.instr(func.lower(Supplier.name), func.lower(payload.query.strip())) > 0
+        total = db.scalar(select(func.count()).select_from(Supplier).where(match))
         page = min(payload.page, max(1, (total + payload.page_size - 1) // payload.page_size))
-        rows = db.execute(
-            f"SELECT id, name FROM suppliers {where} ORDER BY name, id LIMIT ? OFFSET ?",
-            (keyword, payload.page_size, (page - 1) * payload.page_size))
-        return {"items": [dict(row) for row in rows], "total": total,
+        rows = db.scalars(select(Supplier).where(match).order_by(Supplier.name, Supplier.id)
+            .limit(payload.page_size).offset((page - 1) * payload.page_size))
+        return {"items": [{'id': row.id, 'name': row.name} for row in rows], "total": total,
                 "page": page, "page_size": payload.page_size}
 
 
 @router.post("/suppliers", status_code=201)
 def create_supplier(payload: SupplierInput, _: dict = Depends(require("catalog.manage"))) -> dict:
-    with connection() as db:
-        try:
-            cursor = db.execute("INSERT INTO suppliers(name) VALUES (?)", (payload.name,))
-        except sqlite3.IntegrityError:
-            raise HTTPException(409, "供应商已存在") from None
-        return {"id": cursor.lastrowid, "name": payload.name}
+    with orm_session(write=True) as db:
+        supplier = Supplier(name=payload.name)
+        db.add(supplier)
+        flush_catalog(db, "供应商已存在")
+        return {"id": supplier.id, "name": supplier.name}
 
 
 @router.get("/materials")
 def list_materials(_: dict = Depends(require("inventory.view"))) -> list[dict]:
-    with connection() as db:
-        return [dict(row) for row in db.execute("SELECT id, sku, name, unit FROM materials ORDER BY sku")]
+    with orm_session() as db:
+        return [{key: getattr(row, key) for key in ('id', 'sku', 'name', 'unit')}
+                for row in db.scalars(select(Material).order_by(Material.sku))]
 
 
 @router.post("/materials", status_code=201)
 def create_material(payload: MaterialInput, _: dict = Depends(require("catalog.manage"))) -> dict:
-    with connection() as db:
-        try:
-            cursor = db.execute("INSERT INTO materials(sku, name, unit) VALUES (?, ?, ?)",
-                                (payload.sku, payload.name, payload.unit))
-        except sqlite3.IntegrityError:
-            raise HTTPException(409, "物料编码已存在") from None
-        return {"id": cursor.lastrowid, **payload.model_dump()}
+    with orm_session(write=True) as db:
+        material = Material(**payload.model_dump())
+        db.add(material)
+        flush_catalog(db, "物料编码已存在")
+        return {"id": material.id, **payload.model_dump()}
 
 
 @router.put("/materials/{material_id}")
 def update_material(material_id: int, payload: MaterialInput,
                     _: dict = Depends(require("catalog.manage"))) -> dict:
-    with connection() as db:
-        try:
-            cursor = db.execute("UPDATE materials SET sku = ?, name = ?, unit = ? WHERE id = ?",
-                                (payload.sku, payload.name, payload.unit, material_id))
-        except sqlite3.IntegrityError:
-            raise HTTPException(409, "物料编码已存在") from None
-        if not cursor.rowcount:
+    with orm_session(write=True) as db:
+        material = db.get(Material, material_id)
+        if material is None:
             raise HTTPException(404, "物料不存在")
+        material.sku, material.name, material.unit = payload.sku, payload.name, payload.unit
+        flush_catalog(db, "物料编码已存在")
         return {"id": material_id, **payload.model_dump()}
 
 
 @router.delete("/materials/{material_id}", status_code=204)
 def delete_material(material_id: int, _: dict = Depends(require("catalog.manage"))) -> None:
-    with connection() as db:
-        try:
-            cursor = db.execute("DELETE FROM materials WHERE id = ?", (material_id,))
-        except sqlite3.IntegrityError:
-            raise HTTPException(409, "物料已被业务单据或库存记录引用，不能删除") from None
-        if not cursor.rowcount:
+    with orm_session(write=True) as db:
+        material = db.get(Material, material_id)
+        if material is None:
             raise HTTPException(404, "物料不存在")
+        db.delete(material)
+        flush_catalog(db, "物料已被业务单据或库存记录引用，不能删除")
 
 
 @router.put("/suppliers/{supplier_id}")
 def update_supplier(supplier_id: int, payload: SupplierInput,
                     _: dict = Depends(require("catalog.manage"))) -> dict:
-    with connection() as db:
-        try:
-            cursor = db.execute("UPDATE suppliers SET name = ? WHERE id = ?", (payload.name, supplier_id))
-        except sqlite3.IntegrityError:
-            raise HTTPException(409, "供应商已存在") from None
-        if not cursor.rowcount:
+    with orm_session(write=True) as db:
+        supplier = db.get(Supplier, supplier_id)
+        if supplier is None:
             raise HTTPException(404, "供应商不存在")
+        supplier.name = payload.name
+        flush_catalog(db, "供应商已存在")
         return {"id": supplier_id, **payload.model_dump()}
 
 
 @router.delete("/suppliers/{supplier_id}", status_code=204)
 def delete_supplier(supplier_id: int, _: dict = Depends(require("catalog.manage"))) -> None:
-    with connection() as db:
-        try:
-            cursor = db.execute("DELETE FROM suppliers WHERE id = ?", (supplier_id,))
-        except sqlite3.IntegrityError:
-            raise HTTPException(409, "供应商已被业务单据引用，不能删除") from None
-        if not cursor.rowcount:
+    with orm_session(write=True) as db:
+        supplier = db.get(Supplier, supplier_id)
+        if supplier is None:
             raise HTTPException(404, "供应商不存在")
+        db.delete(supplier)
+        flush_catalog(db, "供应商已被业务单据引用，不能删除")
 
 
 @router.get("/supplier-materials")
 def list_supplier_materials(_: dict = Depends(require("inventory.view"))) -> list[dict]:
-    with connection() as db:
-        return [dict(row) for row in db.execute(
-            "SELECT supplier_id, material_id FROM supplier_materials ORDER BY supplier_id, material_id")]
+    with orm_session() as db:
+        return [model_data(row) for row in db.scalars(select(SupplierMaterial)
+            .order_by(SupplierMaterial.supplier_id, SupplierMaterial.material_id))]
 
 
 @router.put("/suppliers/{supplier_id}/materials/{material_id}", status_code=204)
 def bind_supplier_material(supplier_id: int, material_id: int,
                            _: dict = Depends(require("catalog.manage"))) -> None:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        if not db.execute("SELECT 1 FROM suppliers WHERE id = ?", (supplier_id,)).fetchone():
+    with orm_session(write=True) as db:
+        if db.get(Supplier, supplier_id) is None:
             raise HTTPException(404, "供应商不存在")
-        if not db.execute("SELECT 1 FROM materials WHERE id = ?", (material_id,)).fetchone():
+        if db.get(Material, material_id) is None:
             raise HTTPException(404, "物料不存在")
-        db.execute("INSERT OR IGNORE INTO supplier_materials(supplier_id, material_id) VALUES (?, ?)",
-                   (supplier_id, material_id))
+        if db.get(SupplierMaterial, (supplier_id, material_id)) is None:
+            db.add(SupplierMaterial(supplier_id=supplier_id, material_id=material_id))
 
 
 @router.delete("/suppliers/{supplier_id}/materials/{material_id}", status_code=204)
 def unbind_supplier_material(supplier_id: int, material_id: int,
                              _: dict = Depends(require("catalog.manage"))) -> None:
-    with connection() as db:
-        cursor = db.execute("DELETE FROM supplier_materials WHERE supplier_id = ? AND material_id = ?",
-                            (supplier_id, material_id))
-        if not cursor.rowcount:
+    with orm_session(write=True) as db:
+        link = db.get(SupplierMaterial, (supplier_id, material_id))
+        if link is None:
             raise HTTPException(404, "供货关系不存在")
+        db.delete(link)

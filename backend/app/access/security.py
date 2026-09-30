@@ -7,8 +7,11 @@ import time
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app.core.database import connection
+from app.core.models import AuthSession, User, UserRole, RolePermission
+from app.core.orm import orm_session
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -34,29 +37,27 @@ def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def user_details(db, user_id: int) -> dict:
-    user = db.execute("SELECT id, username, is_active, full_name, employee_no, phone FROM users WHERE id = ?", (user_id,)).fetchone()
-    roles = [row[0] for row in db.execute("SELECT role_code FROM user_roles WHERE user_id = ? ORDER BY role_code", (user_id,))]
-    permissions = [row[0] for row in db.execute("""
-        SELECT DISTINCT rp.permission_code FROM role_permissions rp
-        JOIN user_roles ur ON ur.role_code = rp.role_code
-        WHERE ur.user_id = ? ORDER BY rp.permission_code
-    """, (user_id,))]
-    return {"id": user["id"], "username": user["username"], "is_active": bool(user["is_active"]),
+def user_details(db: Session, user_id: int) -> dict:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(401, "登录已失效，请重新登录")
+    roles = list(db.scalars(select(UserRole.role_code).where(UserRole.user_id == user_id).order_by(UserRole.role_code)))
+    permissions = list(db.scalars(select(RolePermission.permission_code)
+        .join(UserRole, UserRole.role_code == RolePermission.role_code)
+        .where(UserRole.user_id == user_id).distinct().order_by(RolePermission.permission_code)))
+    return {"id": user.id, "username": user.username, "is_active": bool(user.is_active),
             "roles": roles, "permissions": permissions,
-            "full_name": user["full_name"], "employee_no": user["employee_no"], "phone": user["phone"]}
+            "full_name": user.full_name, "employee_no": user.employee_no, "phone": user.phone}
 
 
 def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
     if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(401, "请先登录")
-    with connection() as db:
-        row = db.execute("""
-            SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?
-        """, (token_hash(credentials.credentials), int(time.time()))).fetchone()
-        if not row:
+    with orm_session() as db:
+        row = db.get(AuthSession, token_hash(credentials.credentials))
+        if row is None or row.expires_at <= int(time.time()):
             raise HTTPException(401, "登录已失效，请重新登录")
-        user = user_details(db, row["user_id"])
+        user = user_details(db, row.user_id)
         # 禁用账号即使持有尚未到期的令牌，也不能继续调用业务接口。
         if not user["is_active"]:
             raise HTTPException(401, "账号已停用")

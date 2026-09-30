@@ -1,4 +1,4 @@
-"""库存与生产成本 ORM 模型；金额保留文本精度，库结构由版本迁移维护。"""
+"""业务 ORM 模型；金额保留文本精度，库结构由版本迁移维护。"""
 
 from sqlalchemy import ForeignKey, Integer, Text, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -27,6 +27,93 @@ class Material(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     unit: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+
+
+class Role(Base):
+    __tablename__ = 'roles'
+    code: Mapped[str] = mapped_column(Text, primary_key=True)
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    is_builtin: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('0'))
+
+
+class PermissionGroup(Base):
+    __tablename__ = 'permission_groups'
+    code: Mapped[str] = mapped_column(Text, primary_key=True)
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    parent_code: Mapped[str | None] = mapped_column(Text, ForeignKey('permission_groups.code'))
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class Permission(Base):
+    __tablename__ = 'permissions'
+    code: Mapped[str] = mapped_column(Text, primary_key=True)
+    label: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    group_code: Mapped[str | None] = mapped_column(Text, ForeignKey('permission_groups.code'))
+
+
+class RolePermission(Base):
+    __tablename__ = 'role_permissions'
+    role_code: Mapped[str] = mapped_column(Text, ForeignKey('roles.code'), primary_key=True)
+    permission_code: Mapped[str] = mapped_column(Text, ForeignKey('permissions.code'), primary_key=True)
+
+
+class UserRole(Base):
+    __tablename__ = 'user_roles'
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), primary_key=True)
+    role_code: Mapped[str] = mapped_column(Text, ForeignKey('roles.code'), primary_key=True)
+
+
+class AuthSession(Base):
+    __tablename__ = 'sessions'
+    token_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    expires_at: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class UserProfileChange(Base):
+    __tablename__ = 'user_profile_changes'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    changed_by: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    before_json: Mapped[str] = mapped_column(Text, nullable=False)
+    after_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+
+
+class MenuIcon(Base):
+    __tablename__ = 'menu_icons'
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    icon: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class MenuIconChange(Base):
+    __tablename__ = 'menu_icon_changes'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    menu_key: Mapped[str] = mapped_column(Text, nullable=False)
+    before_icon: Mapped[str | None] = mapped_column(Text)
+    after_icon: Mapped[str | None] = mapped_column(Text)
+    changed_by: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+
+
+class Supplier(Base):
+    __tablename__ = 'suppliers'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+
+
+class SupplierMaterial(Base):
+    __tablename__ = 'supplier_materials'
+    supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey('suppliers.id', ondelete='CASCADE'), primary_key=True)
+    material_id: Mapped[int] = mapped_column(Integer, ForeignKey('materials.id', ondelete='CASCADE'), primary_key=True)
+
+
+class ServerIdentity(Base):
+    __tablename__ = 'server_identity'
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 class Bom(Base):

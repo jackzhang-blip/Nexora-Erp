@@ -4,15 +4,19 @@ import ipaddress
 import json
 import re
 import secrets
-import sqlite3
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, field_validator
 
+from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, aliased
+
 from app.access.security import bearer, current_user, hash_password, require, token_hash, user_details, verify_password
-from app.core.database import connection
+from app.core.models import User, UserRole, Role, RolePermission, Permission, PermissionGroup, AuthSession, UserProfileChange
+from app.core.orm import orm_session
 
 router = APIRouter(prefix="/api/v1")
 
@@ -116,87 +120,85 @@ class ChangePasswordInput(BaseModel):
     new_password: str = Field(min_length=12, max_length=128)
 
 
-def validate_roles(db: sqlite3.Connection, roles: list[str]) -> list[str]:
+def validate_roles(db: Session, roles: list[str]) -> list[str]:
     unique = sorted(set(roles))
-    known = {row[0] for row in db.execute("SELECT code FROM roles")}
+    known = set(db.scalars(select(Role.code)))
     if not unique or not set(unique) <= known:
         raise HTTPException(422, "角色无效")
     return unique
 
 
-def validate_permissions(db: sqlite3.Connection, permissions: list[str]) -> list[str]:
+def validate_permissions(db: Session, permissions: list[str]) -> list[str]:
     # 权限只能从服务端固定登记表选择，客户端不能创造任意权限代码。
     unique = sorted(set(permissions))
-    known = {row[0] for row in db.execute("SELECT code FROM permissions")}
+    known = set(db.scalars(select(Permission.code)))
     if not set(unique) <= known:
         raise HTTPException(422, "权限代码无效")
     return unique
 
 
-def role_details(db: sqlite3.Connection, code: str) -> dict:
-    role = db.execute("SELECT code, label, is_builtin FROM roles WHERE code = ?", (code,)).fetchone()
-    if not role:
+def role_details(db: Session, code: str) -> dict:
+    role = db.get(Role, code)
+    if role is None:
         raise HTTPException(404, "角色不存在")
-    permissions = [row[0] for row in db.execute(
-        "SELECT permission_code FROM role_permissions WHERE role_code = ? ORDER BY permission_code", (code,))]
-    return {"code": role["code"], "label": role["label"], "is_builtin": bool(role["is_builtin"]),
+    permissions = list(db.scalars(select(RolePermission.permission_code)
+        .where(RolePermission.role_code == code).order_by(RolePermission.permission_code)))
+    return {"code": role.code, "label": role.label, "is_builtin": bool(role.is_builtin),
             "permissions": permissions}
 
 
-def ensure_active_admin_remains(db: sqlite3.Connection, user_id: int) -> None:
-    # 所有账号管理操作共用同一条约束，保证至少一位启用的内置管理员。
-    target = db.execute("""
-        SELECT 1 FROM users u JOIN user_roles ur ON ur.user_id = u.id
-        WHERE u.id = ? AND u.is_active = 1 AND ur.role_code = 'admin'
-    """, (user_id,)).fetchone()
-    if not target:
+def ensure_active_admin_remains(db: Session, user_id: int) -> None:
+    # 所有账号管理操作共用同一约束，保证至少一位启用的内置管理员。
+    admins = select(User.id).join(UserRole, UserRole.user_id == User.id).where(
+        User.is_active == 1, UserRole.role_code == 'admin')
+    if db.scalar(admins.where(User.id == user_id)) is None:
         return
-    count = db.execute("""
-        SELECT COUNT(*) FROM users u JOIN user_roles ur ON ur.user_id = u.id
-        WHERE u.is_active = 1 AND ur.role_code = 'admin'
-    """).fetchone()[0]
-    if count <= 1:
+    if db.scalar(select(func.count()).select_from(admins.subquery())) <= 1:
         raise HTTPException(409, "至少需要保留一位启用的管理员")
+
+
+def replace_user_roles(db: Session, user_id: int, roles: list[str]) -> None:
+    db.execute(delete(UserRole).where(UserRole.user_id == user_id))
+    db.add_all([UserRole(user_id=user_id, role_code=role) for role in roles])
+    db.flush()
+
 
 @router.post("/setup/admin", status_code=201)
 def bootstrap_admin(payload: AccountInput, request: Request) -> dict:
-    # 首次管理员只能由本机调用，防止服务刚启动时被局域网中的其他设备抢注。
+    # 首次管理员只能由本机调用，防止局域网设备抢注。
     try:
         client_ip = ipaddress.ip_address(request.client.host)
     except (AttributeError, ValueError):
         raise HTTPException(403, "只能在服务端本机创建首位管理员") from None
     if not client_ip.is_loopback:
         raise HTTPException(403, "只能在服务端本机创建首位管理员")
-    with connection() as db:
-        # 写锁保证两个同时发起的首次创建请求只能成功一个。
-        db.execute("BEGIN IMMEDIATE")
-        if db.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+    with orm_session(write=True) as db:
+        if db.scalar(select(User.id).limit(1)) is not None:
             raise HTTPException(409, "管理员已经创建")
-        cursor = db.execute("INSERT INTO users(username, password_hash) VALUES (?, ?)",
-                            (payload.username.lower(), hash_password(payload.password)))
-        db.execute("INSERT INTO user_roles(user_id, role_code) VALUES (?, 'admin')", (cursor.lastrowid,))
-        return user_details(db, cursor.lastrowid)
+        account = User(username=payload.username.lower(), password_hash=hash_password(payload.password))
+        db.add(account)
+        db.flush()
+        db.add(UserRole(user_id=account.id, role_code='admin'))
+        return user_details(db, account.id)
 
 
 @router.post("/auth/login")
 def login(payload: LoginInput) -> dict:
-    with connection() as db:
-        row = db.execute("SELECT id, password_hash, is_active FROM users WHERE username = ?",
-                         (payload.username.lower(),)).fetchone()
-        if not row or not row["is_active"] or not verify_password(payload.password, row["password_hash"]):
+    with orm_session(write=True) as db:
+        row = db.scalar(select(User).where(User.username == payload.username.lower()))
+        if row is None or not row.is_active or not verify_password(payload.password, row.password_hash):
             raise HTTPException(401, "用户名或密码错误")
         token = secrets.token_urlsafe(32)
-        # 会话十二小时后过期；重新登录会得到独立令牌。
-        db.execute("INSERT INTO sessions(token_hash, user_id, expires_at) VALUES (?, ?, ?)",
-                   (token_hash(token), row["id"], int(time.time()) + 12 * 60 * 60))
-        return {"token": token, "user": user_details(db, row["id"])}
+        # 会话十二小时后过期，数据库仅保存令牌摘要。
+        db.add(AuthSession(token_hash=token_hash(token), user_id=row.id, expires_at=int(time.time()) + 12 * 60 * 60))
+        return {"token": token, "user": user_details(db, row.id)}
 
 
 @router.post("/auth/logout", status_code=204)
 def logout(credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
            _: dict = Depends(current_user)) -> None:
-    with connection() as db:
-        db.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash(credentials.credentials),))
+    with orm_session(write=True) as db:
+        db.execute(delete(AuthSession).where(AuthSession.token_hash == token_hash(credentials.credentials)))
 
 
 @router.get("/auth/me")
@@ -206,171 +208,155 @@ def me(user: dict = Depends(current_user)) -> dict:
 
 @router.post("/auth/change-password", status_code=204)
 def change_password(payload: ChangePasswordInput, user: dict = Depends(current_user)) -> None:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        row = db.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
-        if not verify_password(payload.current_password, row["password_hash"]):
+    with orm_session(write=True) as db:
+        account = db.get(User, user['id'])
+        if not verify_password(payload.current_password, account.password_hash):
             raise HTTPException(400, "当前密码不正确")
-        db.execute("UPDATE users SET password_hash = ? WHERE id = ?",
-                   (hash_password(payload.new_password), user["id"]))
+        account.password_hash = hash_password(payload.new_password)
         # 改密后所有旧会话立即失效，当前桌面端也须重新登录。
-        db.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
+        db.execute(delete(AuthSession).where(AuthSession.user_id == user['id']))
 
 
 @router.get("/permissions")
 def list_permissions(_: dict = Depends(require("users.manage"))) -> list[dict]:
-    # 中文名称和父子关系全部取自数据库；角色授权仍只保存叶子操作的稳定代码。
-    with connection() as db:
-        rows = db.execute("""SELECT p.code, p.label, m.code AS module_code,
-                                   m.label AS module_label, d.code AS document_code,
-                                   d.label AS document_label
-                            FROM permissions p
-                            JOIN permission_groups d ON d.code = p.group_code
-                            JOIN permission_groups m ON m.code = d.parent_code
-                            ORDER BY m.sort_order, d.sort_order, p.code""")
-        return [{"code": row["code"], "label": row["label"], "group_path": [
-            {"code": row["module_code"], "label": row["module_label"]},
-            {"code": row["document_code"], "label": row["document_label"]},
-        ]} for row in rows]
+    # 中文名称和父子关系全部取自数据库，角色只保存叶子操作的稳定代码。
+    with orm_session() as db:
+        document, module = aliased(PermissionGroup), aliased(PermissionGroup)
+        rows = db.execute(select(Permission, document, module)
+            .join(document, document.code == Permission.group_code)
+            .join(module, module.code == document.parent_code)
+            .order_by(module.sort_order, document.sort_order, Permission.code))
+        return [{"code": permission.code, "label": permission.label, "group_path": [
+            {"code": group.code, "label": group.label}, {"code": doc.code, "label": doc.label}
+        ]} for permission, doc, group in rows]
 
 
 @router.put("/permissions/{code}/label")
 def update_permission_label(code: str, payload: PermissionLabelInput,
                             _: dict = Depends(require("users.manage"))) -> dict:
-    # 只允许更改展示名称，权限代码与角色授权关系都保持不变。
-    with connection() as db:
-        updated = db.execute("UPDATE permissions SET label = ? WHERE code = ?",
-                             (payload.label, code))
-        if updated.rowcount == 0:
+    with orm_session(write=True) as db:
+        permission = db.get(Permission, code)
+        if permission is None:
             raise HTTPException(404, "权限不存在")
+        permission.label = payload.label
         return {"code": code, "label": payload.label}
 
 
 @router.get("/roles")
 def list_roles(_: dict = Depends(require("users.manage"))) -> list[dict]:
-    with connection() as db:
-        return [role_details(db, row[0]) for row in db.execute("SELECT code FROM roles ORDER BY code").fetchall()]
+    with orm_session() as db:
+        return [role_details(db, code) for code in db.scalars(select(Role.code).order_by(Role.code))]
 
 
 @router.post("/roles", status_code=201)
 def create_role(payload: RoleInput, _: dict = Depends(require("users.manage"))) -> dict:
-    with connection() as db:
+    with orm_session(write=True) as db:
         permissions = validate_permissions(db, payload.permissions)
         try:
-            db.execute("INSERT INTO roles(code, label) VALUES (?, ?)", (payload.code, payload.label))
-        except sqlite3.IntegrityError:
+            db.add(Role(code=payload.code, label=payload.label))
+            db.flush()
+        except IntegrityError:
             raise HTTPException(409, "角色代码已存在") from None
-        db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
-                       [(payload.code, permission) for permission in permissions])
+        db.add_all([RolePermission(role_code=payload.code, permission_code=code) for code in permissions])
         return role_details(db, payload.code)
 
 
 @router.put("/roles/{role_code}")
 def update_role(role_code: str, payload: RoleUpdate, _: dict = Depends(require("users.manage"))) -> dict:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        role = role_details(db, role_code)
-        if role["is_builtin"]:
+    with orm_session(write=True) as db:
+        role = db.get(Role, role_code)
+        if role is None:
+            raise HTTPException(404, "角色不存在")
+        if role.is_builtin:
             raise HTTPException(409, "内置角色不可修改")
         permissions = validate_permissions(db, payload.permissions)
-        db.execute("UPDATE roles SET label = ? WHERE code = ?", (payload.label, role_code))
-        db.execute("DELETE FROM role_permissions WHERE role_code = ?", (role_code,))
-        db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
-                       [(role_code, permission) for permission in permissions])
-        # 权限按请求实时查询，更新角色后现有用户会话立即按新权限执行。
+        role.label = payload.label
+        db.execute(delete(RolePermission).where(RolePermission.role_code == role_code))
+        db.add_all([RolePermission(role_code=role_code, permission_code=code) for code in permissions])
+        # 权限按请求实时查询，原会话无需重发令牌。
         return role_details(db, role_code)
 
 
 @router.get("/users")
 def list_users(_: dict = Depends(require("users.manage"))) -> list[dict]:
-    with connection() as db:
-        return [user_details(db, row[0]) for row in db.execute("SELECT id FROM users ORDER BY id").fetchall()]
+    with orm_session() as db:
+        return [user_details(db, value) for value in db.scalars(select(User.id).order_by(User.id))]
 
 
 @router.post("/users", status_code=201)
 def create_user(payload: UserInput, _: dict = Depends(require("users.manage"))) -> dict:
-    with connection() as db:
+    with orm_session(write=True) as db:
         roles = validate_roles(db, payload.roles)
+        account = User(username=payload.username.lower(), password_hash=hash_password(payload.password),
+            full_name=payload.full_name, employee_no=payload.employee_no, phone=payload.phone)
         try:
-            cursor = db.execute("""INSERT INTO users(username, password_hash, full_name, employee_no, phone)
-                                VALUES (?, ?, ?, ?, ?)""",
-                                (payload.username.lower(), hash_password(payload.password),
-                                 payload.full_name, payload.employee_no, payload.phone))
-        except sqlite3.IntegrityError:
+            db.add(account)
+            db.flush()
+        except IntegrityError:
             raise HTTPException(409, "用户名或工号已存在") from None
-        db.executemany("INSERT INTO user_roles(user_id, role_code) VALUES (?, ?)",
-                       [(cursor.lastrowid, role) for role in roles])
-        return user_details(db, cursor.lastrowid)
+        db.add_all([UserRole(user_id=account.id, role_code=role) for role in roles])
+        return user_details(db, account.id)
 
 
 @router.put("/users/{user_id}")
 def update_user(user_id: int, payload: UserUpdate,
                 actor: dict = Depends(require("users.manage"))) -> dict:
-    with connection() as db:
-        # 资料和角色一次提交；任一校验失败都回滚，避免只保存一半。
-        db.execute("BEGIN IMMEDIATE")
-        if not db.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone():
+    with orm_session(write=True) as db:
+        # 资料、角色和审计在同一事务，任一校验失败均回滚。
+        account = db.get(User, user_id)
+        if account is None:
             raise HTTPException(404, "用户不存在")
         before = user_details(db, user_id)
         roles = validate_roles(db, payload.roles)
         if "admin" not in roles:
             ensure_active_admin_remains(db, user_id)
         try:
-            db.execute("UPDATE users SET full_name = ?, employee_no = ?, phone = ? WHERE id = ?",
-                       (payload.full_name, payload.employee_no, payload.phone, user_id))
-        except sqlite3.IntegrityError:
+            account.full_name, account.employee_no, account.phone = payload.full_name, payload.employee_no, payload.phone
+            db.flush()
+        except IntegrityError:
             raise HTTPException(409, "工号已存在") from None
-        db.execute("DELETE FROM user_roles WHERE user_id = ?", (user_id,))
-        db.executemany("INSERT INTO user_roles(user_id, role_code) VALUES (?, ?)",
-                       [(user_id, role) for role in roles])
+        replace_user_roles(db, user_id, roles)
         after = user_details(db, user_id)
-        db.execute("""INSERT INTO user_profile_changes(user_id, changed_by, before_json, after_json)
-                      VALUES (?, ?, ?, ?)""",
-                   (user_id, actor["id"], json.dumps(before, ensure_ascii=False),
-                    json.dumps(after, ensure_ascii=False)))
+        db.add(UserProfileChange(user_id=user_id, changed_by=actor['id'],
+            before_json=json.dumps(before, ensure_ascii=False), after_json=json.dumps(after, ensure_ascii=False)))
         return after
 
 
 @router.put("/users/{user_id}/roles")
 def set_user_roles(user_id: int, payload: RolesInput,
                    _: dict = Depends(require("users.manage"))) -> dict:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        if not db.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone():
+    with orm_session(write=True) as db:
+        if db.get(User, user_id) is None:
             raise HTTPException(404, "用户不存在")
         roles = validate_roles(db, payload.roles)
         if "admin" not in roles:
             ensure_active_admin_remains(db, user_id)
-        db.execute("DELETE FROM user_roles WHERE user_id = ?", (user_id,))
-        db.executemany("INSERT INTO user_roles(user_id, role_code) VALUES (?, ?)",
-                       [(user_id, role) for role in roles])
+        replace_user_roles(db, user_id, roles)
         return user_details(db, user_id)
 
 
 @router.put("/users/{user_id}/status")
 def set_user_status(user_id: int, payload: StatusInput,
                     _: dict = Depends(require("users.manage"))) -> dict:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        row = db.execute("SELECT is_active FROM users WHERE id = ?", (user_id,)).fetchone()
-        if not row:
+    with orm_session(write=True) as db:
+        account = db.get(User, user_id)
+        if account is None:
             raise HTTPException(404, "用户不存在")
-        if row["is_active"] and not payload.is_active:
+        if account.is_active and not payload.is_active:
             ensure_active_admin_remains(db, user_id)
-        db.execute("UPDATE users SET is_active = ? WHERE id = ?", (int(payload.is_active), user_id))
+        account.is_active = int(payload.is_active)
         if not payload.is_active:
-            # 停用时撤销全部会话；重新启用后必须输入密码登录。
-            db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            # 停用时撤销全部会话，重新启用后必须登录。
+            db.execute(delete(AuthSession).where(AuthSession.user_id == user_id))
         return user_details(db, user_id)
 
 
 @router.post("/users/{user_id}/reset-password", status_code=204)
 def reset_user_password(user_id: int, payload: PasswordInput,
                         _: dict = Depends(require("users.manage"))) -> None:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        if not db.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone():
+    with orm_session(write=True) as db:
+        account = db.get(User, user_id)
+        if account is None:
             raise HTTPException(404, "用户不存在")
-        db.execute("UPDATE users SET password_hash = ? WHERE id = ?",
-                   (hash_password(payload.password), user_id))
-        db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        account.password_hash = hash_password(payload.password)
+        db.execute(delete(AuthSession).where(AuthSession.user_id == user_id))

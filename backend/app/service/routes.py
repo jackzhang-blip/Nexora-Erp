@@ -2,8 +2,10 @@
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
+from sqlalchemy import select
 
-from app.core.database import connection
+from app.core.models import User, ServerIdentity
+from app.core.orm import orm_session
 
 router = APIRouter(prefix="/api/v1")
 
@@ -22,14 +24,14 @@ def health(request: Request) -> HealthResponse:
 
 @router.get("/setup/status")
 def setup_status() -> dict:
-    with connection() as db:
-        return {"needs_setup": db.execute("SELECT NOT EXISTS(SELECT 1 FROM users)").fetchone()[0] == 1}
+    with orm_session() as db:
+        return {"needs_setup": db.scalar(select(User.id).limit(1)) is None}
 
 
 @router.get("/server/info")
 def server_info(request: Request) -> dict:
     # 发现阶段只公开实例身份和兼容版本，不返回用户或业务资料。
-    with connection() as db:
-        row = db.execute("SELECT id, name FROM server_identity LIMIT 1").fetchone()
-        return {"id": row["id"], "name": row["name"], "version": request.app.version,
-                "ready": db.execute("SELECT EXISTS(SELECT 1 FROM users)").fetchone()[0] == 1}
+    with orm_session() as db:
+        row = db.scalar(select(ServerIdentity).limit(1))
+        return {"id": row.id, "name": row.name, "version": request.app.version,
+                "ready": db.scalar(select(User.id).limit(1)) is not None}
