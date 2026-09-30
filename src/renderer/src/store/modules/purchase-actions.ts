@@ -7,6 +7,10 @@ export function createPurchaseActions(
 ) {
   const {
     purchaseOrders,
+    purchaseRequests,
+    purchaseRequestForm,
+    requestConversionForm,
+    requestRejectReasons,
     receiptForm,
     purchaseForm,
     purchaseReturnForm,
@@ -14,6 +18,83 @@ export function createPurchaseActions(
     receiptReversalReasons,
     selectedPurchaseReturnReceipt
   } = state
+
+  function editPurchaseRequest(requestId?: number): void {
+    const request = purchaseRequests.value.find((item) => item.id === requestId)
+    purchaseRequestForm.value = request ? {
+      requestId: request.id,
+      reference: request.reference,
+      note: request.note,
+      lines: request.lines.map((line) => ({ material_id: line.material_id, quantity: line.quantity }))
+    } : { requestId: null, reference: '', note: '', lines: [{ material_id: 0, quantity: '1' }] }
+  }
+
+  async function savePurchaseRequest(): Promise<void> {
+    if (!window.nexora) return
+    const { requestId, reference, note, lines } = purchaseRequestForm.value
+    await perform(async () => {
+      const payload = { reference, note, lines: lines.map((line) => ({ ...line })) }
+      if (requestId) await window.nexora!.callApi('updatePurchaseRequest', { requestId, ...payload })
+      else await window.nexora!.callApi('createPurchaseRequest', payload)
+      editPurchaseRequest()
+    }, requestId ? '采购申请已更新。' : '采购申请草稿已创建。')
+  }
+
+  async function submitPurchaseRequest(requestId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('submitPurchaseRequest', { requestId }), `采购申请 #${requestId} 已提交。`)
+  }
+
+  async function approvePurchaseRequest(requestId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('approvePurchaseRequest', { requestId }), `采购申请 #${requestId} 已批准。`)
+  }
+
+  async function rejectPurchaseRequest(requestId: number): Promise<void> {
+    if (!window.nexora) return
+    const reason = requestRejectReasons.value[requestId]?.trim() ?? ''
+    await perform(async () => {
+      await window.nexora!.callApi('rejectPurchaseRequest', { requestId, reason })
+      delete requestRejectReasons.value[requestId]
+    }, `采购申请 #${requestId} 已驳回。`)
+  }
+
+  async function cancelPurchaseRequest(requestId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('cancelPurchaseRequest', { requestId }), `采购申请 #${requestId} 已取消。`)
+  }
+
+  function selectRequestConversion(requestId: number): void {
+    const request = purchaseRequests.value.find((item) => item.id === requestId)
+    requestConversionForm.value = {
+      requestId: request?.id ?? 0,
+      supplier_id: 0,
+      reference: '',
+      // 每次选择申请都从服务端剩余量预填；允许把本批不采购的明细数量改为零。
+      lines: request?.lines.filter((line) => Number(line.remaining_quantity) > 0).map((line) => ({
+        material_id: line.material_id,
+        purchase_request_line_id: line.id,
+        quantity: line.remaining_quantity,
+        unit_price: '0'
+      })) ?? []
+    }
+  }
+
+  async function convertPurchaseRequest(): Promise<void> {
+    if (!window.nexora) return
+    const form = requestConversionForm.value
+    const lines = form.lines.filter((line) => Number(line.quantity) > 0)
+    if (!form.requestId || !lines.length) return
+    await perform(async () => {
+      await window.nexora!.callApi('createPurchaseOrder', {
+        purchase_request_id: form.requestId,
+        supplier_id: form.supplier_id,
+        reference: form.reference,
+        lines: lines.map((line) => ({ ...line }))
+      })
+      selectRequestConversion(0)
+    }, '采购订单草稿已由申请生成。')
+  }
 
   function addLine(): void {
     receiptForm.value.lines.push({ material_id: 0, quantity: '1' })
@@ -174,6 +255,14 @@ export function createPurchaseActions(
   }
 
   return {
+    editPurchaseRequest,
+    savePurchaseRequest,
+    submitPurchaseRequest,
+    approvePurchaseRequest,
+    rejectPurchaseRequest,
+    cancelPurchaseRequest,
+    selectRequestConversion,
+    convertPurchaseRequest,
     addLine,
     removeLine,
     createReceipt,

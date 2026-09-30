@@ -138,15 +138,17 @@ def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path):
     with sqlite3.connect(path) as db:
         # 模拟 v24 旧库：权限表只有代码，迁移须保留已有角色关联所用的代码。
         db.execute("CREATE TABLE permissions (code TEXT PRIMARY KEY)")
+        # 旧权限库的最小角色关联表，供新版权限种子验证升级路径。
+        db.execute("CREATE TABLE role_permissions (role_code TEXT, permission_code TEXT)")
         db.execute("INSERT INTO permissions(code) VALUES ('bom.activate'), ('future.view')")
         db.execute("PRAGMA user_version = 24")
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 28
-        assert dict(db.execute("SELECT code, label FROM permissions").fetchall()) == {
-            "bom.activate": "启用生产物料清单版本",
-            "future.view": "未命名权限",
-        }
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 29
+        labels = dict(db.execute("SELECT code, label FROM permissions").fetchall())
+        assert labels["bom.activate"] == "启用生产物料清单版本"
+        assert labels["future.view"] == "未命名权限"
+        assert labels["purchase_request.review"] == "审批采购申请"
         # 升级后新增权限必须同时登记中文名称，不再产生裸代码展示。
         try:
             db.execute("INSERT INTO permissions(code) VALUES ('new.view')")
@@ -206,6 +208,13 @@ def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, 
         db.execute("UPDATE permissions SET label = '未命名权限' WHERE code = 'production.view'")
         db.execute("UPDATE permissions SET label = '查看仓库实时库存' WHERE code = 'inventory.view'")
         grants = db.execute("SELECT role_code, permission_code FROM role_permissions ORDER BY 1, 2").fetchall()
+        # 人工回退版本测试须一并移除新版申请结构，才能模拟真实 v25 库。
+        db.execute("DROP TABLE purchase_order_request_links")
+        db.execute("DROP TABLE purchase_request_lines")
+        db.execute("DROP TABLE purchase_requests")
+        db.execute("DELETE FROM role_permissions WHERE permission_code LIKE 'purchase_request.%'")
+        db.execute("DELETE FROM permissions WHERE code LIKE 'purchase_request.%'")
+        db.execute("DELETE FROM permission_groups WHERE code = 'purchase.purchase_request'")
         db.execute("DROP TABLE supplier_materials")
         # 还原成升级前的 v25 表结构，验证中文修复与目录落库连续迁移。
         db.execute("DROP TRIGGER permissions_group_required_insert")
@@ -231,6 +240,6 @@ def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, 
 
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 28
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 29
         assert db.execute("SELECT role_code, permission_code FROM role_permissions ORDER BY 1, 2").fetchall() == grants
         assert db.execute("SELECT label FROM permissions WHERE code = 'inventory.view'").fetchone()[0] == "查看仓库实时库存"

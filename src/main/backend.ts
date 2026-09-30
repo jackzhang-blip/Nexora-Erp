@@ -218,6 +218,22 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
       return { method: 'POST', path: `/api/v1/purchase-returns/${returnId}/reverse`, body: { reason: fields.reason } }
     }
     case 'purchaseOrders': return { method: 'GET', path: '/api/v1/purchase-orders' }
+    case 'purchaseRequests': return { method: 'GET', path: '/api/v1/purchase-requests' }
+    case 'createPurchaseRequest': return { method: 'POST', path: '/api/v1/purchase-requests', body: payload }
+    case 'updatePurchaseRequest': {
+      const requestId = positiveId(payload, 'requestId')
+      const fields = payload as ErpOperations['updatePurchaseRequest']['input']
+      return { method: 'PUT', path: `/api/v1/purchase-requests/${requestId}`,
+        body: { reference: fields.reference, note: fields.note, lines: fields.lines } }
+    }
+    case 'submitPurchaseRequest': return { method: 'POST', path: `/api/v1/purchase-requests/${positiveId(payload, 'requestId')}/submit` }
+    case 'approvePurchaseRequest': return { method: 'POST', path: `/api/v1/purchase-requests/${positiveId(payload, 'requestId')}/approve` }
+    case 'rejectPurchaseRequest': {
+      const requestId = positiveId(payload, 'requestId')
+      const fields = payload as ErpOperations['rejectPurchaseRequest']['input']
+      return { method: 'POST', path: `/api/v1/purchase-requests/${requestId}/reject`, body: { reason: fields.reason } }
+    }
+    case 'cancelPurchaseRequest': return { method: 'POST', path: `/api/v1/purchase-requests/${positiveId(payload, 'requestId')}/cancel` }
     case 'createPurchaseOrder': return { method: 'POST', path: '/api/v1/purchase-orders', body: payload }
     case 'confirmPurchaseOrder': return { method: 'POST', path: `/api/v1/purchase-orders/${positiveId(payload, 'orderId')}/confirm` }
     case 'cancelPurchaseOrder': return { method: 'POST', path: `/api/v1/purchase-orders/${positiveId(payload, 'orderId')}/cancel` }

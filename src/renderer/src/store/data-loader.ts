@@ -15,6 +15,7 @@ export function createDataLoader(
     movements,
     receipts,
     purchaseOrders,
+    purchaseRequests,
     purchaseReturns,
     receivablesPayables,
     financeAccounts,
@@ -97,6 +98,9 @@ export function createDataLoader(
         window.nexora.callApi('purchaseReturns', undefined)
       ])
     }
+    purchaseRequests.value = can('purchase_request.view')
+      ? await window.nexora.callApi('purchaseRequests', undefined)
+      : []
     if (can('sales.view')) {
       ;[
         customers.value,

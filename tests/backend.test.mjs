@@ -232,3 +232,29 @@ test('基础资料接口限定路径和正整数编号', async (t) => {
   await assert.rejects(callBackend('bindSupplierMaterial', { supplierId: 3, materialId: '../users' }), /记录编号无效/)
   await assert.rejects(callBackend('unbindSupplierMaterial', { supplierId: 0, materialId: 4 }), /记录编号无效/)
 })
+
+test('采购申请操作使用固定路径且只发送正式字段', async (t) => {
+  const originalUrl = process.env.NEXORA_API_URL
+  t.after(() => {
+    if (originalUrl === undefined) delete process.env.NEXORA_API_URL
+    else process.env.NEXORA_API_URL = originalUrl
+  })
+  process.env.NEXORA_API_URL = 'http://127.0.0.1:8000'
+  const calls = []
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push({ path: new URL(url).pathname, method: init.method, body: init.body })
+    return Response.json({ token: 'test-token', user: { id: 1 } })
+  })
+  await callBackend('login', {})
+  await callBackend('purchaseRequests', undefined)
+  assert.equal(calls.at(-1).path, '/api/v1/purchase-requests')
+  const input = { requestId: 7, reference: 'REQ', note: '补货', lines: [{ material_id: 2, quantity: '3' }] }
+  await callBackend('updatePurchaseRequest', input)
+  assert.equal(calls.at(-1).path, '/api/v1/purchase-requests/7')
+  assert.equal(calls.at(-1).method, 'PUT')
+  assert.deepEqual(JSON.parse(calls.at(-1).body), { reference: 'REQ', note: '补货', lines: input.lines })
+  await callBackend('rejectPurchaseRequest', { requestId: 7, reason: '数量错误' })
+  assert.equal(calls.at(-1).path, '/api/v1/purchase-requests/7/reject')
+  assert.deepEqual(JSON.parse(calls.at(-1).body), { reason: '数量错误' })
+  await assert.rejects(callBackend('approvePurchaseRequest', { requestId: '../users' }), /记录编号无效/)
+})

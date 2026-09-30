@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.core.database import connection
 from app.purchase.returns import returned_quantity as purchase_returned_quantity
+from app.purchase.requests import ordered_quantity
 from app.access.security import require
 
 router = APIRouter(prefix="/api/v1")
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/api/v1")
 
 class PurchaseOrderLineInput(BaseModel):
     material_id: int = Field(gt=0)
+    purchase_request_line_id: int | None = Field(default=None, gt=0)
     quantity: Decimal
     unit_price: Decimal
 
@@ -36,6 +38,7 @@ class PurchaseOrderLineInput(BaseModel):
 
 class PurchaseOrderInput(BaseModel):
     supplier_id: int = Field(gt=0)
+    purchase_request_id: int | None = Field(default=None, gt=0)
     reference: str = Field(default="", max_length=100)
     lines: list[PurchaseOrderLineInput] = Field(min_length=1, max_length=100)
 
@@ -68,8 +71,10 @@ def order_data(db: sqlite3.Connection, order_id: int) -> dict:
     lines = []
     total = Decimal(0)
     for entry in db.execute("""SELECT pol.id, pol.material_id, m.sku, m.name AS material_name,
-        m.unit, pol.quantity, pol.unit_price FROM purchase_order_lines pol
+        m.unit, pol.quantity, pol.unit_price, link.purchase_request_line_id
+        FROM purchase_order_lines pol
         JOIN materials m ON m.id = pol.material_id
+        LEFT JOIN purchase_order_request_links link ON link.purchase_order_line_id = pol.id
         WHERE pol.purchase_order_id = ? ORDER BY pol.id""", (order_id,)):
         quantity = Decimal(entry["quantity"])
         price = Decimal(entry["unit_price"])
@@ -80,7 +85,13 @@ def order_data(db: sqlite3.Connection, order_id: int) -> dict:
         lines.append({**dict(entry), "received_quantity": str(received),
                       "returned_quantity": str(returned), "net_received_quantity": str(received - returned),
                       "remaining_quantity": str(quantity - received), "line_total": str(line_total)})
-    return {**dict(row), "lines": lines, "total_amount": str(total)}
+    request_ids = {entry["purchase_request_id"] for entry in db.execute("""
+        SELECT DISTINCT prl.purchase_request_id FROM purchase_order_request_links link
+        JOIN purchase_order_lines pol ON pol.id = link.purchase_order_line_id
+        JOIN purchase_request_lines prl ON prl.id = link.purchase_request_line_id
+        WHERE pol.purchase_order_id = ?""", (order_id,))}
+    return {**dict(row), "purchase_request_id": next(iter(request_ids), None),
+            "lines": lines, "total_amount": str(total)}
 
 
 def order_receipt_lines(db: sqlite3.Connection, order_id: int, supplier_id: int,
@@ -150,6 +161,10 @@ def create_purchase_order(payload: PurchaseOrderInput,
                           user: dict = Depends(require("purchase_order.create"))) -> dict:
     if len({line.material_id for line in payload.lines}) != len(payload.lines):
         raise HTTPException(422, "一张采购订单不能重复选择同一物料")
+    if (payload.purchase_request_id is None and any(line.purchase_request_line_id is not None for line in payload.lines)) or (
+        payload.purchase_request_id is not None and any(line.purchase_request_line_id is None for line in payload.lines)
+    ):
+        raise HTTPException(422, "关联申请的订单须为每条明细选择申请明细")
     with connection() as db:
         db.execute("BEGIN IMMEDIATE")
         if not db.execute("SELECT 1 FROM suppliers WHERE id = ?", (payload.supplier_id,)).fetchone():
@@ -157,12 +172,32 @@ def create_purchase_order(payload: PurchaseOrderInput,
         for line in payload.lines:
             if not db.execute("SELECT 1 FROM materials WHERE id = ?", (line.material_id,)).fetchone():
                 raise HTTPException(422, "物料不存在")
+        if payload.purchase_request_id is not None:
+            request = db.execute("SELECT status FROM purchase_requests WHERE id = ?",
+                                 (payload.purchase_request_id,)).fetchone()
+            if not request:
+                raise HTTPException(422, "采购申请不存在")
+            if request["status"] != "approved":
+                raise HTTPException(409, "只有已批准的采购申请可转订单")
+            for line in payload.lines:
+                source = db.execute("""SELECT material_id, quantity FROM purchase_request_lines
+                    WHERE id = ? AND purchase_request_id = ?""",
+                    (line.purchase_request_line_id, payload.purchase_request_id)).fetchone()
+                if not source or source["material_id"] != line.material_id:
+                    raise HTTPException(422, "采购订单明细与申请明细不一致")
+                # 在同一写事务内检查未转数量，两个客户端不能同时占用同一申请余额。
+                if line.quantity > Decimal(source["quantity"]) - ordered_quantity(db, line.purchase_request_line_id):
+                    raise HTTPException(409, f"申请明细 #{line.purchase_request_line_id} 的未转数量不足")
         cursor = db.execute("INSERT INTO purchase_orders(supplier_id, reference, created_by) VALUES (?, ?, ?)",
                             (payload.supplier_id, payload.reference.strip(), user["id"]))
-        db.executemany("""INSERT INTO purchase_order_lines(
-            purchase_order_id, material_id, quantity, unit_price) VALUES (?, ?, ?, ?)""",
-            [(cursor.lastrowid, line.material_id, str(line.quantity), str(line.unit_price))
-             for line in payload.lines])
+        for line in payload.lines:
+            line_id = db.execute("""INSERT INTO purchase_order_lines(
+                purchase_order_id, material_id, quantity, unit_price) VALUES (?, ?, ?, ?)""",
+                (cursor.lastrowid, line.material_id, str(line.quantity), str(line.unit_price))).lastrowid
+            if line.purchase_request_line_id is not None:
+                db.execute("""INSERT INTO purchase_order_request_links(
+                    purchase_order_line_id, purchase_request_line_id) VALUES (?, ?)""",
+                    (line_id, line.purchase_request_line_id))
         return order_data(db, cursor.lastrowid)
 
 

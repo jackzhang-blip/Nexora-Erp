@@ -114,6 +114,7 @@ const {
         <div class="receipt-head">
           <div>
             <strong>#{{ item.id }} · {{ item.supplier_name }}</strong>
+            <span v-if="item.purchase_request_id" class="muted"> · 采购申请 #{{ item.purchase_request_id }}</span>
             <p class="muted">
               {{ localTime(item.created_at) }} · 创建人
               {{ item.created_by_name }}

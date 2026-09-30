@@ -13,6 +13,7 @@ from app.access.routes import router as access_router
 from app.catalog.routes import router as catalog_router
 from app.purchase.receipts import router as receipts_router
 from app.purchase.orders import router as purchase_router
+from app.purchase.requests import router as purchase_requests_router
 from app.purchase.returns import router as purchase_returns_router
 from app.inventory.warehouse import router as inventory_router
 from app.inventory.stocktake import router as stocktake_router
@@ -69,7 +70,7 @@ app = FastAPI(title="Nexora ERP API", version="0.1.0", lifespan=lifespan)
 for router in (
     service_router, access_router, catalog_router, receipts_router,
     inventory_router, stock_router, stocktake_router,
-    purchase_router, purchase_returns_router, sales_router, sales_returns_router,
+    purchase_router, purchase_requests_router, purchase_returns_router, sales_router, sales_returns_router,
     production_router, work_orders_router, material_issues_router,
     material_returns_router, production_completions_router, production_costs_router,
     finance_router,

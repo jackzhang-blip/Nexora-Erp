@@ -13,6 +13,7 @@ import type {
   ProductionCompletion,
   ProductionCostReport,
   PurchaseOrder,
+  PurchaseRequest,
   PurchaseReturn,
   ReceivablesPayables,
   Receipt,
@@ -61,6 +62,7 @@ export function createAppState() {
   const movements = ref<Movement[]>([])
   const receipts = ref<Receipt[]>([])
   const purchaseOrders = ref<PurchaseOrder[]>([])
+  const purchaseRequests = ref<PurchaseRequest[]>([])
   const purchaseReturns = ref<PurchaseReturn[]>([])
   const receivablesPayables = ref<ReceivablesPayables | null>(null)
   const financeAccounts = ref<FinanceAccount[]>([])
@@ -101,6 +103,19 @@ export function createAppState() {
     reference: '',
     lines: [{ material_id: 0, quantity: '1', unit_price: '0' }]
   })
+  const purchaseRequestForm = ref({
+    requestId: null as number | null,
+    reference: '',
+    note: '',
+    lines: [{ material_id: 0, quantity: '1' }]
+  })
+  const requestConversionForm = ref({
+    requestId: 0,
+    supplier_id: 0,
+    reference: '',
+    lines: [] as { material_id: number; purchase_request_line_id: number; quantity: string; unit_price: string }[]
+  })
+  const requestRejectReasons = ref<Record<number, string>>({})
   const purchaseReturnForm = ref({
     receipt_id: 0,
     reason: '',
@@ -277,6 +292,7 @@ export function createAppState() {
     movements,
     receipts,
     purchaseOrders,
+    purchaseRequests,
     purchaseReturns,
     receivablesPayables,
     financeAccounts,
@@ -307,6 +323,9 @@ export function createAppState() {
     supplierForm,
     receiptForm,
     purchaseForm,
+    purchaseRequestForm,
+    requestConversionForm,
+    requestRejectReasons,
     purchaseReturnForm,
     paymentForm,
     reversalReasons,
