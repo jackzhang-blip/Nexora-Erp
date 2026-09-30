@@ -218,6 +218,24 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'inventoryCostInputs': return { method: 'GET', path: '/api/v1/inventory/valuation/inputs' }
     case 'recordInventoryCost': return { method: 'POST', path: '/api/v1/inventory/valuation/inputs', body: payload }
     case 'financeAccounts': return { method: 'GET', path: '/api/v1/finance/accounts' }
+    case 'ledgerAccounts': return { method: 'GET', path: '/api/v1/finance/ledger-accounts' }
+    case 'createLedgerAccount': return { method: 'POST', path: '/api/v1/finance/ledger-accounts', body: payload }
+    case 'ledgerAccountChanges': return { method: 'GET', path: `/api/v1/finance/ledger-accounts/${positiveId(payload, 'id')}/changes` }
+    case 'updateLedgerAccount': {
+      const id = positiveId(payload, 'id')
+      const fields = payload as ErpOperations['updateLedgerAccount']['input']
+      return { method: 'PUT', path: `/api/v1/finance/ledger-accounts/${id}`,
+        body: { name: fields.name, is_active: fields.is_active, version: fields.version, reason: fields.reason } }
+    }
+    case 'accountingPeriods': return { method: 'GET', path: '/api/v1/finance/accounting-periods' }
+    case 'createAccountingPeriod': return { method: 'POST', path: '/api/v1/finance/accounting-periods', body: payload }
+    case 'accountingPeriodChanges': return { method: 'GET', path: `/api/v1/finance/accounting-periods/${positiveId(payload, 'id')}/changes` }
+    case 'updateAccountingPeriod': {
+      const id = positiveId(payload, 'id')
+      const fields = payload as ErpOperations['updateAccountingPeriod']['input']
+      return { method: 'PUT', path: `/api/v1/finance/accounting-periods/${id}`,
+        body: { name: fields.name, version: fields.version, reason: fields.reason } }
+    }
     case 'paymentRecords': return { method: 'GET', path: '/api/v1/finance/payment-records' }
     case 'createPaymentRecord': return { method: 'POST', path: '/api/v1/finance/payment-records', body: payload }
     case 'reversePaymentRecord': return {

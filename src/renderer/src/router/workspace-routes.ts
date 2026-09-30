@@ -214,6 +214,20 @@ export const workspaceRouteGroups = [
     label: '财务管理',
     routes: [
       {
+        key: 'ledgerAccounts',
+        path: '/workspace/ledger-accounts',
+        label: '总账科目',
+        permission: 'ledger_account.view',
+        icon: 'finance'
+      },
+      {
+        key: 'accountingPeriods',
+        path: '/workspace/accounting-periods',
+        label: '会计期间',
+        permission: 'accounting_period.view',
+        icon: 'history'
+      },
+      {
         key: 'inventoryValuation',
         path: '/workspace/inventory-valuation',
         label: '库存计价',

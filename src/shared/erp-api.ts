@@ -23,6 +23,26 @@ export interface Supplier { id: number; name: string }
 export interface Customer { id: number; name: string }
 export interface Material { id: number; sku: string; name: string; unit: string }
 export interface Warehouse { id: number; code: string; name: string }
+export type LedgerCategory = 'asset' | 'liability' | 'equity' | 'income' | 'expense' | 'cost'
+export interface LedgerAccount {
+  id: number; code: string; name: string; category: LedgerCategory
+  normal_balance: 'debit' | 'credit'; is_active: boolean; version: number
+  created_by: number; created_at: string
+}
+export interface AccountingPeriod {
+  id: number; code: string; name: string; start_date: string; end_date: string
+  status: 'open' | 'closed'; version: number; created_by: number; created_at: string
+}
+export interface FinanceMetadataChange<T> {
+  id: number; before: T | null; after: T; reason: string
+  changed_by: number; changed_by_name: string; created_at: string
+}
+export interface LedgerAccountInput {
+  code: string; name: string; category: LedgerCategory; normal_balance: 'debit' | 'credit'; reason: string
+}
+export interface AccountingPeriodInput {
+  code: string; name: string; start_date: string; end_date: string; reason: string
+}
 // 非采购入库沿用单据确认和冲销模式，不进入采购应付来源。
 export interface OtherInbound {
   id: number
@@ -868,6 +888,14 @@ export interface ErpOperations {
   receivablesPayables: { input: undefined; output: ReceivablesPayables }
   financeOverview: { input: undefined; output: FinanceOverview }
   financeAccounts: { input: undefined; output: FinanceAccount[] }
+  ledgerAccounts: { input: undefined; output: LedgerAccount[] }
+  createLedgerAccount: { input: LedgerAccountInput; output: LedgerAccount }
+  updateLedgerAccount: { input: { id: number; version: number; name: string; is_active: boolean; reason: string }; output: LedgerAccount }
+  ledgerAccountChanges: { input: { id: number }; output: FinanceMetadataChange<LedgerAccount>[] }
+  accountingPeriods: { input: undefined; output: AccountingPeriod[] }
+  createAccountingPeriod: { input: AccountingPeriodInput; output: AccountingPeriod }
+  updateAccountingPeriod: { input: { id: number; version: number; name: string; reason: string }; output: AccountingPeriod }
+  accountingPeriodChanges: { input: { id: number }; output: FinanceMetadataChange<AccountingPeriod>[] }
   paymentRecords: { input: undefined; output: PaymentRecord[] }
   createPaymentRecord: { input: { kind: 'receivable' | 'payable'; order_id: number; action: 'settlement' | 'refund'; amount: string; reference: string; note: string }; output: PaymentRecord }
   reversePaymentRecord: { input: { paymentId: number; reason: string }; output: PaymentRecord }
