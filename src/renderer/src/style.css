@@ -374,3 +374,6 @@ legend { margin-bottom: 9px; color: #46546b; font-size: 12px; font-weight: 700; 
   .receipt-head { display: block; }
   .receipt-actions { margin-top: 12px; }
 }
+
+/* 分组与页面使用相同的图标尺寸，箭头保持靠右。 */
+.category-label { display: inline-flex; align-items: center; gap: 12px; }

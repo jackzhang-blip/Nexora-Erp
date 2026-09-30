@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 37:
+        if version > 38:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -1191,3 +1191,18 @@ def migrate() -> None:
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )""")
             db.execute("PRAGMA user_version = 37")
+
+        if version < 38:
+            # 配置与变更记录独立于业务数据；恢复默认保留版本，防止旧客户端覆盖。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE menu_icons (
+                key TEXT PRIMARY KEY, icon TEXT, version INTEGER NOT NULL
+            )""")
+            db.execute("""CREATE TABLE menu_icon_changes (
+                id INTEGER PRIMARY KEY, menu_key TEXT NOT NULL,
+                before_icon TEXT, after_icon TEXT,
+                changed_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.execute("PRAGMA user_version = 38")

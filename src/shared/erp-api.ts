@@ -1,3 +1,4 @@
+import type { MenuIconKey, MenuIconSetting } from './menu-icons'
 // 桌面端与本地服务共用的数据契约；渲染进程不能自行指定请求地址。
 // 账号资料与登录名分开，工号可为空；非空工号由服务端保证唯一。
 export interface UserProfile { full_name: string; employee_no: string; phone: string }
@@ -763,6 +764,8 @@ export interface ErpOperations {
   logout: { input: undefined; output: void }
   me: { input: undefined; output: User }
   changePassword: { input: { current_password: string; new_password: string }; output: void }
+  menuIcons: { input: undefined; output: MenuIconSetting[] }
+  saveMenuIcon: { input: { key: string; icon: MenuIconKey | null; version: number }; output: MenuIconSetting }
   permissions: { input: undefined; output: Permission[] }
   // 仅修改权限目录的展示文案；授权仍以 code 为准。
   updatePermissionLabel: { input: { code: string; label: string }; output: Pick<Permission, 'code' | 'label'> }

@@ -1,5 +1,6 @@
 /** 工作台页面地址与查看权限统一在此登记，写操作仍由服务端逐项授权。 */
-type RouteIcon = 'dashboard' | 'stack' | 'archive' | 'file' | 'history' | 'team' | 'settings'
+import type { MenuIconKey } from '../../../shared/menu-icons'
+type RouteIcon = MenuIconKey
 
 interface RouteEntry {
   key: string
@@ -10,6 +11,7 @@ interface RouteEntry {
 }
 
 interface RouteGroup {
+  icon: MenuIconKey
   key: string
   label: string
   routes: readonly RouteEntry[]
@@ -18,6 +20,7 @@ interface RouteGroup {
 export const workspaceRouteGroups = [
   {
     key: 'home',
+    icon: 'dashboard',
     label: '工作台',
     routes: [
       {
@@ -31,6 +34,7 @@ export const workspaceRouteGroups = [
   },
   {
     key: 'warehouse',
+    icon: 'warehouse',
     label: '仓库管理',
     routes: [
       {
@@ -93,6 +97,7 @@ export const workspaceRouteGroups = [
   },
   {
     key: 'catalog',
+    icon: 'catalog',
     label: '基础资料',
     routes: [
       {
@@ -128,6 +133,7 @@ export const workspaceRouteGroups = [
   },
   {
     key: 'purchase',
+    icon: 'purchase',
     label: '采购管理',
     routes: [
       {
@@ -176,6 +182,7 @@ export const workspaceRouteGroups = [
   },
   {
     key: 'sales',
+    icon: 'sales',
     label: '销售管理',
     routes: [
       {
@@ -203,6 +210,7 @@ export const workspaceRouteGroups = [
   },
   {
     key: 'finance',
+    icon: 'finance',
     label: '财务管理',
     routes: [
       {
@@ -238,6 +246,7 @@ export const workspaceRouteGroups = [
   },
   {
     key: 'production',
+    icon: 'production',
     label: '生产管理',
     routes: [
       {
@@ -286,9 +295,17 @@ export const workspaceRouteGroups = [
   },
   {
     key: 'system',
+    icon: 'settings',
     label: '系统管理',
     routes: [
-      // 三个管理入口沿用同一查看权限，页面写操作仍由服务端逐项校验。
+      // 管理入口沿用同一查看权限，页面写操作仍由服务端逐项校验。
+      {
+        key: 'menuManagement',
+        path: '/workspace/menu-management',
+        label: '菜单管理',
+        permission: 'users.manage',
+        icon: 'menu'
+      },
       {
         key: 'users',
         path: '/workspace/users',
@@ -394,6 +411,7 @@ export function visibleRouteGroups(permissions: readonly string[]) {
     .map((group) => ({
       key: group.key,
       label: group.label,
+      icon: group.icon,
       routes: group.routes.filter((route) => canVisitRoute(route, permissions))
     }))
     .filter((group) => group.routes.length > 0)
