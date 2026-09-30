@@ -7,7 +7,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.core.database import connection, migrate
+from sqlalchemy import select
+from app.core.database import migrate
+from app.core.models import ServerIdentity
+from app.core.orm import orm_session
 from app.service.discovery import DiscoveryPublisher
 from app.access.routes import router as access_router
 from app.access.menus import router as menu_router
@@ -47,8 +50,8 @@ async def lifespan(_: FastAPI):
     task = None
     port = os.environ.get("NEXORA_DISCOVERY_PORT")
     if port is not None:
-        with connection() as db:
-            instance_id = db.execute("SELECT id FROM server_identity LIMIT 1").fetchone()[0]
+        with orm_session() as db:
+            instance_id = db.scalar(select(ServerIdentity.id).limit(1))
         publisher = DiscoveryPublisher(instance_id, "0.1.0", int(port))
 
         async def publish_periodically():

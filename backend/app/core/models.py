@@ -542,3 +542,253 @@ class PaymentRecord(Base):
     reverses_id: Mapped[int | None] = mapped_column(Integer, ForeignKey('payment_records.id'), nullable=True)
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
     created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+
+class ReceiptWarehouse(Base):
+    __tablename__ = "receipt_warehouses"
+    receipt_id: Mapped[int] = mapped_column(Integer, ForeignKey("receipts.id"), primary_key=True)
+    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+
+
+class Transfer(Base):
+    __tablename__ = "transfers"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    from_warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    to_warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    reference: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'draft'"))
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    posted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    posted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class TransferLine(Base):
+    __tablename__ = "transfer_lines"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    transfer_id: Mapped[int] = mapped_column(Integer, ForeignKey("transfers.id"), nullable=False)
+    material_id: Mapped[int] = mapped_column(Integer, ForeignKey("materials.id"), nullable=False)
+    quantity: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class Stocktake(Base):
+    __tablename__ = "stocktakes"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    reference: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'draft'"))
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    posted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    cancelled_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    posted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class StocktakeLine(Base):
+    __tablename__ = "stocktake_lines"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    stocktake_id: Mapped[int] = mapped_column(Integer, ForeignKey("stocktakes.id"), nullable=False)
+    material_id: Mapped[int] = mapped_column(Integer, ForeignKey("materials.id"), nullable=False)
+    book_quantity: Mapped[str] = mapped_column(Text, nullable=False)
+    counted_quantity: Mapped[str] = mapped_column(Text, nullable=False)
+    movement_id: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class BomLine(Base):
+    __tablename__ = "bom_lines"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bom_id: Mapped[int] = mapped_column(Integer, ForeignKey("boms.id"), nullable=False)
+    component_material_id: Mapped[int] = mapped_column(Integer, ForeignKey("materials.id"), nullable=False)
+    quantity: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class StocktakeReversal(Base):
+    __tablename__ = "stocktake_reversals"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    stocktake_id: Mapped[int] = mapped_column(Integer, ForeignKey("stocktakes.id"), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class TransferReversal(Base):
+    __tablename__ = "transfer_reversals"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    transfer_id: Mapped[int] = mapped_column(Integer, ForeignKey("transfers.id"), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class PurchaseRequest(Base):
+    __tablename__ = "purchase_requests"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reference: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    note: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'draft'"))
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    submitted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    cancelled_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    review_reason: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    submitted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class PurchaseRequestLine(Base):
+    __tablename__ = "purchase_request_lines"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    purchase_request_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("purchase_requests.id"), nullable=False
+    )
+    material_id: Mapped[int] = mapped_column(Integer, ForeignKey("materials.id"), nullable=False)
+    quantity: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class PurchaseOrderRequestLink(Base):
+    __tablename__ = "purchase_order_request_links"
+    purchase_order_line_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("purchase_order_lines.id"), primary_key=True
+    )
+    purchase_request_line_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("purchase_request_lines.id"), nullable=False
+    )
+
+
+class PurchaseGoodsReceipt(Base):
+    __tablename__ = "purchase_goods_receipts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    purchase_order_id: Mapped[int] = mapped_column(Integer, ForeignKey("purchase_orders.id"), nullable=False)
+    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    inbound_receipt_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("receipts.id"), nullable=True)
+    reference: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'draft'"))
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    confirmed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    cancelled_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    confirmed_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class PurchaseGoodsReceiptLine(Base):
+    __tablename__ = "purchase_goods_receipt_lines"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    goods_receipt_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("purchase_goods_receipts.id"), nullable=False
+    )
+    purchase_order_line_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("purchase_order_lines.id"), nullable=False
+    )
+    accepted_quantity: Mapped[str] = mapped_column(Text, nullable=False)
+    rejected_quantity: Mapped[str] = mapped_column(Text, nullable=False)
+    rejection_reason: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+
+
+class WarehouseInbound(Base):
+    __tablename__ = "warehouse_inbounds"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    reference: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'draft'"))
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    posted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    cancelled_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    posted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class WarehouseInboundLine(Base):
+    __tablename__ = "warehouse_inbound_lines"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    inbound_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouse_inbounds.id"), nullable=False)
+    material_id: Mapped[int] = mapped_column(Integer, ForeignKey("materials.id"), nullable=False)
+    quantity: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class WarehouseInboundReversal(Base):
+    __tablename__ = "warehouse_inbound_reversals"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    inbound_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouse_inbounds.id"), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class WarehouseOutbound(Base):
+    __tablename__ = "warehouse_outbounds"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    source_kind: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'other'"))
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    reference: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'draft'"))
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    posted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    cancelled_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    posted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    purchase_return_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("purchase_returns.id"), nullable=True
+    )
+
+
+class WarehouseOutboundLine(Base):
+    __tablename__ = "warehouse_outbound_lines"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    outbound_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouse_outbounds.id"), nullable=False)
+    material_id: Mapped[int] = mapped_column(Integer, ForeignKey("materials.id"), nullable=False)
+    quantity: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class WarehouseOutboundReversal(Base):
+    __tablename__ = "warehouse_outbound_reversals"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    outbound_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouse_outbounds.id"), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class StockAdjustment(Base):
+    __tablename__ = "stock_adjustments"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id"), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    reference: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'draft'"))
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    submitted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    posted_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    cancelled_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    review_reason: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    submitted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    posted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class StockAdjustmentLine(Base):
+    __tablename__ = "stock_adjustment_lines"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    adjustment_id: Mapped[int] = mapped_column(Integer, ForeignKey("stock_adjustments.id"), nullable=False)
+    material_id: Mapped[int] = mapped_column(Integer, ForeignKey("materials.id"), nullable=False)
+    quantity: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class StockAdjustmentReversal(Base):
+    __tablename__ = "stock_adjustment_reversals"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    adjustment_id: Mapped[int] = mapped_column(Integer, ForeignKey("stock_adjustments.id"), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("CURRENT_TIMESTAMP"))

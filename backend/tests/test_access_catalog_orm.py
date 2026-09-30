@@ -31,16 +31,20 @@ def setup(client):
 
 def test_migrated_modules_do_not_reintroduce_sql_connections():
     root = Path(__file__).resolve().parents[1] / 'app'
-    for relative in ('access/security.py', 'access/routes.py', 'access/menus.py',
-                     'catalog/routes.py', 'service/routes.py', 'finance/routes.py',
-                     'inventory/stock.py', 'inventory/ledger.py'):
-        tree = ast.parse((root / relative).read_text('utf-8'))
+    for path in root.rglob('*.py'):
+        relative = path.relative_to(root).as_posix()
+        if relative in ('core/database.py', 'core/orm.py'):
+            continue
+        tree = ast.parse(path.read_text('utf-8'))
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module == 'app.core.database':
                 assert not any(item.name == 'connection' for item in node.names), relative
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 if node.func.attr in ('execute', 'executemany') and node.args:
-                    assert not isinstance(node.args[0], ast.Constant), relative
+                    assert not isinstance(node.args[0], (ast.Constant, ast.JoinedStr)), relative
+                if node.func.attr == 'exec_driver_sql':
+                    assert relative == 'service/backup.py', relative
+                    assert ast.literal_eval(node.args[0]) == 'PRAGMA integrity_check', relative
 
 
 def test_concurrent_first_admin_and_last_admin_protection(client):

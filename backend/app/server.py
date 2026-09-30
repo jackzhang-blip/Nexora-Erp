@@ -12,7 +12,10 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
-from app.core.database import connection, migrate
+from sqlalchemy import select
+from app.core.database import migrate
+from app.core.models import ServerIdentity
+from app.core.orm import orm_session
 from .main import app
 
 
@@ -68,8 +71,8 @@ def create_server(data_dir: Path, name: str, port: int) -> uvicorn.Server:
     os.environ["NEXORA_INSTANCE_NAME"] = name
     os.environ["NEXORA_DISCOVERY_PORT"] = str(port)
     migrate()
-    with connection() as db:
-        instance_id = db.execute("SELECT id FROM server_identity LIMIT 1").fetchone()[0]
+    with orm_session() as db:
+        instance_id = db.scalar(select(ServerIdentity.id).limit(1))
     cert, key = ensure_certificate(data_dir, instance_id)
     config = uvicorn.Config(app, host="0.0.0.0", port=port,
                             ssl_certfile=str(cert), ssl_keyfile=str(key), log_level="info")
