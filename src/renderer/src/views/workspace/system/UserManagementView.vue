@@ -1,180 +1,134 @@
 <script setup lang="ts">
-import { matchesRecordQuery } from '../../../utils/workspace-records'
+import { computed, reactive, ref, watch } from 'vue'
+import { NModal, NSwitch } from 'naive-ui'
+import type { User } from '../../../../../shared/erp-api'
 import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
-import { computed, ref } from 'vue'
-import { NModal } from 'naive-ui'
 import { useAppStore } from '../../../store/app-store'
 import { submitCreateDialog } from '../../../utils/create-dialog'
+import { matchesRecordQuery } from '../../../utils/workspace-records'
 
-// 页面直接使用共享状态与操作，切换标签时不会丢失正在填写的草稿。
-const {
-  error,
-  notice,
-  busy,
-  user,
-  username,
-  password,
-  roles,
-  users,
-  roleDrafts,
-  resetPasswords,
-  newUser,
-  createUser,
-  saveRoles,
-  setUserStatus,
-  resetUserPassword
-} = useAppStore()
-
-// 保存失败时保留弹窗和草稿，方便直接修正后重试。
-const createOpen = ref(false)
-async function submitCreate(): Promise<void> {
-  await submitCreateDialog(createUser, { busy, error, notice }, createOpen)
+const { error, notice, busy, user, roles, users, resetPasswords, newUser,
+  createUser, updateUser, setUserStatus, resetUserPassword } = useAppStore()
+const editorOpen = ref(false)
+const editingId = ref<number | null>(null)
+const editDraft = reactive({ full_name: '', employee_no: '', phone: '', roles: [] as string[] })
+const profile = computed(() => editingId.value === null ? newUser.value : editDraft)
+const editingUsername = ref('')
+// 每次打开编辑复制最新已保存资料，取消不会改变列表中真实的角色和资料。
+function openEditor(entry?: User): void {
+  editingId.value = entry?.id ?? null
+  editingUsername.value = entry?.username ?? ''
+  if (entry) Object.assign(editDraft, { full_name: entry.full_name ?? '',
+    employee_no: entry.employee_no ?? '', phone: entry.phone ?? '', roles: [...entry.roles] })
+  editorOpen.value = true
 }
-// 搜索仅使用公开的账号和角色字段，不读取密码草稿。
+async function submitEditor(): Promise<void> {
+  await submitCreateDialog(
+    () => editingId.value === null ? createUser() : updateUser(editingId.value, editDraft),
+    { busy, error, notice }, editorOpen
+  )
+}
+const passwordOpen = ref(false)
+const passwordTarget = ref<User | null>(null)
+function openPassword(entry: User): void {
+  resetPasswords.value[entry.id] = ''
+  passwordTarget.value = entry
+  passwordOpen.value = true
+}
+// 密码弹窗关闭即清除敏感草稿，避免取消后的密码留在跨页状态里。
+watch(passwordOpen, (open) => {
+  if (!open && passwordTarget.value) resetPasswords.value[passwordTarget.value.id] = ''
+})
+async function submitPassword(): Promise<void> {
+  if (!passwordTarget.value) return
+  await submitCreateDialog(() => resetUserPassword(passwordTarget.value!.id),
+    { busy, error, notice }, passwordOpen)
+}
 const userQuery = ref('')
 const userColumns = [
-  { key: 'document', title: '账号', width: '180' },
-  { key: 'roles', title: '角色', width: '35%' },
-  { key: 'password', title: '重置密码', width: '230' },
-  { key: 'actions', title: '操作', width: '250' }
+  { key: 'id', title: 'ID', width: '80' },
+  { key: 'account', title: '账号', width: '150' },
+  { key: 'name', title: '姓名', width: '120' },
+  { key: 'employee', title: '工号', width: '140' },
+  { key: 'phone', title: '手机号', width: '170' },
+  { key: 'roles', title: '角色', width: '190' },
+  { key: 'actions', title: '操作', width: '350' }
 ]
-const filteredUsers = computed(() =>
-  users.value.filter((entry) =>
-    matchesRecordQuery(userQuery.value, [
-      entry.id,
-      entry.username,
-      ...entry.roles.map((code) => roles.value.find((role) => role.code === code)?.label ?? code)
-    ])
-  )
-)
+const roleLabel = (code: string): string => roles.value.find(role => role.code === code)?.label ?? code
+// 搜索仅包含可展示的资料和角色，绝不读取密码草稿。
+const filteredUsers = computed(() => users.value.filter(entry => matchesRecordQuery(userQuery.value,
+  [entry.id, entry.username, entry.full_name, entry.employee_no, entry.phone, ...entry.roles.map(roleLabel)])))
 </script>
 
 <template>
   <section class="stack">
-    <NModal v-model:show="createOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">用户管理</p>
-          <h2>创建用户</h2>
+    <NModal v-model:show="editorOpen" preset="card" :title="editingId === null ? '创建用户' : `编辑用户 · ${editingUsername}`"
+      :mask-closable="!busy" :closable="!busy" :close-on-esc="!busy" class="user-editor-modal"
+      :style="{ width: 'min(760px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
+      <form class="stack" @submit.prevent="submitEditor">
+        <div class="user-profile-grid">
+          <template v-if="editingId === null">
+            <label>账号<input v-model.trim="newUser.username" required minlength="3" maxlength="40" pattern="[A-Za-z0-9_]+" placeholder="英文、数字或下划线" :disabled="busy" /></label>
+            <label>初始密码<input v-model="newUser.password" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位" :disabled="busy" /></label>
+          </template>
+          <label>姓名<input v-model.trim="profile.full_name" maxlength="60" placeholder="请输入姓名" :disabled="busy" /></label>
+          <label>工号<input v-model.trim="profile.employee_no" maxlength="40" pattern="[A-Za-z0-9_\-]+" placeholder="英文、数字、下划线或短横线" :disabled="busy" /></label>
+          <label>手机号<input v-model.trim="profile.phone" type="tel" maxlength="24" placeholder="手机号或带区号的联系电话" :disabled="busy" /></label>
         </div>
-      </div>
-      <form class="inline-form" @submit.prevent="submitCreate">
-        <label
-          >用户名<input
-            v-model.trim="newUser.username"
-            required
-            minlength="3"
-            maxlength="40"
-            placeholder="英文、数字或下划线" /></label
-        ><label
-          >初始密码<input
-            v-model="newUser.password"
-            type="password"
-            required
-            minlength="12"
-            maxlength="128"
-            autocomplete="new-password"
-            placeholder="至少 12 位"
-        /></label>
-        <fieldset>
-          <legend>角色</legend>
-          <label v-for="role in roles" :key="role.code" class="check"
-            ><input
-              v-model="newUser.roles"
-              type="checkbox"
-              :value="role.code"
-            />{{ role.label }}</label
-          >
+        <fieldset :disabled="busy">
+          <legend>分配角色</legend>
+          <div class="role-picker">
+            <label v-for="role in roles" :key="role.code" class="check">
+              <input v-model="profile.roles" type="checkbox" :value="role.code" />{{ role.label }}
+            </label>
+          </div>
         </fieldset>
-        <button
-          class="primary"
-          type="submit"
-          :disabled="busy || !newUser.roles.length"
-        >
-          创建用户
-        </button>
+        <p class="muted">用户资料可稍后补齐；填写工号时须保持唯一，至少分配一个角色。</p>
+        <div class="form-actions">
+          <button class="secondary" type="button" :disabled="busy" @click="editorOpen = false">取消</button>
+          <button class="primary" type="submit" :disabled="busy || !profile.roles.length">{{ editingId === null ? '创建用户' : '保存修改' }}</button>
+        </div>
       </form>
     </NModal>
-    <!-- 将角色和账号操作保留在同一行，当前账号保护条件沿用原实现。 -->
-    <WorkspaceTable
-      :show-title="false"
-      title="用户管理"
-      :columns="userColumns"
-      :data="filteredUsers"
-      :min-table-width="1100"
-    >
-      <template #actions>
-        <button class="primary" type="button" :disabled="busy" @click="createOpen = true">
-          创建用户
-        </button>
-      </template>
-      <template #filters>
-        <label>
-          搜索用户
-          <input v-model="userQuery" placeholder="输入编号或名称" />
-        </label>
-      </template>
-      <template #cell-document="{ row: entry }">
-        <div>
-          <strong>{{ entry.username }}</strong>
-          <small>#{{ entry.id }} · {{ entry.is_active ? '已启用' : '已停用' }}</small>
+    <NModal v-model:show="passwordOpen" preset="card" title="重置密码" :mask-closable="!busy" :closable="!busy" :close-on-esc="!busy"
+      :style="{ width: 'min(480px, calc(100vw - 32px))' }">
+      <form v-if="passwordTarget" class="stack" @submit.prevent="submitPassword">
+        <p>为 {{ passwordTarget.username }} 设置新密码，保存后该账号需要重新登录。</p>
+        <label>新密码<input v-model="resetPasswords[passwordTarget.id]" type="password" required minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位" :disabled="busy" /></label>
+        <div class="form-actions">
+          <button class="secondary" type="button" :disabled="busy" @click="passwordOpen = false">取消</button>
+          <button class="primary" type="submit" :disabled="busy || (resetPasswords[passwordTarget.id]?.length ?? 0) < 12">确认重置</button>
         </div>
-      </template>
-      <template #cell-roles="{ row: entry }">
-        <div class="role-picker">
-          <label v-for="role in roles" :key="role.code" class="check">
-            <input v-model="roleDrafts[entry.id]" type="checkbox" :value="role.code" />
-            {{ role.label }}
-          </label>
-        </div>
-      </template>
-      <template #cell-password="{ row: entry }">
-        <label class="reset-field">
-          新密码
-          <input
-            v-model="resetPasswords[entry.id]"
-            type="password"
-            minlength="12"
-            maxlength="128"
-            autocomplete="new-password"
-            placeholder="重置密码至少 12 位"
-          />
-        </label>
-      </template>
+      </form>
+    </NModal>
+    <WorkspaceTable :show-title="false" title="用户管理" :columns="userColumns" :data="filteredUsers" :min-table-width="1200">
+      <template #actions><button class="primary" type="button" :disabled="busy" @click="openEditor()">创建用户</button></template>
+      <template #filters><label>搜索用户<input v-model="userQuery" placeholder="搜索 ID、账号、姓名、工号、手机号或角色" /></label></template>
+      <template #cell-id="{ row: entry }">{{ entry.id }}</template>
+      <template #cell-account="{ row: entry }"><strong>{{ entry.username }}</strong></template>
+      <template #cell-name="{ row: entry }">{{ entry.full_name || '—' }}</template>
+      <template #cell-employee="{ row: entry }">{{ entry.employee_no || '—' }}</template>
+      <template #cell-phone="{ row: entry }">{{ entry.phone || '—' }}</template>
+      <template #cell-roles="{ row: entry }"><div class="user-role-labels"><span v-for="code in entry.roles" :key="code" class="user-role-label">{{ roleLabel(code) }}</span></div></template>
       <template #cell-actions="{ row: entry }">
         <div class="form-actions">
-          <button
-            class="secondary small"
-            type="button"
-            :disabled="busy || !roleDrafts[entry.id]?.length"
-            @click="saveRoles(entry.id)"
-          >
-            保存角色
-          </button>
-          <button
-            class="secondary small"
-            type="button"
-            :disabled="
-              busy ||
-              entry.id === user?.id ||
-              !resetPasswords[entry.id] ||
-              resetPasswords[entry.id].length < 12
-            "
-            @click="resetUserPassword(entry.id)"
-          >
-            重置密码
-          </button>
-          <button
-            class="secondary small"
-            type="button"
-            :disabled="busy || entry.id === user?.id"
-            @click="setUserStatus(entry)"
-          >
-            {{ entry.is_active ? '停用账号' : '启用账号' }}
-          </button>
+          <button class="secondary small" type="button" :disabled="busy" @click="openEditor(entry)">编辑</button>
+          <button class="secondary small" type="button" :disabled="busy || entry.id === user?.id" @click="openPassword(entry)">重置密码</button>
+          <!-- 受控开关只展示服务端快照，失败时保持原状态；禁止停用当前登录账号。 -->
+          <NSwitch :value="entry.is_active" :disabled="busy || entry.id === user?.id" :aria-label="`${entry.username}账号状态`" @update:value="setUserStatus(entry)">
+            <template #checked>启用账号</template><template #unchecked>停用账号</template>
+          </NSwitch>
         </div>
       </template>
       <template #empty>{{ userQuery ? '没有匹配的用户。' : '暂无用户。' }}</template>
     </WorkspaceTable>
   </section>
 </template>
+
+<style scoped>
+/* 资料字段分两列排列，小窗口下自然折行，不挤压操作和角色内容。 */
+.user-profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.user-role-labels { display: flex; flex-wrap: wrap; gap: 6px; }
+.user-role-label { padding: 4px 9px; border-radius: 6px; background: rgba(44, 153, 150, .12); }
+@media (max-width: 600px) { .user-profile-grid { grid-template-columns: 1fr; } }
+</style>

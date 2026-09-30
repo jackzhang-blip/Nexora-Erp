@@ -128,6 +128,8 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     }
     case 'users': return { method: 'GET', path: '/api/v1/users' }
     case 'createUser': return { method: 'POST', path: '/api/v1/users', body: payload }
+    // 路径只能使用经过校验的用户编号，业务字段由后端再次校验。
+    case 'updateUser': return { method: 'PUT', path: `/api/v1/users/${positiveId(payload, 'userId')}`, body: payload }
     case 'setUserRoles': return {
       method: 'PUT', path: `/api/v1/users/${positiveId(payload, 'userId')}/roles`,
       body: { roles: (payload as { roles: unknown }).roles }

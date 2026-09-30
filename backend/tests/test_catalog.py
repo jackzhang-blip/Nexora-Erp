@@ -132,7 +132,7 @@ def test_v27_migration_preserves_existing_materials(client):
     migrate()
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 36
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 37
         assert db.execute("SELECT name FROM materials WHERE id = ?", (material,)).fetchone()[0] == "旧物料"
         assert db.execute("SELECT COUNT(*) FROM supplier_materials").fetchone()[0] == 0
 

@@ -122,7 +122,7 @@ test('新增入口打开弹窗，失败时保留草稿', () => {
   for (const path of paths) {
     const source = readFileSync(new URL(path, viewRoot), 'utf8')
     assert.match(source, /<NModal\b/, path)
-    assert.match(source, /@click="(?:edit\(\)|showForm = true|createOpen = true|customerOpen = true)"/, path)
+    assert.match(source, /@click="(?:edit\(\)|openEditor\(\)|showForm = true|createOpen = true|customerOpen = true)"/, path)
     assert.match(source, /submitCreateDialog\(|if \(await saveMaterial/, path)
   }
 })

@@ -35,7 +35,7 @@ def token_hash(token: str) -> str:
 
 
 def user_details(db, user_id: int) -> dict:
-    user = db.execute("SELECT id, username, is_active FROM users WHERE id = ?", (user_id,)).fetchone()
+    user = db.execute("SELECT id, username, is_active, full_name, employee_no, phone FROM users WHERE id = ?", (user_id,)).fetchone()
     roles = [row[0] for row in db.execute("SELECT role_code FROM user_roles WHERE user_id = ? ORDER BY role_code", (user_id,))]
     permissions = [row[0] for row in db.execute("""
         SELECT DISTINCT rp.permission_code FROM role_permissions rp
@@ -43,7 +43,8 @@ def user_details(db, user_id: int) -> dict:
         WHERE ur.user_id = ? ORDER BY rp.permission_code
     """, (user_id,))]
     return {"id": user["id"], "username": user["username"], "is_active": bool(user["is_active"]),
-            "roles": roles, "permissions": permissions}
+            "roles": roles, "permissions": permissions,
+            "full_name": user["full_name"], "employee_no": user["employee_no"], "phone": user["phone"]}
 
 
 def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
