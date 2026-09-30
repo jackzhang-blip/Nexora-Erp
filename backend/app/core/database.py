@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 32:
+        if version > 33:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -1040,3 +1040,34 @@ def migrate() -> None:
                                          "other_outbound.post", "other_outbound.cancel")])
             db.execute("INSERT INTO role_permissions(role_code, permission_code) VALUES ('admin', 'other_outbound.reverse')")
             db.execute("PRAGMA user_version = 32")
+
+        if version < 33:
+            # 旧退货保留历史流水；仅为已确认的旧单据补关联出库单，不重放库存。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("ALTER TABLE warehouse_outbounds ADD COLUMN purchase_return_id INTEGER REFERENCES purchase_returns(id)")
+            db.execute("CREATE UNIQUE INDEX warehouse_outbound_return_unique ON warehouse_outbounds(purchase_return_id)")
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'purchase_returns'").fetchone():
+                legacy_returns = db.execute("""SELECT pr.id, pr.reason, pr.created_by, pr.posted_by,
+                pr.created_at, pr.posted_at, rw.warehouse_id FROM purchase_returns pr
+                JOIN receipt_warehouses rw ON rw.receipt_id = pr.receipt_id
+                WHERE pr.status = 'posted'""").fetchall()
+            else:
+                legacy_returns = []
+            for item in legacy_returns:
+                outbound_id = db.execute("""INSERT INTO warehouse_outbounds(warehouse_id, source_kind,
+                    reason, note, reference, status, created_by, posted_by, created_at, posted_at,
+                    purchase_return_id) VALUES (?, 'purchase_return', 'purchase_return', ?, ?,
+                    'posted', ?, ?, ?, ?, ?)""",
+                    (item['warehouse_id'], item['reason'], f"采购退货 #{item['id']}",
+                     item['created_by'], item['posted_by'], item['created_at'], item['posted_at'], item['id'])).lastrowid
+                db.execute("""INSERT INTO warehouse_outbound_lines(outbound_id, material_id, quantity)
+                    SELECT ?, rl.material_id, prl.quantity FROM purchase_return_lines prl
+                    JOIN receipt_lines rl ON rl.id = prl.receipt_line_id
+                    WHERE prl.purchase_return_id = ?""", (outbound_id, item['id']))
+            db.execute("""INSERT INTO permissions(code, label, group_code)
+                VALUES ('purchase_return.submit', '提交采购退货待仓库出库', 'purchase.purchase_return')""")
+            db.execute("""INSERT INTO role_permissions(role_code, permission_code)
+                SELECT role_code, 'purchase_return.submit' FROM role_permissions
+                WHERE permission_code = 'purchase_return.create'""")
+            db.execute("PRAGMA user_version = 33")

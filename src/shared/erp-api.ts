@@ -64,6 +64,7 @@ export interface WarehouseOutbound {
   reversed_by_name: string | null
   reversed_at: string | null
   lines: ReceiptLine[]
+  purchase_return_id: number | null
 }
 export interface Stock extends Material { quantity: string }
 export interface ReceiptLine {
@@ -199,6 +200,8 @@ export interface PurchaseReturn {
   warehouse_name: string
   reason: string
   status: 'draft' | 'posted' | 'cancelled'
+  outbound_id: number | null
+  outbound_status: 'draft' | 'posted' | 'cancelled' | null
   created_by: number
   created_by_name: string
   posted_by: number | null
@@ -725,6 +728,7 @@ export interface ErpOperations {
   recordProductionCharge: { input: { work_order_id: number; kind: 'labor' | 'overhead'; amount: string; reference: string; note: string }; output: ProductionCostEntry }
   reverseProductionCost: { input: { entryId: number; reason: string }; output: ProductionCostEntry }
   createPurchaseReturn: { input: { receipt_id: number; reason: string; lines: { receipt_line_id: number; quantity: string }[] }; output: PurchaseReturn }
+  submitPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   postPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   cancelPurchaseReturn: { input: { returnId: number }; output: PurchaseReturn }
   reversePurchaseReturn: { input: { returnId: number; reason: string }; output: PurchaseReturn }

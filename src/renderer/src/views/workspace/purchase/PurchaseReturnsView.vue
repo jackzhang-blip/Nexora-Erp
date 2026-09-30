@@ -13,7 +13,7 @@ const {
   localTime,
   choosePurchaseReturnReceipt,
   createPurchaseReturn,
-  postPurchaseReturn,
+  submitPurchaseReturn,
   cancelPurchaseReturn,
   reversePurchaseReturn
 } = useAppStore()
@@ -149,16 +149,16 @@ const {
                   ? '已退供应商'
                   : item.status === 'cancelled'
                     ? '已取消'
-                    : '待确认'
+                    : item.outbound_id ? `待仓库出库 #${item.outbound_id}` : '草稿'
             }}</span
             ><button
-              v-if="item.status === 'draft' && can('purchase_return.post')"
+              v-if="item.status === 'draft' && !item.outbound_id && can('purchase_return.submit')"
               class="primary small"
               type="button"
               :disabled="busy"
-              @click="postPurchaseReturn(item.id)"
+              @click="submitPurchaseReturn(item.id)"
             >
-              确认退货</button
+              提交待出库</button
             ><button
               v-if="item.status === 'draft' && can('purchase_return.cancel')"
               class="secondary small"

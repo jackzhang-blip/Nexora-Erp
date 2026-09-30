@@ -153,3 +153,5 @@ PYTHONPATH=backend python3 -m pytest backend/tests -q
 另有跨模块测试把采购组件入库、跨仓调拨、生产领料与质检入库、成品销售出库、工单成本及应收应付结清串在同一测试数据库中；这验证接口和库存来源的一致性，不代替真实设备或现场业务数据验收。
 
 数据库第 32 版新增 `/api/v1/warehouse-outbounds`。其他出库草稿记录仓库、用途、原因及明细，`/post` 在仓库余额充足时原子扣减库存；`/cancel` 仅取消草稿，`/reverse` 追加冲销流水。重复操作返回 409，其他出库不产生采购应付。权限为 `other_outbound.view/create/post/cancel/reverse`。
+
+数据库第 33 版将采购退货提交与仓库出库确认分离。`POST /api/v1/purchase-returns/{id}/submit` 创建唯一待出库单并占用原入库可退量；仓库通过 `/api/v1/warehouse-outbounds/{id}/post` 在同一事务重查原入库可退量和原仓余额，确认一次才写一组退货流水、确认退货及应付冲减。取消待出库退货释放占用。旧客户端的退货 `/post` 在同一事务补建并确认关联出库单；迁移仅为历史已确认退货补单据，不重放流水。
