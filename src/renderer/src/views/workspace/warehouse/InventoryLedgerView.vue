@@ -12,6 +12,11 @@ const columns = [
   { key: 'material', title: '物料' }, { key: 'source', title: '来源单据' },
   { key: 'quantity', title: '变动' }, { key: 'balance', title: '筛选范围结余' }
 ]
+// 期初期末汇总同样通过公共表格展示，避免查询页保留第二种表格实现。
+const groupColumns = [
+  { key: 'warehouse_name', title: '仓库' }, { key: 'material', title: '物料' },
+  { key: 'opening', title: '期初' }, { key: 'closing', title: '期末' }
+]
 const sourceLabels: Record<string, string> = {
   receipt: '采购入库', receipt_reversal: '采购入库冲销',
   other_inbound: '其他入库', other_inbound_reversal: '其他入库冲销',
@@ -33,8 +38,13 @@ onMounted(() => { void queryLedger() })
 
 <template>
   <section class="stack">
-    <WorkspaceTable title="库存台账" description="按仓库和物料核对期初、每笔变动及期末。选择来源后显示该来源范围内的累计数量。"
-      :columns="columns" :row-count="ledgerResult.rows.length" :loading="busy" :min-table-width="1000">
+    <WorkspaceTable v-if="ledgerResult.groups.length" title="期初期末" :columns="groupColumns" :data="ledgerResult.groups" :min-table-width="680">
+      <template #cell-material="{ row }">{{ row.sku }} · {{ row.material_name }}</template>
+      <template #cell-opening="{ row }">{{ row.opening_quantity }} {{ row.unit }}</template>
+      <template #cell-closing="{ row }">{{ row.closing_quantity }} {{ row.unit }}</template>
+    </WorkspaceTable>
+    <WorkspaceTable :data="ledgerResult.rows" title="库存台账" description="按仓库和物料核对期初、每笔变动及期末。选择来源后显示该来源范围内的累计数量。"
+      :columns="columns" :loading="busy" :min-table-width="1000">
       <template #filters>
         <label>仓库<select v-model.number="ledgerQuery.warehouse_id"><option :value="null">全部仓库</option><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
         <label>物料<select v-model.number="ledgerQuery.material_id"><option :value="null">全部物料</option><option v-for="item in materials" :key="item.id" :value="item.id">{{ item.sku }} · {{ item.name }}</option></select></label>
@@ -43,24 +53,12 @@ onMounted(() => { void queryLedger() })
         <label>来源<select v-model="ledgerQuery.source_type"><option :value="null">全部来源</option><option v-for="[key, label] in sourceOptions" :key="key" :value="key">{{ label }}</option></select></label>
         <button class="primary" :disabled="busy || connectionLost" @click="queryLedger">查询</button>
       </template>
-      <template #beforeTable>
-        <div v-if="ledgerResult.groups.length" class="table-wrap">
-          <table aria-label="库存台账期初期末"><thead><tr><th>仓库</th><th>物料</th><th>期初</th><th>期末</th></tr></thead>
-            <tbody><tr v-for="item in ledgerResult.groups" :key="`${item.warehouse_id}-${item.material_id}`">
-              <td>{{ item.warehouse_name }}</td><td>{{ item.sku }} · {{ item.material_name }}</td>
-              <td>{{ item.opening_quantity }} {{ item.unit }}</td><td>{{ item.closing_quantity }} {{ item.unit }}</td>
-            </tr></tbody></table>
-        </div>
-      </template>
-      <template #rows>
-        <tr v-for="item in ledgerResult.rows" :key="item.id">
-          <td>{{ localTime(item.created_at) }}<small>{{ item.created_by_name }}</small></td>
-          <td>{{ item.warehouse_name }}</td><td>{{ item.sku }} · {{ item.material_name }}</td>
-          <td>{{ sourceLabels[item.source_type] ?? item.source_type }} #{{ item.source_id }}<small>明细 #{{ item.source_line_id }}</small></td>
-          <td>{{ item.quantity.startsWith('-') ? '' : '+' }}{{ item.quantity }} {{ item.unit }}</td>
-          <td>{{ item.balance_quantity }} {{ item.unit }}</td>
-        </tr>
-      </template>
+      <template #cell-time="{ row: item }">{{ localTime(item.created_at) }}<small>{{ item.created_by_name }}</small></template>
+      <template #cell-warehouse="{ row: item }">{{ item.warehouse_name }}</template>
+      <template #cell-material="{ row: item }">{{ item.sku }} · {{ item.material_name }}</template>
+      <template #cell-source="{ row: item }">{{ sourceLabels[item.source_type] ?? item.source_type }} #{{ item.source_id }}<small>明细 #{{ item.source_line_id }}</small></template>
+      <template #cell-quantity="{ row: item }">{{ item.quantity.startsWith('-') ? '' : '+' }}{{ item.quantity }} {{ item.unit }}</template>
+      <template #cell-balance="{ row: item }">{{ item.balance_quantity }} {{ item.unit }}</template>
       <template #empty>筛选范围内暂无库存流水。</template>
     </WorkspaceTable>
   </section>

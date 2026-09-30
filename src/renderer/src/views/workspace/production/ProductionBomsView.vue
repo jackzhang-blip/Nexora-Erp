@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { NModal } from 'naive-ui'
 import { useAppStore } from '../../../store/app-store'
+import { submitCreateDialog } from '../../../utils/create-dialog'
 
 // 页面直接使用共享状态与操作，切换标签时不会丢失正在填写的草稿。
 const {
+  error,
+  notice,
   version,
   busy,
   materials,
@@ -15,11 +20,18 @@ const {
   retireBom,
   cancelBom
 } = useAppStore()
+
+// 保存失败时保留弹窗和草稿，方便直接修正后重试。
+const createOpen = ref(false)
+async function submitCreate(): Promise<void> {
+  await submitCreateDialog(createBom, { busy, error, notice }, createOpen)
+}
 </script>
 
 <template>
   <section class="stack">
-    <div v-if="can('bom.create')" class="card">
+    <div class="form-actions"><button v-if="can('bom.create')" class="primary" type="button" :disabled="busy" @click="createOpen = true">新建 BOM 版本</button></div>
+    <NModal v-if="can('bom.create')" v-model:show="createOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
       <div class="section-heading">
         <div>
           <p class="eyebrow">BILL OF MATERIALS</p>
@@ -31,7 +43,7 @@ const {
         BOM
         记录生产指定数量成品所需的组件。旧版本会保留供追溯；同一成品一次只能启用一个版本。
       </p>
-      <form @submit.prevent="createBom">
+      <form @submit.prevent="submitCreate">
         <div class="form-grid">
           <label
             >成品物料<select
@@ -112,7 +124,7 @@ const {
           </button>
         </div>
       </form>
-    </div>
+    </NModal>
     <div class="card">
       <div class="section-heading">
         <div>

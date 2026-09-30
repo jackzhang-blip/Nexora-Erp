@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { NModal } from 'naive-ui'
 import { useAppStore } from '../../../store/app-store'
+import { submitCreateDialog } from '../../../utils/create-dialog'
 
 // 页面直接使用共享状态与操作，切换标签时不会丢失正在填写的草稿。
 const {
+  error,
+  notice,
   busy,
   materials,
   customers,
@@ -16,6 +21,16 @@ const {
   confirmSalesOrder,
   cancelSalesOrder
 } = useAppStore()
+
+// 保存失败时保留弹窗和草稿，方便直接修正后重试。
+const createOpen = ref(false)
+const customerOpen = ref(false)
+async function submitCreate(): Promise<void> {
+  await submitCreateDialog(createSalesOrder, { busy, error, notice }, createOpen)
+}
+async function submitCustomer(): Promise<void> {
+  await submitCreateDialog(createCustomer, { busy, error, notice }, customerOpen)
+}
 </script>
 
 <template>
@@ -26,8 +41,10 @@ const {
           <p class="eyebrow">CUSTOMERS</p>
           <h2>客户资料</h2>
         </div>
+        <button class="primary" type="button" :disabled="busy" @click="customerOpen = true">新增客户</button>
       </div>
-      <form class="inline-form" @submit.prevent="createCustomer">
+      <NModal v-model:show="customerOpen" preset="card" title="新增客户" :mask-closable="!busy" :style="{ width: 'min(560px, calc(100vw - 32px))' }">
+      <form class="inline-form" @submit.prevent="submitCustomer">
         <label
           >客户名称<input
             v-model.trim="customerForm.name"
@@ -38,11 +55,13 @@ const {
           添加客户
         </button>
       </form>
+      </NModal>
       <div class="receipt-lines">
         <span v-for="item in customers" :key="item.id">{{ item.name }}</span>
       </div>
     </div>
-    <div v-if="can('sales_order.create')" class="card">
+    <div class="form-actions"><button v-if="can('sales_order.create')" class="primary" type="button" :disabled="busy" @click="createOpen = true">新建销售订单</button></div>
+    <NModal v-if="can('sales_order.create')" v-model:show="createOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
       <div class="section-heading">
         <div>
           <p class="eyebrow">SALES ORDER</p>
@@ -50,7 +69,7 @@ const {
         </div>
         <span class="pill">草稿</span>
       </div>
-      <form @submit.prevent="createSalesOrder">
+      <form @submit.prevent="submitCreate">
         <div class="form-grid">
           <label
             >客户<select v-model.number="salesForm.customer_id" required>
@@ -125,7 +144,7 @@ const {
           </button>
         </div>
       </form>
-    </div>
+    </NModal>
     <div class="card">
       <div class="section-heading">
         <div>
