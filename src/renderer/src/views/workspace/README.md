@@ -21,7 +21,9 @@
 | `sales/` | `SalesOrdersView.vue` | 建立和管理销售订单；客户资料独立维护，订单弹窗提供快捷入口并保留草稿 |
 | `sales/` | `SalesShipmentsView.vue` | 处理销售出库 |
 | `sales/` | `SalesReturnsView.vue` | 处理销售退货 |
-| `finance/` | `ReceivablesPayablesView.vue` | 查看应收应付并登记收付款 |
+| `finance/` | `ReceivablesPayablesView.vue` | 应收应付汇总及订单金额核对 |
+| `finance/` | `PaymentRecordsView.vue` | 独立查询、登记收付款及冲销，保留审计记录 |
+| `finance/` | `FinancialSourcesView.vue` | 查看应收应付的业务来源明细 |
 | `finance/` | `InventoryValuationView.vue` | 查看移动平均库存金额、待核价来源和核价修订历史 |
 | `production/` | `ProductionBomsView.vue` | 管理生产 BOM 版本 |
 | `production/` | `ProductionWorkOrdersView.vue` | 建立和下达生产工单 |
