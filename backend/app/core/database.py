@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 41:
+        if version > 42:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -1346,3 +1346,43 @@ def migrate() -> None:
             db.executemany("INSERT INTO role_permissions(role_code,permission_code) VALUES (?,?)",
                 [(role, code) for role in ('admin','finance') for code, _ in operations])
             db.execute("PRAGMA user_version = 41")
+
+
+        if version < 42:
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE opening_balances (
+                id INTEGER PRIMARY KEY, reference TEXT NOT NULL UNIQUE,
+                effective_date TEXT NOT NULL, period_id INTEGER NOT NULL REFERENCES accounting_periods(id),
+                note TEXT NOT NULL, currency TEXT NOT NULL DEFAULT 'CNY' CHECK(currency='CNY'),
+                status TEXT NOT NULL CHECK(status IN ('draft','submitted','approved','rejected','confirmed','cancelled','reversed')),
+                version INTEGER NOT NULL CHECK(version>0), active_key INTEGER UNIQUE CHECK(active_key=1),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                submitted_by INTEGER REFERENCES users(id), reviewed_by INTEGER REFERENCES users(id),
+                confirmed_by INTEGER REFERENCES users(id), cancelled_by INTEGER REFERENCES users(id), reversed_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                submitted_at TEXT, reviewed_at TEXT, confirmed_at TEXT, cancelled_at TEXT, reversed_at TEXT,
+                CHECK ((status IN ('cancelled','reversed') AND active_key IS NULL) OR
+                       (status NOT IN ('cancelled','reversed') AND active_key IS NOT NULL))
+            )""")
+            db.execute("""CREATE TABLE opening_balance_lines (
+                id INTEGER PRIMARY KEY, opening_balance_id INTEGER NOT NULL REFERENCES opening_balances(id),
+                position INTEGER NOT NULL, account_id INTEGER NOT NULL REFERENCES ledger_accounts(id),
+                account_code TEXT NOT NULL, account_name TEXT NOT NULL, category TEXT NOT NULL,
+                normal_balance TEXT NOT NULL, summary TEXT NOT NULL, debit TEXT NOT NULL, credit TEXT NOT NULL,
+                UNIQUE(opening_balance_id,position), UNIQUE(opening_balance_id,account_id)
+            )""")
+            db.execute("""CREATE TABLE opening_balance_changes (
+                id INTEGER PRIMARY KEY, opening_balance_id INTEGER NOT NULL REFERENCES opening_balances(id),
+                action TEXT NOT NULL, before_json TEXT, after_json TEXT NOT NULL, reason TEXT NOT NULL,
+                changed_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.execute("INSERT INTO permission_groups(code,label,parent_code,sort_order) VALUES ('finance.opening_balances','期初余额','finance',53)")
+            operations = [('opening_balance.view','查看期初余额'), ('opening_balance.create','建立和修改期初余额'),
+                ('opening_balance.submit','提交期初余额'), ('opening_balance.review','审核期初余额'),
+                ('opening_balance.confirm','确认期初余额'), ('opening_balance.cancel','取消未确认期初余额'),
+                ('opening_balance.reverse','撤销未发生过账的期初余额')]
+            db.executemany("INSERT INTO permissions(code,label,group_code) VALUES (?,?,'finance.opening_balances')",operations)
+            db.executemany("INSERT INTO role_permissions(role_code,permission_code) VALUES (?,?)",
+                [(role,code) for role in ('admin','finance') for code,_ in operations])
+            db.execute("PRAGMA user_version = 42")
