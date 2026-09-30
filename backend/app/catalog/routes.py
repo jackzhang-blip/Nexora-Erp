@@ -40,6 +40,30 @@ def list_suppliers(_: dict = Depends(require("inventory.view"))) -> list[dict]:
         return [dict(row) for row in db.execute("SELECT id, name FROM suppliers ORDER BY name")]
 
 
+class SupplierPageQuery(BaseModel):
+    # 限制页大小和搜索长度，避免客户端提交无界查询。
+    query: str = Field(default="", max_length=120)
+    page: int = Field(default=1, ge=1, le=2147483647)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
+@router.post("/suppliers/query")
+def query_suppliers(payload: SupplierPageQuery,
+                    _: dict = Depends(require("inventory.view"))) -> dict:
+    with connection() as db:
+        # 总数和当前页来自同一读事务；删除导致页码越界时回退到最后有效页。
+        db.execute("BEGIN")
+        keyword = payload.query.strip()
+        where = "WHERE instr(lower(name), lower(?)) > 0"
+        total = db.execute(f"SELECT COUNT(*) FROM suppliers {where}", (keyword,)).fetchone()[0]
+        page = min(payload.page, max(1, (total + payload.page_size - 1) // payload.page_size))
+        rows = db.execute(
+            f"SELECT id, name FROM suppliers {where} ORDER BY name, id LIMIT ? OFFSET ?",
+            (keyword, payload.page_size, (page - 1) * payload.page_size))
+        return {"items": [dict(row) for row in rows], "total": total,
+                "page": page, "page_size": payload.page_size}
+
+
 @router.post("/suppliers", status_code=201)
 def create_supplier(payload: SupplierInput, _: dict = Depends(require("catalog.manage"))) -> dict:
     with connection() as db:

@@ -6,6 +6,7 @@ import type { Supplier } from '../../../../../shared/erp-api'
 import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
 import { usePiniaAppStore } from '../../../store/app-store'
 import { submitCreateDialog } from '../../../utils/create-dialog'
+import { usePagedQuery } from '../../../composables/use-paged-query'
 import './catalog.css'
 
 const store = usePiniaAppStore()
@@ -15,7 +16,14 @@ const query = ref('')
 const editingId = ref<number | undefined>()
 const showForm = ref(false)
 const form = reactive({ name: '' })
-const filtered = computed(() => suppliers.value.filter(item => [item.name].join(' ').toLowerCase().includes(query.value.trim().toLowerCase())))
+// 列表从服务端分页获取；全量供应商快照仅供其他业务选项和供货关系使用。
+const { rows, total, page, pageSize, loading, error: queryError, load, search } = usePagedQuery<Supplier>(async params => {
+  if (!window.nexora) throw new Error('服务连接不可用，请重新连接后重试。')
+  return window.nexora.callApi('querySuppliers', params)
+})
+watch(query, search)
+// 写入后的统一快照刷新、断线恢复都会重新查询当前页。
+watch([suppliers, connectionLost], () => { void load() }, { immediate: true })
 // 主列表与供货物料明细共用表格外壳，绑定关系的操作仍留在本页。
 const supplierColumns = [
   { key: 'name', title: '供应商名称' },
@@ -58,14 +66,14 @@ async function submitBinding(): Promise<void> {
 <template>
   <section class="stack catalog-page">
     <!-- 主标题和说明统一由工作台外壳展示。 -->
-    <WorkspaceTable :show-title="false" :data="filtered" title="供应商列表" :columns="supplierColumns" :min-table-width="360">
+    <WorkspaceTable :show-title="false" :data="rows" :loading="loading" :error="queryError" :pagination="{ page, pageSize, total, disabled: connectionLost }" @page-change="load" title="供应商列表" :columns="supplierColumns" :min-table-width="360">
       <template #actions>
         <button v-if="can('catalog.manage')" class="primary" :disabled="busy || connectionLost" @click="edit()">新增供应商</button>
       </template>
       <template #filters>
-        <label class="catalog-search">搜索供应商<input v-model="query" placeholder="输入名称搜索" /></label>
-        <span class="muted">共 {{ suppliers.length }} 条</span>
+        <label class="catalog-search">搜索供应商<input v-model="query" placeholder="输入名称搜索" maxlength="120" /></label>
       </template>
+      <template #errorActions><button class="secondary" type="button" :disabled="loading || connectionLost" @click="load()">重新查询</button></template>
       <template #beforeTable>
         <NModal v-model:show="showForm" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
         <form v-if="showForm && can('catalog.manage')" class="catalog-editor" @submit.prevent="save">

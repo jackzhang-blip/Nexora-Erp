@@ -164,3 +164,5 @@ PYTHONPATH=backend python3 -m pytest backend/tests -q
 数据库第 34 版新增独立 `/api/v1/stock-adjustments`。草稿必须填写原因及有符号调整量，依次提交、由非建单人批准、仓库确认后才追加增减库存流水；驳回、取消、重复操作和库存不足均不改库存。确认后可填写原因冲销，负向冲销仍须核对当前余额。权限为 `adjustment.view/create/submit/review/cancel/post/reverse`。
 
 数据库第 35 版新增采购报表与库存报表权限。`POST /api/v1/reports/query` 支持 `purchase_requests`、`purchase_orders`、`receiving_returns`、`inventory_balance`、`stock_flow`，按可用的供应商、仓库、物料和日期筛选。响应同时包含列、行和由同一行集生成的带 UTF-8 BOM 的 CSV；日期按单据创建日期或库存流水日期筛选，库存余额按截至日期计算。采购类要求 `purchase_report.view`，库存类要求 `inventory_report.view`。
+
+供应商主列表支持服务端分页搜索：`POST /api/v1/suppliers/query` 接收 `query`、`page`（从 1 开始）与 `page_size`（1–100，默认 20），返回 `items`、筛选后 `total`、有效 `page` 和 `page_size`；查看仍要求 `inventory.view`。总数与分页统一显示在表格底部，可选每页 10/20/50/100 条，搜索回到首页，删除造成的越界页自动回退。查询失败提供重试入口，过期响应不覆盖新结果。原 GET 供应商接口仍供业务选项使用，其他列表及供货物料明细尚未改为服务端分页。客户端与服务端需同时升级。

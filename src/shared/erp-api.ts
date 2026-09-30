@@ -11,6 +11,10 @@ export interface PermissionGroup { code: string; label: string }
 // 模块与单据层级用于展示；角色和服务端仍只保存、校验操作叶子的 code。
 export interface Permission { code: string; label: string; group_path: PermissionGroup[] }
 export interface Role { code: string; label: string; is_builtin: boolean; permissions: string[] }
+// 分页列表返回筛选后的总数与有效页码，其他业务的选项列表仍使用原接口。
+export interface PageQuery { query: string; page: number; page_size: number }
+export interface PageResult<T> { items: T[]; total: number; page: number; page_size: number }
+
 export interface SupplierMaterial { supplier_id: number; material_id: number }
 export interface Supplier { id: number; name: string }
 export interface Customer { id: number; name: string }
@@ -769,6 +773,7 @@ export interface ErpOperations {
   setUserStatus: { input: { userId: number; is_active: boolean }; output: User }
   resetUserPassword: { input: { userId: number; password: string }; output: void }
   suppliers: { input: undefined; output: Supplier[] }
+  querySuppliers: { input: PageQuery; output: PageResult<Supplier> }
   updateMaterial: { input: { id: number; sku: string; name: string; unit: string }; output: Material }
   deleteMaterial: { input: { id: number }; output: void }
   updateSupplier: { input: { id: number; name: string }; output: Supplier }
