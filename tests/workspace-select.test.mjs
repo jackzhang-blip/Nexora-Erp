@@ -45,7 +45,7 @@ test('所有工作台页面与公共表格都通过 WorkspaceSelect 使用下拉
     })
   }
   for (const file of files(root)) {
-    if (file.endsWith('/WorkspaceSelect.vue')) continue
+    if (file.endsWith('WorkspaceSelect.vue')) continue
     assert.doesNotMatch(readFileSync(file, 'utf8'), /<(?:select|NSelect|n-select)\b/, file)
   }
 })
