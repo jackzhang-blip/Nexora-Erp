@@ -8,11 +8,11 @@
 | --- | --- |
 | `app/access/` | 账号登录、用户、角色、权限、导航图标配置及授权检查。 |
 | `app/catalog/` | 供应商与物料基础资料。 |
-| `app/core/` | SQLite 连接和数据库迁移。 |
+| `app/core/` | 数据库迁移、SQLAlchemy ORM 模型与会话事务边界；旧业务 SQLite 连接待逐模块迁移。 |
 | `app/purchase/` | 采购申请、采购订单、采购收货、入库单、采购退货。 |
 | `app/inventory/` | 仓库、其他入出库、调拨、盘点、独立调整、库存余额和台账。 |
 | `app/sales/` | 客户、销售订单、出库、销售退货。 |
-| `app/production/` | BOM、工单、领退料、报工、工单成本。 |
+| `app/production/` | BOM、工单、领退料、报工、工单成本及完工批次结算。 |
 | `app/finance/` | 应收应付、订单余额、手工收付款。 |
 | `app/reports/` | 采购执行、收退货、库存余额与收发存报表。 |
 | `app/service/` | 服务状态、局域网发现、系统服务、备份恢复。 |
@@ -66,7 +66,7 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 ## 应收应付来源
 
-库存金额基础接口为 `GET /api/v1/inventory/valuation`，按同一公司全部仓库的物料流水顺序重放移动加权平均。关联采购订单的入库沿用订单单价；出库按发生时平均成本，销售退货、生产退料和调拨入库沿用原出库成本。没有价格依据的正向流水会显示“待核价”，现存数量含未知成本时该物料及总库存金额均为 `null`，不会把未知金额当作零。`GET /api/v1/inventory/valuation/inputs` 可查全部人工核价修订；`POST /api/v1/inventory/valuation/inputs` 对允许人工核价的正向流水登记单价、依据编号和原因，后续修订追加记录并重算金额。查看和登记分别需要 `inventory_valuation.view`、`inventory_valuation.record`，默认授予管理员和财务员。历史期间尚未锁定，修订可能改变已展示的历史成本；自动完工成本、库存价差、正式销售成本和总账凭证仍待实现。
+库存金额基础接口为 `GET /api/v1/inventory/valuation`，按同一公司全部仓库的物料流水顺序重放移动加权平均。关联采购订单的入库沿用订单单价；出库按发生时平均成本，销售退货、生产退料和调拨入库沿用原出库成本。没有价格依据的正向流水会显示“待核价”，现存数量含未知成本时该物料及总库存金额均为 `null`，不会把未知金额当作零。`GET /api/v1/inventory/valuation/inputs` 可查全部人工核价修订；`POST /api/v1/inventory/valuation/inputs` 对允许人工核价的正向流水登记单价、依据编号和原因，后续修订追加记录并重算金额。查看和登记分别需要 `inventory_valuation.view`、`inventory_valuation.record`，默认授予管理员和财务员。历史期间尚未锁定，修订可能改变已展示的历史成本；已结算完工批次采用结算分摊金额；已被有效结算使用的核价来源禁止修订，须先冲销关联结算。库存价差、正式销售成本和总账凭证仍待实现。
 
 `GET /api/v1/finance/receivables-payables` 逐行列出已确认销售出库形成的应收、采购入库形成的应付及销售、采购退货形成的负向调整。每笔记录包含往来单位、订单、来源单据与明细、物料、数量、原单价、确认人和确认时间。金额按每行数量乘原单价四舍五入到分，币种暂固定为人民币。草稿与取消单不产生金额；升级前的已确认单据同样从原记录推导，无需改写历史。没有采购订单单价的入库及其退货标记为待核价，不计入已知应付总额。此接口需要 `finance.view`，仅内置管理员和财务员默认拥有；其他角色需管理员显式授权。当前合计是业务净额；订单级收付款和未结金额由下述独立记录计算，税费和总账尚未实现。
 
@@ -82,7 +82,7 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 ## 生产领料
 
-`POST /api/v1/material-issues` 对已下达或生产中的工单建立分批领料草稿，指定源仓库及本次工单组件数量；`GET /api/v1/material-issues` 查看全部记录及每条已退、可退数量。`POST /api/v1/material-issues/{id}/post` 在写事务中重新核对工单剩余需料及源仓库存，再逐行写入带领料单、明细和确认人来源的负向库存流水，工单进入“生产中”。两个草稿可以并存，但后确认的草稿若超出剩余需料或库存会返回 409，整单不扣库存。`/cancel` 仅取消草稿；已确认领料保留原单据及流水。查看要求 `production.view`；创建、确认、取消分别要求 `material_issue.create`、`material_issue.post`、`material_issue.cancel`。管理员可全部操作；计划员可创建和取消，仓库员可创建、确认和取消。自动库存计价仍待实现。
+`POST /api/v1/material-issues` 对已下达或生产中的工单建立分批领料草稿，指定源仓库及本次工单组件数量；`GET /api/v1/material-issues` 查看全部记录及每条已退、可退数量。`POST /api/v1/material-issues/{id}/post` 在写事务中重新核对工单剩余需料及源仓库存，再逐行写入带领料单、明细和确认人来源的负向库存流水，工单进入“生产中”。两个草稿可以并存，但后确认的草稿若超出剩余需料或库存会返回 409，整单不扣库存。`/cancel` 仅取消草稿；已确认领料保留原单据及流水。查看要求 `production.view`；创建、确认、取消分别要求 `material_issue.create`、`material_issue.post`、`material_issue.cancel`。管理员可全部操作；计划员可创建和取消，仓库员可创建、确认和取消。材料金额按领料时库存移动平均成本读取；库存成本未知时可在成本页面人工核价。
 
 ## 生产退料更正
 
@@ -90,15 +90,19 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 ## 完工报工与基础质检
 
-`POST /api/v1/production-completions` 为生产中的工单建立分批报工草稿，保存本批报工数量及可选参考号；`GET /api/v1/production-completions` 查看记录。`POST /api/v1/production-completions/{id}/inspect` 由有质检权限的操作员填写合格数量及质检说明，不合格数量由报工数减合格数计算。`/post` 仅确认已质检单据，在同一写事务中核对累计已确认报工不超过工单目标，并按累计报工数量核对每个组件的净领料是否达到 BOM 快照比例；仅合格品生成进入工单目标仓库的正向库存流水，全部目标报工确认后工单变为“已完工”。两个草稿可并存，但后确认的草稿若超出目标会返回 409。`/cancel` 可取消草稿或已质检但未入库的单据，已确认入库不能直接取消。查看要求 `production.view`；创建、质检、确认、取消分别要求 `production_completion.create`、`production_completion.inspect`、`production_completion.post`、`production_completion.cancel`。管理员有全部权限；计划员可创建和取消，仓库员可质检与确认。目标为报工总数，包含质检不合格数；不合格品不进入可用库存，返工及完工批次成本分配仍待实现。这是记录数量与说明的基础质检，没有批次检验标准或现场实物核验。
+`POST /api/v1/production-completions` 为生产中的工单建立分批报工草稿，保存本批报工数量及可选参考号；`GET /api/v1/production-completions` 查看记录。`POST /api/v1/production-completions/{id}/inspect` 由有质检权限的操作员填写合格数量及质检说明，不合格数量由报工数减合格数计算。`/post` 仅确认已质检单据，在同一写事务中核对累计已确认报工不超过工单目标，并按累计报工数量核对每个组件的净领料是否达到 BOM 快照比例；仅合格品生成进入工单目标仓库的正向库存流水，全部目标报工确认后工单变为“已完工”。两个草稿可并存，但后确认的草稿若超出目标会返回 409。`/cancel` 可取消草稿或已质检但未入库的单据，已确认入库不能直接取消。查看要求 `production.view`；创建、质检、确认、取消分别要求 `production_completion.create`、`production_completion.inspect`、`production_completion.post`、`production_completion.cancel`。管理员有全部权限；计划员可创建和取消，仓库员可质检与确认。目标为报工总数，包含质检不合格数；不合格品不进入可用库存，返工仍待实现；完工批次成本可在成本页面结算分配。这是记录数量与说明的基础质检，没有批次检验标准或现场实物核验。
 
 `POST /api/v1/production-completions/{id}/reverse` 仅管理员可按原因冲销已确认完工单。服务端在一个写事务内检查目标仓库仍有足量合格成品，新增独立冲销记录；合格数量大于零时追加负向库存流水，原报工、质检和入库流水不被改写。冲销后的报工、合格和不合格数量不再计入工单当前累计；若工单原已完工，则恢复“生产中”并允许重新报工。库存不足或重复冲销返回 409。原单查询会展示冲销原因、操作人和时间；当前不支持部分冲销；工单成本可在独立归集页面查询。
 
 ## 生产成本归集
 
-`GET /api/v1/production-costs` 返回每个工单的材料已知金额、人工、制造费用、待核价领料条数和有效成本记录；任何净领料缺少有效核定单价时，`total_amount` 为 `null`，不会把未知成本当成零。`POST /api/v1/production-costs/material-valuations` 为一条已确认领料明细登记人工核定单价、依据编号和可选说明；每条明细只能有一个有效核价。材料金额按该明细已领减已退数量乘核定单价计算，并按人民币分位四舍五入。`POST /api/v1/production-costs/charges` 为已下达、生产中或已完工工单登记人工或制造费用；`POST /api/v1/production-costs/{id}/reverse` 按原因冲销原成本记录，原记录、依据和操作者保留，核价冲销后该领料恢复待核价状态，可重新核价。查看要求 `production_cost.view`，登记与冲销分别要求 `production_cost.record`、`production_cost.reverse`；管理员和财务员默认有全部权限，生产计划员默认只可查看。
+`GET /api/v1/production-costs` 返回每个工单的材料已知金额、人工、制造费用、待核价领料条数和有效成本记录；任何净领料既没有库存成本也缺少有效人工核定单价时，`total_amount` 为 `null`，不会把未知成本当成零。`POST /api/v1/production-costs/material-valuations` 为一条已确认领料明细登记人工核定单价、依据编号和可选说明；每条明细只能有一个有效核价。材料金额按该明细已领减已退数量乘核定单价计算，并按人民币分位四舍五入。`POST /api/v1/production-costs/charges` 为已下达、生产中或已完工工单登记人工或制造费用；`POST /api/v1/production-costs/{id}/reverse` 按原因冲销原成本记录，原记录、依据和操作者保留，库存成本仍未知时，核价冲销后该领料恢复待核价状态，可重新核价。查看要求 `production_cost.view`，登记与冲销分别要求 `production_cost.record`、`production_cost.reverse`；管理员和财务员默认有全部权限，生产计划员默认只可查看。
 
-这是按工单汇总的人工核价与费用归集，尚不从库存流水自动计算真实材料单价，也不生成完工批次成本、存货价值、销售成本或总账凭证。未完工工单显示的是截至当前已归集金额，不能当作最终制造成本。
+材料成本优先读取领料流水发生时的库存移动平均单价，只有库存成本未知时允许人工领料核价。报告新增 `material_sources`，逐行返回净领数量、采用单价、金额、库存流水和人工成本记录编号；`entries[].included_in_current_cost` 表示人工记录是否用于当前成本。已结算工单的汇总与材料来源展示结算时快照。未完工工单显示截至当前的归集金额。
+
+数据库第 39 版增加成本结算、分摊、来源依赖和独立冲销表。GET `/api/v1/production-costs/settlements` 查看历史；POST 同路径传入 `work_order_id`、`reference`、可选 `note`，仅可结算全部报工、无未处理草稿且净领料全部核价的工单。成本按合格入库数量累计比例分摊到各完工批次，以分为单位处理尾差；没有合格成品时拒绝结算。完工入库在库存计价中返回 `cost_source: production_settlement` 与 `settlement_id`，内部分摊金额不由四位展示单价倒算。POST `/{id}/reverse` 按原因冲销结算，原快照保留；有关联后续有效工单结算时拒绝冲销。结算冻结该工单费用、完工来源和有关核价依赖，先冲销后才能更正。结算、冲销分别要求 `production_cost.settle`、`production_cost.reopen`，默认授予管理员和财务员；查看沿用 `production_cost.view`。成本规则与边界见 [完工成本规则](../docs/production-cost-settlement.md)。
+
+库存计价、生产成本和结算的数据读写已使用 SQLAlchemy 2.0 ORM，金额仍用 Decimal 计算并以文本精确保存；会话统一处理一致读快照、写锁、提交、回滚和连接释放。其他既有业务接口仍有直接 SQL，按 [ORM 迁移清单](../docs/backend-orm-migration.md) 继续转换，尚未完成全后端迁移。客户端与服务端需同时升级。
 
 ## 多仓库库存与调拨
 

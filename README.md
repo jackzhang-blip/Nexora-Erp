@@ -12,7 +12,7 @@
 
 局域网扫描和已保存连接的地址恢复会分别通过当前各局域网 IPv4 网卡发送 mDNS 查询，避免 Windows 的 VPN 或虚拟网卡占用默认组播出口导致搜索不到服务。重新扫描时会重新读取网卡并释放上一轮的发现连接。手动连接成功但扫描无结果时，仍需检查两端防火墙和路由器是否允许 UDP 5353 组播；HTTPS 端口可达并不代表发现通道可达。
 
-**当前数据集中保存在服务端。**远程客户端断网后不能继续编辑；工作台会提示断线并重试，连接恢复后重新读取服务端数据。没有本地数据合并或离线同步。应收应付来源清单、手工收付款记录及按公司物料计算的基础库存移动平均计价已实现；缺少来源价格的入库可人工核价并保留修订记录。自动完工成本分摊、正式销售成本、总账、MySQL、跨设备数据同步、人力资源与 CRM 是后续阶段的工作。
+**当前数据集中保存在服务端。**远程客户端断网后不能继续编辑；工作台会提示断线并重试，连接恢复后重新读取服务端数据。没有本地数据合并或离线同步。应收应付来源清单、手工收付款记录及按公司物料计算的基础库存移动平均计价已实现；缺少来源价格的入库可人工核价并保留修订记录。生产领料自动读取库存平均成本，工单全部报工后可结算并按合格数量分摊到完工批次，保存来源与冲销历史。正式销售成本凭证、总账、MySQL、跨设备数据同步、人力资源与 CRM 是后续阶段的工作。
 
 ## 开发
 
@@ -75,7 +75,7 @@ npm run build
 - 应收应付清单从已确认出库、入库及对应退货逐行计算，保留单据、物料、往来单位和确认人来源。按订单核对业务净额、收付款净额和未结金额；历史无价入库列为待核价，不计入已知应付总额。
 - 财务员可按订单登记客户收款、供应商付款及退货后的退款，保存外部参考号和操作人。金额超出未结或可退余额会被拒绝；录错的记录通过新冲销记录更正，原记录不删除。当前是手工登记，不会自动连接银行账户或确认资金实际到账。
 - 生产计划员可建立 BOM 草稿并启用版本；同一成品只允许一个启用版本，启用时阻止物料循环引用。工单创建时固定 BOM 版本、目标报工数量及组件需求。下达后可分批领料；退料更正按原领料明细核对累计可退量并回到原仓库。生产中的工单可分批报工，仓库员记录基础质检的合格与不合格数量；确认时核对累计报工目标和按比例应领组件，仅将合格成品入目标仓库。已用于报工的需料不能退回。管理员可按原因冲销已确认完工单，目标仓库库存足够时追加反向流水并恢复工单待报工量，原报工和质检记录保留。返工仍待实现。
-- 财务员可为已确认领料明细人工登记核定单价及依据编号，并按工单登记人工、制造费用；已确认退料会减少当前材料成本。错误记录通过独立冲销保留原金额与操作人。存在净领料未核价时总成本显示“待核价”。当前仅为工单成本归集，不自动生成库存计价、批次完工成本、销售成本或总账凭证。
+- 材料成本优先沿用领料发生时的库存移动平均单价；仅无库存价格时可人工核定单价。财务员按工单登记人工、制造费用；已确认退料减少净材料成本。全部报工后的工单可结算，将总成本按合格入库数量分摊到各完工批次，含不合格品消耗；尾分保证各批次金额合计与总额相等。结算保存材料、费用和分摊快照，成品库存及后续出库、生产领料自动沿用该成本。更正费用、完工或来源价格前须先冲销相关结算；后续工单已结算时须先冲销后续结算。尚无期间结账或正式销售成本、总账凭证，详见 [完工成本规则](docs/production-cost-settlement.md)。
 - 销售订单可分批出库；确认出库时在同一写事务中检查订单剩余数量和指定仓库的可用库存，记录带单据来源的负库存流水。管理员可按原因冲销误确认出库，在原仓追加正库存和负应收更正，并恢复订单可出库数量；有效销售退货须先冲销，原出库记录与流水保留。
 - 销售退货关联已确认出库明细；确认时重新核对累计可退量，在所选仓库记录正库存流水。管理员可在退回仓库存充足时一次性冲销已确认退货，追加负库存和正应收更正来源，原退货与流水保留，可退数量恢复。退货金额按原销售单价展示；实际退款需另行登记。
 - 一张入库单、调拨单或盘点单只允许确认一次。确认状态与库存流水在同一个事务中写入，当前库存可按仓库或全部仓库从流水汇总；调拨前检查来源仓库可用量。管理员可按原因冲销已确认调拨，原目标仓库存不足时拒绝，冲销另记双向反向流水。盘点在建单时保存账面量，确认前如有库存变化须重新盘点。管理员也可按原因冲销已确认盘点；冲销只追加反向差异流水，若盘盈已被消耗至库存不足则拒绝冲销。原单据及流水始终可查。
@@ -83,7 +83,7 @@ npm run build
 
 ## English summary
 
-Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, user and role administration, approved purchase requests that can be split across purchase orders, purchase orders with partial goods receiving, warehouse-confirmed receipts, and linked returns, sales orders with partial shipments and linked returns, versioned production BOMs, work orders with partial material issues and linked returns, partial production completion reports with basic quality inspection, accepted-goods receipts, and audited reversals, manual work-order cost collection, a source-linked receivables/payables list, multi-warehouse stock, document-based other inbounds, transfers, stocktakes, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Packaged hosts use an OS service; remote clients require a live connection. Payment records are entered manually and reconciled to orders. Posted material returns restore stock to the original issue warehouse and adjust net issued quantity. Material costs require an entered unit cost; automatic inventory valuation, finished-goods batch costing, cost of goods sold, and rework remain future work. Offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Cross-platform device acceptance remains pending.
+Nexora ERP currently supports a LAN host and connected desktop clients, with FastAPI, SQLite, HTTPS certificate pinning, user and role administration, approved purchase requests that can be split across purchase orders, purchase orders with partial goods receiving, warehouse-confirmed receipts, and linked returns, sales orders with partial shipments and linked returns, versioned production BOMs, work orders with partial material issues and linked returns, partial production completion reports with basic quality inspection, accepted-goods receipts, and audited reversals, inventory moving-weighted-average valuation, automatic material cost collection, finished-goods cost settlement with auditable allocations and reversals, a source-linked receivables/payables list, multi-warehouse stock, document-based other inbounds, transfers, stocktakes, and stock movements. A host can be created locally, discovered with mDNS, or connected by address. Packaged hosts use an OS service; remote clients require a live connection. Payment records are entered manually and reconciled to orders. Posted material returns restore stock to the original issue warehouse and adjust net issued quantity. Material costs use inventory issue prices with manual valuation only when inventory costs are unknown. Period closing, formal cost of goods sold, general ledger posting, and rework remain future work. Offline synchronization and MySQL are future work. Internal macOS Apple Silicon and Windows x64 packaging scripts are included. Cross-platform device acceptance remains pending.
 
 ### 基础资料管理
 

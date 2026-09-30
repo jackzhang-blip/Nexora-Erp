@@ -35,6 +35,7 @@ export const state = {
   inspectionDrafts:ref({1:{accepted_quantity:'4',qc_note:'测试质检'}}),
   productionCostReport:ref({orders:[{work_order_id:1,product_name:'待核价成品',work_order_status:'released',known_material_amount:'0',labor_amount:'0',overhead_amount:'0',total_amount:null,unpriced_issue_count:1}],entries:[{id:1,kind:'labor',status:'active',current_amount:'20'},{id:2,kind:'material',status:'reversed',current_amount:null,reversal_id:3,reversal_reason:'重复核价',material_name:'铝材'}],unpriced_lines:[]}),
   materialValuationForm:ref({}), productionChargeForm:ref({}), costReversalReasons:ref({}),
+  productionCostSettlements:ref([]), productionSettlementForm:ref({work_order_id:0,reference:'',note:''}), settlementReversalReasons:ref({}),
   can:p=>permissions.has(p), localTime:v=>v, paymentActionLabel:item=>item.action==='reversal'?'冲销':'收款', financialSource:()=>''
 }
 export const useAppStore=()=>state
@@ -87,7 +88,7 @@ test('财务冲销、生产质检与账号操作在表格迁移后保留原权�
   assert.match(await render(financePages[1][0]), /<button[^>]*disabled[^>]*>\s*登记收付款/)
   state.connectionLost.value = false
   permissions.delete('finance.record')
-  const buttons = html => [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)].map(m=>({disabled:m[1].includes('disabled'),label:m[2].trim()}))
+  const buttons = html => [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)].map(m=>({disabled:/(?:^|\s)disabled(?:\s|=|$)/.test(m[1]),label:m[2].trim()}))
   const finance='finance/PaymentRecordsView.vue'
   assert.doesNotMatch(await render(finance),/冲销此记录/)
   permissions.add('finance.reverse')
@@ -113,6 +114,24 @@ test('财务冲销、生产质检与账号操作在表格迁移后保留原权�
   assert.match(costHtml,/总成本\s*待核价/)
   assert.match(costHtml,/重复核价/)
   assert.equal(buttons(costHtml).filter(b=>b.label==='冲销记录').length,1)
+
+  // 只有有权限且未结算的已完工工单显示结算入口，未核价和断线时禁止提交。
+  state.productionCostReport.value.orders = [
+    {work_order_id:1,product_name:'可结算',work_order_status:'completed',total_amount:'20',settlement_id:null},
+    {work_order_id:2,product_name:'已结算',work_order_status:'completed',total_amount:'20',settlement_id:7},
+    {work_order_id:3,product_name:'未核价',work_order_status:'completed',total_amount:null,settlement_id:null},
+    {work_order_id:4,product_name:'生产中',work_order_status:'in_progress',total_amount:'20',settlement_id:null}
+  ]
+  assert.doesNotMatch(await render(costs), /结算完工成本/)
+  permissions.add('production_cost.settle')
+  const plainButtons = html => buttons(html).map(b=>({...b,label:b.label.replace(/<[^>]*>/g,'').trim()}))
+  assert.deepEqual(plainButtons(await render(costs)).filter(b=>b.label==='结算完工成本').map(b=>b.disabled),[false,true])
+  state.connectionLost.value = true
+  assert.ok(plainButtons(await render(costs)).filter(b=>b.label==='结算完工成本').every(b=>b.disabled))
+  state.connectionLost.value = false
+  state.productionCostReport.value.entries[0].work_order_id = 1
+  state.productionCostSettlements.value = [{id:7,work_order_id:1,status:'active',allocations:[],material_sources:[],charges:[]}]
+  assert.equal(buttons(await render(costs)).filter(b=>b.label==='冲销记录').length,0)
 
   const users='system/UserManagementView.vue'
   const userButtons=buttons(await render(users))

@@ -29,7 +29,8 @@ const materials = computed(() => inventoryValuation.value?.materials.filter((ite
 const unpriced = computed(() => inventoryValuation.value?.movements.filter((item) =>
   inventoryValuation.value?.unpriced_movement_ids.includes(item.id)) ?? [])
 const priceable = computed(() => inventoryValuation.value?.movements.filter((item) =>
-  unpriced.value.some((missing) => missing.id === item.id) || item.cost_source === 'manual') ?? [])
+  ['receipt', 'other_inbound', 'stocktake', 'adjustment', 'production_completion'].includes(item.source_type) &&
+  (unpriced.value.some((missing) => missing.id === item.id) || item.cost_source === 'manual')) ?? [])
 const materialName = (id: number): string => inventoryValuation.value?.materials.find(
   (item) => item.id === id)?.name ?? `物料 #${id}`
 

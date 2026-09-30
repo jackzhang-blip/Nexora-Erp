@@ -74,9 +74,8 @@ def test_procure_produce_sell_cycle(monkeypatch, tmp_path):
                                                         "lines": [{"work_order_line_id": work_order["lines"][0]["id"],
                                                                    "quantity": "4"}]})
         confirm(f"/material-issues/{issue['id']}/post", warehouse)
-        create("/production-costs/material-valuations", finance, {
-            "material_issue_line_id": issue["lines"][0]["id"], "unit_cost": "3",
-            "reference": "PURCHASE-CYCLE"})
+        # 领料成本自动沿用采购入库形成的库存平均成本，不再重复人工核价。
+        assert client.get(f"{base}/production-costs", headers=finance).json()["orders"][0]["known_material_amount"] == "12.00"
         create("/production-costs/charges", finance, {"work_order_id": work_order["id"],
                                                        "kind": "labor", "amount": "2",
                                                        "reference": "LABOR-CYCLE"})
@@ -102,6 +101,10 @@ def test_procure_produce_sell_cycle(monkeypatch, tmp_path):
                                 headers=warehouse, json={"accepted_quantity": "2", "qc_note": "全数合格"})
         assert inspected.status_code == 200, inspected.text
         confirm(f"/production-completions/{completion}/post", warehouse)
+        settlement = create('/production-costs/settlements', finance, {
+            'work_order_id': work_order['id'], 'reference': 'SETTLE-CYCLE'})
+        assert settlement['total_amount'] == '14.00'
+        assert settlement['allocations'][0]['amount'] == '14.00'
         produced = client.get(f"{base}/stock?warehouse_id={production_warehouse}", headers=warehouse).json()
         assert Decimal(next(row["quantity"] for row in produced if row["id"] == product)) == Decimal(2)
         confirm(f"/shipments/{shipment}/post", warehouse)

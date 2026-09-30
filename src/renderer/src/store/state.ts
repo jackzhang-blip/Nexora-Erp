@@ -20,6 +20,7 @@ import type {
   Permission,
   ProductionCompletion,
   ProductionCostReport,
+  ProductionCostSettlement,
   PurchaseOrder,
   PurchaseRequest,
   PurchaseReturn,
@@ -100,6 +101,9 @@ export function createAppState() {
   const materialReturns = ref<MaterialReturn[]>([])
   const productionCompletions = ref<ProductionCompletion[]>([])
   const productionCostReport = ref<ProductionCostReport | null>(null)
+  const productionCostSettlements = ref<ProductionCostSettlement[]>([])
+  const productionSettlementForm = ref({ work_order_id: 0, reference: '', note: '' })
+  const settlementReversalReasons = ref<Record<number, string>>({})
   const warehouses = ref<Warehouse[]>([])
   const transfers = ref<Transfer[]>([])
   const stocktakes = ref<Stocktake[]>([])
@@ -376,6 +380,9 @@ export function createAppState() {
     materialReturns,
     productionCompletions,
     productionCostReport,
+    productionCostSettlements,
+    productionSettlementForm,
+    settlementReversalReasons,
     warehouses,
     transfers,
     stocktakes,

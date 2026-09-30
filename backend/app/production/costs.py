@@ -1,211 +1,234 @@
-"""生产工单成本归集：领料逐行核价，人工和制造费用独立留痕。"""
+"""生产成本 ORM 归集：库存平均成本优先，人工和制造费用独立留痕。"""
 
-import sqlite3
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app.core.database import connection
-from app.production.material_returns import returned_quantity
 from app.access.security import require
+from app.core.orm import orm_session, model_data
+from app.core.models import (User, Material, Bom, WorkOrder, WorkOrderLine, MaterialIssue,
+    MaterialIssueLine, MaterialReturn, MaterialReturnLine, StockMovement, ProductionCostEntry,
+    ProductionCostReversal, ProductionSettlementSource)
+from app.inventory.valuation import calculate_valuation
+from app.production.cost_lock import active_settlement, ensure_unsettled
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix='/api/v1')
 
 
 def money(value: Decimal) -> str:
-    return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    return str(value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
 
 
 class MaterialValuationInput(BaseModel):
     material_issue_line_id: int = Field(gt=0)
     unit_cost: Decimal
     reference: str = Field(min_length=1, max_length=100)
-    note: str = Field(default="", max_length=200)
+    note: str = Field(default='', max_length=200)
 
-    @field_validator("unit_cost")
+    @field_validator('unit_cost')
     @classmethod
     def valid_unit_cost(cls, value: Decimal) -> Decimal:
         if not value.is_finite() or value < 0 or value > 1_000_000_000 or value.as_tuple().exponent < -4:
-            raise ValueError("材料核定单价须非负、最多四位小数且不超过十亿")
+            raise ValueError('材料核定单价须非负、最多四位小数且不超过十亿')
         return value
 
-    @field_validator("reference")
+    @field_validator('reference')
     @classmethod
     def trim_reference(cls, value: str) -> str:
         if not value.strip():
-            raise ValueError("成本依据编号不能为空")
+            raise ValueError('成本依据编号不能为空')
         return value.strip()
 
 
 class ChargeInput(BaseModel):
     work_order_id: int = Field(gt=0)
-    kind: Literal["labor", "overhead"]
+    kind: Literal['labor', 'overhead']
     amount: Decimal
     reference: str = Field(min_length=1, max_length=100)
-    note: str = Field(default="", max_length=200)
+    note: str = Field(default='', max_length=200)
 
-    @field_validator("amount")
+    @field_validator('amount')
     @classmethod
     def valid_amount(cls, value: Decimal) -> Decimal:
         if not value.is_finite() or value <= 0 or value > 1_000_000_000_000 or value.as_tuple().exponent < -2:
-            raise ValueError("费用金额须大于零、最多两位小数且不超过一万亿元")
+            raise ValueError('费用金额须大于零、最多两位小数且不超过一万亿元')
         return value
 
-    @field_validator("reference")
+    @field_validator('reference')
     @classmethod
     def trim_reference(cls, value: str) -> str:
         if not value.strip():
-            raise ValueError("成本依据编号不能为空")
+            raise ValueError('成本依据编号不能为空')
         return value.strip()
 
 
 class CostReversalInput(BaseModel):
     reason: str = Field(min_length=1, max_length=200)
 
-    @field_validator("reason")
+    @field_validator('reason')
     @classmethod
     def trim_reason(cls, value: str) -> str:
         if not value.strip():
-            raise ValueError("冲销原因不能为空")
+            raise ValueError('冲销原因不能为空')
         return value.strip()
 
 
-def entry_data(db: sqlite3.Connection, entry_id: int) -> dict:
-    row = db.execute("""SELECT pce.*, u.username AS created_by_name,
-        r.id AS reversal_id, r.reason AS reversal_reason,
-        r.created_by AS reversed_by, r.created_at AS reversed_at,
-        ru.username AS reversed_by_name, mil.quantity AS issue_quantity,
-        m.sku AS material_sku, m.name AS material_name
-        FROM production_cost_entries pce JOIN users u ON u.id = pce.created_by
-        LEFT JOIN production_cost_reversals r ON r.entry_id = pce.id
-        LEFT JOIN users ru ON ru.id = r.created_by
-        LEFT JOIN material_issue_lines mil ON mil.id = pce.material_issue_line_id
-        LEFT JOIN work_order_lines wol ON wol.id = mil.work_order_line_id
-        LEFT JOIN materials m ON m.id = wol.component_material_id
-        WHERE pce.id = ?""", (entry_id,)).fetchone()
-    if not row:
-        raise HTTPException(404, "生产成本记录不存在")
-    result = dict(row)
-    result["status"] = "reversed" if row["reversal_id"] is not None else "active"
-    if row["kind"] == "material":
-        net = Decimal(row["issue_quantity"]) - returned_quantity(db, row["material_issue_line_id"])
-        result["net_quantity"] = str(net)
-        result["current_amount"] = money(net * Decimal(row["unit_cost"])) if result["status"] == "active" else None
-    else:
-        result["net_quantity"] = None
-        result["current_amount"] = row["amount"] if result["status"] == "active" else None
-    return result
+def returned_quantity(session: Session, issue_line_id: int) -> Decimal:
+    return sum((Decimal(value) for value in session.scalars(select(MaterialReturnLine.quantity)
+        .join(MaterialReturn, MaterialReturn.id == MaterialReturnLine.material_return_id)
+        .where(MaterialReturnLine.material_issue_line_id == issue_line_id, MaterialReturn.status == 'posted'))), Decimal(0))
 
 
-def cost_report(db: sqlite3.Connection) -> dict:
-    # 未核价的净领料必须显式计数，总成本保持空值，不能误报为已完成核算。
-    entries = [entry_data(db, row[0]) for row in db.execute(
-        "SELECT id FROM production_cost_entries ORDER BY id DESC")]
-    active_rates = {entry["material_issue_line_id"]: entry for entry in entries
-                    if entry["status"] == "active" and entry["kind"] == "material"}
-    charges: dict[int, dict[str, Decimal]] = {}
-    for entry in entries:
-        if entry["status"] == "active" and entry["kind"] in ("labor", "overhead"):
-            charges.setdefault(entry["work_order_id"], {"labor": Decimal(0), "overhead": Decimal(0)})[
-                entry["kind"]] += Decimal(entry["amount"])
-    orders = []
-    unpriced_lines = []
-    for order in db.execute("""SELECT wo.id, wo.status, m.name AS product_name
-        FROM work_orders wo JOIN boms b ON b.id = wo.bom_id
-        JOIN materials m ON m.id = b.product_material_id ORDER BY wo.id DESC"""):
-        known = Decimal(0)
-        unpriced = 0
-        for line in db.execute("""SELECT mil.id, mil.quantity, mi.id AS material_issue_id,
-            m.sku, m.name AS material_name, m.unit FROM material_issue_lines mil
-            JOIN material_issues mi ON mi.id = mil.material_issue_id
-            JOIN work_order_lines wol ON wol.id = mil.work_order_line_id
-            JOIN materials m ON m.id = wol.component_material_id
-            WHERE mi.work_order_id = ? AND mi.status = 'posted'""", (order["id"],)):
-            net = Decimal(line["quantity"]) - returned_quantity(db, line["id"])
+def entry_data(session: Session, entry_id: int) -> dict:
+    entry = session.get(ProductionCostEntry, entry_id)
+    if entry is None:
+        raise HTTPException(404, '生产成本记录不存在')
+    reversal = session.scalar(select(ProductionCostReversal).where(ProductionCostReversal.entry_id == entry_id))
+    issue_line = session.get(MaterialIssueLine, entry.material_issue_line_id) if entry.material_issue_line_id else None
+    material = session.get(Material, session.get(WorkOrderLine, issue_line.work_order_line_id).component_material_id) if issue_line else None
+    net = Decimal(issue_line.quantity) - returned_quantity(session, issue_line.id) if issue_line else None
+    current = (money(net * Decimal(entry.unit_cost)) if issue_line else entry.amount) if reversal is None else None
+    return {**model_data(entry), 'created_by_name': session.get(User, entry.created_by).username,
+        'status': 'reversed' if reversal else 'active', 'reversal_id': reversal.id if reversal else None,
+        'reversal_reason': reversal.reason if reversal else None,
+        'reversed_by': reversal.created_by if reversal else None,
+        'reversed_at': reversal.created_at if reversal else None,
+        'reversed_by_name': session.get(User, reversal.created_by).username if reversal else None,
+        'issue_quantity': issue_line.quantity if issue_line else None,
+        'material_sku': material.sku if material else None, 'material_name': material.name if material else None,
+        'net_quantity': str(net) if net is not None else None, 'current_amount': current}
+
+
+def cost_report(session: Session) -> dict:
+    entries = [entry_data(session, value) for value in session.scalars(
+        select(ProductionCostEntry.id).order_by(ProductionCostEntry.id.desc()))]
+    manual_rates = {item['material_issue_line_id']: item for item in entries
+                    if item['status'] == 'active' and item['kind'] == 'material'}
+    valuation = calculate_valuation(session)
+    issue_movements = {item['source_line_id']: item['id'] for item in valuation.report['movements']
+                       if item['source_type'] == 'material_issue'}
+    orders, unpriced_lines, material_sources = [], [], []
+    for order, product_name in session.execute(select(WorkOrder, Material.name)
+        .join(Bom, Bom.id == WorkOrder.bom_id).join(Material, Material.id == Bom.product_material_id)
+        .order_by(WorkOrder.id.desc())):
+        known, unpriced = Decimal(0), 0
+        for line, material in session.execute(select(MaterialIssueLine, Material)
+            .join(MaterialIssue, MaterialIssue.id == MaterialIssueLine.material_issue_id)
+            .join(WorkOrderLine, WorkOrderLine.id == MaterialIssueLine.work_order_line_id)
+            .join(Material, Material.id == WorkOrderLine.component_material_id)
+            .where(MaterialIssue.work_order_id == order.id, MaterialIssue.status == 'posted')):
+            net = Decimal(line.quantity) - returned_quantity(session, line.id)
             if net <= 0:
                 continue
-            valuation = active_rates.get(line["id"])
-            if valuation is None:
+            movement_id = issue_movements.get(line.id)
+            inventory_cost = valuation.movement_costs.get(movement_id)
+            manual = manual_rates.get(line.id)
+            rate = inventory_cost if inventory_cost is not None else Decimal(manual['unit_cost']) if manual else None
+            if rate is None:
                 unpriced += 1
-                unpriced_lines.append({"material_issue_line_id": line["id"],
-                                       "material_issue_id": line["material_issue_id"],
-                                       "work_order_id": order["id"], "sku": line["sku"],
-                                       "material_name": line["material_name"], "unit": line["unit"],
-                                       "net_quantity": str(net)})
+                unpriced_lines.append({'material_issue_line_id': line.id, 'material_issue_id': line.material_issue_id,
+                    'work_order_id': order.id, 'sku': material.sku, 'material_name': material.name,
+                    'unit': material.unit, 'net_quantity': str(net)})
             else:
-                known += Decimal(valuation["current_amount"])
-        labor = charges.get(order["id"], {}).get("labor", Decimal(0))
-        overhead = charges.get(order["id"], {}).get("overhead", Decimal(0))
-        orders.append({"work_order_id": order["id"], "product_name": order["product_name"],
-                       "work_order_status": order["status"], "known_material_amount": money(known),
-                       "labor_amount": money(labor), "overhead_amount": money(overhead),
-                       "total_amount": None if unpriced else money(known + labor + overhead),
-                       "unpriced_issue_count": unpriced})
-    return {"currency": "CNY", "orders": orders, "entries": entries,
-            "unpriced_lines": unpriced_lines}
+                amount = money(net * rate)
+                known += Decimal(amount)
+                material_sources.append({'work_order_id': order.id, 'material_issue_line_id': line.id,
+                    'material_issue_id': line.material_issue_id, 'movement_id': movement_id,
+                    'sku': material.sku, 'material_name': material.name, 'net_quantity': str(net),
+                    'unit_cost': str(rate), 'amount': amount, 'cost_source': 'inventory' if inventory_cost is not None else 'manual',
+                    'cost_entry_id': None if inventory_cost is not None else manual['id']})
+        fees = {kind: sum((Decimal(item['amount']) for item in entries
+            if item['work_order_id'] == order.id and item['status'] == 'active' and item['kind'] == kind), Decimal(0))
+            for kind in ('labor', 'overhead')}
+        settlement = active_settlement(session, order.id)
+        summary = {'work_order_id': order.id, 'product_name': product_name, 'work_order_status': order.status,
+            'known_material_amount': money(known), 'labor_amount': money(fees['labor']),
+            'overhead_amount': money(fees['overhead']),
+            'total_amount': None if unpriced else money(known + fees['labor'] + fees['overhead']),
+            'unpriced_issue_count': unpriced, 'settlement_id': settlement['id'] if settlement else None}
+        if settlement:
+            # 结算后的汇总和来源均使用当时快照，后补价格不会悄然替换历史依据。
+            summary.update(known_material_amount=settlement['material_amount'], labor_amount=settlement['labor_amount'],
+                overhead_amount=settlement['overhead_amount'], total_amount=settlement['total_amount'], unpriced_issue_count=0)
+            material_sources = [item for item in material_sources if item['work_order_id'] != order.id]
+            unpriced_lines = [item for item in unpriced_lines if item['work_order_id'] != order.id]
+            for source, issue_id, sku, name in session.execute(select(ProductionSettlementSource,
+                MaterialIssueLine.material_issue_id, Material.sku, Material.name)
+                .join(MaterialIssueLine, MaterialIssueLine.id == ProductionSettlementSource.material_issue_line_id)
+                .join(WorkOrderLine, WorkOrderLine.id == MaterialIssueLine.work_order_line_id)
+                .join(Material, Material.id == WorkOrderLine.component_material_id)
+                .where(ProductionSettlementSource.settlement_id == settlement['id'])):
+                material_sources.append({**model_data(source), 'work_order_id': order.id,
+                    'material_issue_id': issue_id, 'sku': sku, 'material_name': name})
+        orders.append(summary)
+    applied = {item['cost_entry_id'] for item in material_sources if item['cost_entry_id'] is not None}
+    for entry in entries:
+        entry['included_in_current_cost'] = entry['status'] == 'active' and (entry['kind'] != 'material' or entry['id'] in applied)
+    return {'currency': 'CNY', 'orders': orders, 'entries': entries,
+            'unpriced_lines': unpriced_lines, 'material_sources': material_sources}
 
 
-@router.get("/production-costs")
-def list_production_costs(_: dict = Depends(require("production_cost.view"))) -> dict:
-    with connection() as db:
-        # 汇总跨多张单据，使用同一读取快照避免同时退料或冲销造成前后不一致。
-        db.execute("BEGIN")
-        return cost_report(db)
+@router.get('/production-costs')
+def list_production_costs(_: dict = Depends(require('production_cost.view'))) -> dict:
+    with orm_session() as session:
+        return cost_report(session)
 
 
-@router.post("/production-costs/material-valuations", status_code=201)
+@router.post('/production-costs/material-valuations', status_code=201)
 def record_material_valuation(payload: MaterialValuationInput,
-                              user: dict = Depends(require("production_cost.record"))) -> dict:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        line = db.execute("""SELECT mi.work_order_id, mi.status FROM material_issue_lines mil
-            JOIN material_issues mi ON mi.id = mil.material_issue_id
-            WHERE mil.id = ?""", (payload.material_issue_line_id,)).fetchone()
-        if not line:
-            raise HTTPException(422, "领料明细不存在")
-        if line["status"] != "posted":
-            raise HTTPException(409, "只有已确认领料明细可以核价")
-        if db.execute("""SELECT 1 FROM production_cost_entries pce
-            WHERE pce.material_issue_line_id = ? AND NOT EXISTS (
-                SELECT 1 FROM production_cost_reversals r WHERE r.entry_id = pce.id)""",
-                (payload.material_issue_line_id,)).fetchone():
-            raise HTTPException(409, "此领料明细已有有效核价记录，须先冲销原记录")
-        cursor = db.execute("""INSERT INTO production_cost_entries(
-            work_order_id, kind, material_issue_line_id, unit_cost, reference, note, created_by)
-            VALUES (?, 'material', ?, ?, ?, ?, ?)""",
-            (line["work_order_id"], payload.material_issue_line_id, str(payload.unit_cost),
-             payload.reference, payload.note.strip(), user["id"]))
-        return entry_data(db, cursor.lastrowid)
+                              user: dict = Depends(require('production_cost.record'))) -> dict:
+    with orm_session(write=True) as session:
+        line = session.get(MaterialIssueLine, payload.material_issue_line_id)
+        if line is None:
+            raise HTTPException(422, '领料明细不存在')
+        issue = session.get(MaterialIssue, line.material_issue_id)
+        if issue.status != 'posted':
+            raise HTTPException(409, '只有已确认领料明细可以核价')
+        ensure_unsettled(session, issue.work_order_id)
+        movement_id = session.scalar(select(StockMovement.id).where(
+            StockMovement.source_type == 'material_issue', StockMovement.source_line_id == line.id))
+        if movement_id is not None and calculate_valuation(session).movement_costs.get(movement_id) is not None:
+            raise HTTPException(409, '领料已有库存平均成本，无需另行人工核价；请更正库存成本来源')
+        if session.scalar(select(ProductionCostEntry.id).where(ProductionCostEntry.material_issue_line_id == line.id,
+            ~select(ProductionCostReversal.id).where(ProductionCostReversal.entry_id == ProductionCostEntry.id).exists()).limit(1)) is not None:
+            raise HTTPException(409, '此领料明细已有有效核价记录，须先冲销原记录')
+        entry = ProductionCostEntry(work_order_id=issue.work_order_id, kind='material', material_issue_line_id=line.id,
+            unit_cost=str(payload.unit_cost), reference=payload.reference, note=payload.note.strip(), created_by=user['id'])
+        session.add(entry)
+        session.flush()
+        return entry_data(session, entry.id)
 
 
-@router.post("/production-costs/charges", status_code=201)
-def record_charge(payload: ChargeInput, user: dict = Depends(require("production_cost.record"))) -> dict:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        order = db.execute("SELECT status FROM work_orders WHERE id = ?", (payload.work_order_id,)).fetchone()
-        if not order:
-            raise HTTPException(422, "生产工单不存在")
-        if order["status"] not in ("released", "in_progress", "completed"):
-            raise HTTPException(409, "只有已下达、生产中或已完工的工单可以归集费用")
-        cursor = db.execute("""INSERT INTO production_cost_entries(
-            work_order_id, kind, amount, reference, note, created_by)
-            VALUES (?, ?, ?, ?, ?, ?)""",
-            (payload.work_order_id, payload.kind, money(payload.amount),
-             payload.reference, payload.note.strip(), user["id"]))
-        return entry_data(db, cursor.lastrowid)
+@router.post('/production-costs/charges', status_code=201)
+def record_charge(payload: ChargeInput, user: dict = Depends(require('production_cost.record'))) -> dict:
+    with orm_session(write=True) as session:
+        order = session.get(WorkOrder, payload.work_order_id)
+        if order is None:
+            raise HTTPException(422, '生产工单不存在')
+        if order.status not in ('released', 'in_progress', 'completed'):
+            raise HTTPException(409, '只有已下达、生产中或已完工的工单可以归集费用')
+        ensure_unsettled(session, order.id)
+        entry = ProductionCostEntry(work_order_id=order.id, kind=payload.kind, amount=money(payload.amount),
+            reference=payload.reference, note=payload.note.strip(), created_by=user['id'])
+        session.add(entry)
+        session.flush()
+        return entry_data(session, entry.id)
 
 
-@router.post("/production-costs/{entry_id}/reverse")
+@router.post('/production-costs/{entry_id}/reverse')
 def reverse_cost_entry(entry_id: int, payload: CostReversalInput,
-                       user: dict = Depends(require("production_cost.reverse"))) -> dict:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        if not db.execute("SELECT 1 FROM production_cost_entries WHERE id = ?", (entry_id,)).fetchone():
-            raise HTTPException(404, "生产成本记录不存在")
-        if db.execute("SELECT 1 FROM production_cost_reversals WHERE entry_id = ?", (entry_id,)).fetchone():
-            raise HTTPException(409, "此生产成本记录已冲销")
-        db.execute("""INSERT INTO production_cost_reversals(entry_id, reason, created_by)
-            VALUES (?, ?, ?)""", (entry_id, payload.reason, user["id"]))
-        return entry_data(db, entry_id)
+                       user: dict = Depends(require('production_cost.reverse'))) -> dict:
+    with orm_session(write=True) as session:
+        entry = session.get(ProductionCostEntry, entry_id)
+        if entry is None:
+            raise HTTPException(404, '生产成本记录不存在')
+        ensure_unsettled(session, entry.work_order_id)
+        if session.scalar(select(ProductionCostReversal.id).where(ProductionCostReversal.entry_id == entry_id)) is not None:
+            raise HTTPException(409, '此生产成本记录已冲销')
+        session.add(ProductionCostReversal(entry_id=entry_id, reason=payload.reason, created_by=user['id']))
+        session.flush()
+        return entry_data(session, entry.id)

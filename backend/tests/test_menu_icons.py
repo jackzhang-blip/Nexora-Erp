@@ -42,16 +42,19 @@ def test_menu_icons_lifecycle(monkeypatch, tmp_path):
             {'key':'group:warehouse','icon':None,'version':2}, {'key':'route:home','icon':'chart','version':1}]
 
 
-def test_upgrade_v37_keeps_existing_data(monkeypatch, tmp_path):
+def test_upgrade_v37_keeps_existing_data(monkeypatch, tmp_path, remove_v39_schema):
     path = tmp_path / 'legacy.db'
     monkeypatch.setenv('NEXORA_DB_PATH', str(path))
+    migrate()
     with sqlite3.connect(path) as db:
-        db.execute('CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT)')
-        db.execute("INSERT INTO users VALUES (7, 'retained')")
+        db.execute("INSERT INTO users(id, username, password_hash) VALUES (7, 'retained', 'retained-hash')")
+        db.execute('DROP TABLE menu_icon_changes')
+        db.execute('DROP TABLE menu_icons')
+        remove_v39_schema(db)
         db.execute('PRAGMA user_version = 37')
     migrate()
     migrate()
     with connection() as db:
         assert db.execute('SELECT username FROM users').fetchone()[0] == 'retained'
         assert db.execute('SELECT COUNT(*) FROM menu_icons').fetchone()[0] == 0
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 38
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 39

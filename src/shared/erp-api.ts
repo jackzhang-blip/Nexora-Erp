@@ -110,7 +110,8 @@ export interface InventoryValuationMovement {
   created_at: string
   unit_cost: string | null
   amount: string | null
-  cost_source: 'purchase_order' | 'manual' | 'linked_movement' | 'moving_average' | 'unpriced'
+  cost_source: 'purchase_order' | 'manual' | 'linked_movement' | 'moving_average' | 'unpriced' | 'production_settlement'
+  settlement_id: number | null
   cost_input_id: number | null
 }
 export interface InventoryValuationReport {
@@ -519,6 +520,7 @@ export interface ProductionCostEntry {
   issue_quantity: string | null
   net_quantity: string | null
   current_amount: string | null
+  included_in_current_cost?: boolean
   status: 'active' | 'reversed'
   reversal_id: number | null
   reversal_reason: string | null
@@ -535,11 +537,48 @@ export interface ProductionCostOrder {
   overhead_amount: string
   total_amount: string | null
   unpriced_issue_count: number
+  settlement_id: number | null
+}
+export interface ProductionMaterialSource {
+  work_order_id: number
+  material_issue_line_id: number
+  material_issue_id: number
+  movement_id: number
+  sku: string
+  material_name: string
+  net_quantity: string
+  unit_cost: string
+  amount: string
+  cost_source: 'inventory' | 'manual'
+  cost_entry_id: number | null
+}
+export interface ProductionCostSettlement {
+  id: number
+  work_order_id: number
+  reference: string
+  note: string
+  material_amount: string
+  labor_amount: string
+  overhead_amount: string
+  total_amount: string
+  accepted_quantity: string
+  created_by: number
+  created_by_name: string
+  created_at: string
+  status: 'active' | 'reversed'
+  reversal_id: number | null
+  reversal_reason: string | null
+  reversed_by_name: string | null
+  reversed_at: string | null
+  allocations: { settlement_id: number; completion_id: number; movement_id: number; quantity: string; amount: string }[]
+  material_sources: Omit<ProductionMaterialSource, 'work_order_id' | 'material_issue_id'>[]
+  charges: { id: number; kind: 'labor' | 'overhead'; amount: string; reference: string; created_by: number; created_at: string }[]
 }
 export interface ProductionCostReport {
   currency: 'CNY'
   orders: ProductionCostOrder[]
   entries: ProductionCostEntry[]
+  material_sources: ProductionMaterialSource[]
   unpriced_lines: { material_issue_line_id: number; material_issue_id: number; work_order_id: number;
     sku: string; material_name: string; unit: string; net_quantity: string }[]
 }
@@ -856,6 +895,9 @@ export interface ErpOperations {
   cancelProductionCompletion: { input: { completionId: number }; output: ProductionCompletion }
   reverseProductionCompletion: { input: { completionId: number; reason: string }; output: ProductionCompletion }
   productionCosts: { input: undefined; output: ProductionCostReport }
+  productionCostSettlements: { input: undefined; output: ProductionCostSettlement[] }
+  settleProductionCost: { input: { work_order_id: number; reference: string; note: string }; output: ProductionCostSettlement }
+  reverseProductionSettlement: { input: { settlementId: number; reason: string }; output: ProductionCostSettlement }
   recordMaterialValuation: { input: { material_issue_line_id: number; unit_cost: string; reference: string; note: string }; output: ProductionCostEntry }
   recordProductionCharge: { input: { work_order_id: number; kind: 'labor' | 'overhead'; amount: string; reference: string; note: string }; output: ProductionCostEntry }
   reverseProductionCost: { input: { entryId: number; reason: string }; output: ProductionCostEntry }

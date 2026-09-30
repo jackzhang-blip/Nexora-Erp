@@ -32,6 +32,7 @@ export function createDataLoader(
     materialReturns,
     productionCompletions,
     productionCostReport,
+    productionCostSettlements,
     warehouses,
     transfers,
     stocktakes,
@@ -191,6 +192,9 @@ export function createDataLoader(
     productionCostReport.value = can('production_cost.view')
       ? await window.nexora.callApi('productionCosts', undefined)
       : null
+    productionCostSettlements.value = can('production_cost.view')
+      ? await window.nexora.callApi('productionCostSettlements', undefined)
+      : []
     if (can('users.manage')) {
       ;[roles.value, users.value] = await Promise.all([
         window.nexora.callApi('roles', undefined),

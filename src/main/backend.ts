@@ -261,6 +261,13 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
         body: { reason: fields.reason } }
     }
     case 'productionCosts': return { method: 'GET', path: '/api/v1/production-costs' }
+    case 'productionCostSettlements': return { method: 'GET', path: '/api/v1/production-costs/settlements' }
+    case 'settleProductionCost': return { method: 'POST', path: '/api/v1/production-costs/settlements', body: payload }
+    case 'reverseProductionSettlement': {
+      const settlementId = positiveId(payload, 'settlementId')
+      const fields = payload as ErpOperations['reverseProductionSettlement']['input']
+      return { method: 'POST', path: `/api/v1/production-costs/settlements/${settlementId}/reverse`, body: { reason: fields.reason } }
+    }
     case 'recordMaterialValuation': return { method: 'POST', path: '/api/v1/production-costs/material-valuations', body: payload }
     case 'recordProductionCharge': return { method: 'POST', path: '/api/v1/production-costs/charges', body: payload }
     case 'reverseProductionCost': {

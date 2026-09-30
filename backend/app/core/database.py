@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 38:
+        if version > 39:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -1206,3 +1206,58 @@ def migrate() -> None:
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )""")
             db.execute("PRAGMA user_version = 38")
+
+        if version < 39:
+            # 结算保存不可变快照，冲销独立追加；写锁保护同一工单不被重复结算。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE production_cost_settlements (
+                id INTEGER PRIMARY KEY,
+                work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+                reference TEXT NOT NULL, note TEXT NOT NULL,
+                material_amount TEXT NOT NULL, labor_amount TEXT NOT NULL,
+                overhead_amount TEXT NOT NULL, total_amount TEXT NOT NULL,
+                accepted_quantity TEXT NOT NULL,
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (work_order_id, reference)
+            )""")
+            db.execute("""CREATE TABLE production_settlement_reversals (
+                id INTEGER PRIMARY KEY,
+                settlement_id INTEGER NOT NULL UNIQUE REFERENCES production_cost_settlements(id),
+                reason TEXT NOT NULL, created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.execute("""CREATE TABLE production_cost_allocations (
+                settlement_id INTEGER NOT NULL REFERENCES production_cost_settlements(id),
+                completion_id INTEGER NOT NULL REFERENCES production_completions(id),
+                movement_id INTEGER NOT NULL REFERENCES stock_movements(id),
+                quantity TEXT NOT NULL, amount TEXT NOT NULL,
+                PRIMARY KEY (settlement_id, movement_id)
+            )""")
+            db.execute("""CREATE TABLE production_settlement_sources (
+                settlement_id INTEGER NOT NULL REFERENCES production_cost_settlements(id),
+                material_issue_line_id INTEGER NOT NULL REFERENCES material_issue_lines(id),
+                movement_id INTEGER NOT NULL REFERENCES stock_movements(id),
+                net_quantity TEXT NOT NULL, unit_cost TEXT NOT NULL, amount TEXT NOT NULL,
+                cost_source TEXT NOT NULL, cost_entry_id INTEGER REFERENCES production_cost_entries(id),
+                PRIMARY KEY (settlement_id, material_issue_line_id)
+            )""")
+            db.execute("""CREATE TABLE production_settlement_dependencies (
+                settlement_id INTEGER NOT NULL REFERENCES production_cost_settlements(id),
+                kind TEXT NOT NULL CHECK (kind IN ('input', 'settlement')), source_id INTEGER NOT NULL,
+                PRIMARY KEY (settlement_id, kind, source_id)
+            )""")
+            db.execute("""CREATE TABLE production_settlement_charges (
+                settlement_id INTEGER NOT NULL REFERENCES production_cost_settlements(id),
+                entry_id INTEGER NOT NULL REFERENCES production_cost_entries(id),
+                PRIMARY KEY (settlement_id, entry_id)
+            )""")
+            db.executemany("""INSERT INTO permissions(code, label, group_code)
+                VALUES (?, ?, 'production.production_cost')""", [
+                ('production_cost.settle', '结算完工成本'),
+                ('production_cost.reopen', '冲销成本结算')])
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, code) for role in ('admin', 'finance')
+                            for code in ('production_cost.settle', 'production_cost.reopen')])
+            db.execute("PRAGMA user_version = 39")
