@@ -21,6 +21,7 @@
 | `sales/` | `SalesShipmentsView.vue` | 处理销售出库 |
 | `sales/` | `SalesReturnsView.vue` | 处理销售退货 |
 | `finance/` | `ReceivablesPayablesView.vue` | 查看应收应付并登记收付款 |
+| `finance/` | `InventoryValuationView.vue` | 查看移动平均库存金额、待核价来源和核价修订历史 |
 | `production/` | `ProductionBomsView.vue` | 管理生产 BOM 版本 |
 | `production/` | `ProductionWorkOrdersView.vue` | 建立和下达生产工单 |
 | `production/` | `MaterialIssuesView.vue` | 处理生产领料 |

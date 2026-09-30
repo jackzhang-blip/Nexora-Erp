@@ -144,7 +144,7 @@ def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path):
         db.execute("PRAGMA user_version = 24")
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 35
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 36
         labels = dict(db.execute("SELECT code, label FROM permissions").fetchall())
         assert labels["bom.activate"] == "启用生产物料清单版本"
         assert labels["future.view"] == "未命名权限"
@@ -208,6 +208,10 @@ def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, 
         db.execute("UPDATE permissions SET label = '未命名权限' WHERE code = 'production.view'")
         db.execute("UPDATE permissions SET label = '查看仓库实时库存' WHERE code = 'inventory.view'")
         grants = db.execute("SELECT role_code, permission_code FROM role_permissions ORDER BY 1, 2").fetchall()
+        db.execute("DROP TABLE inventory_cost_inputs")
+        db.execute("DELETE FROM role_permissions WHERE permission_code LIKE 'inventory_valuation.%'")
+        db.execute("DELETE FROM permissions WHERE code LIKE 'inventory_valuation.%'")
+        db.execute("DELETE FROM permission_groups WHERE code = 'finance.inventory_valuation'")
         db.execute("DELETE FROM role_permissions WHERE permission_code = 'purchase_return.submit'")
         db.execute("DELETE FROM permissions WHERE code = 'purchase_return.submit'")
         db.execute("DELETE FROM role_permissions WHERE permission_code IN ('purchase_report.view', 'inventory_report.view')")
@@ -268,6 +272,6 @@ def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, 
 
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 35
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 36
         assert db.execute("SELECT role_code, permission_code FROM role_permissions ORDER BY 1, 2").fetchall() == grants
         assert db.execute("SELECT label FROM permissions WHERE code = 'inventory.view'").fetchone()[0] == "查看仓库实时库存"

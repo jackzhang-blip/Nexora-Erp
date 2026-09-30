@@ -12,6 +12,8 @@ export function createDataLoader(
     suppliers,
     supplierMaterials,
     stock,
+    inventoryValuation,
+    inventoryCostInputs,
     movements,
     otherInbounds,
     warehouseOutbounds,
@@ -117,6 +119,15 @@ export function createDataLoader(
     stockAdjustments.value = can('adjustment.view')
       ? await window.nexora.callApi('stockAdjustments', undefined)
       : []
+    if (can('inventory_valuation.view')) {
+      ;[inventoryValuation.value, inventoryCostInputs.value] = await Promise.all([
+        window.nexora.callApi('inventoryValuation', undefined),
+        window.nexora.callApi('inventoryCostInputs', undefined)
+      ])
+    } else {
+      inventoryValuation.value = null
+      inventoryCostInputs.value = []
+    }
     if (can('sales.view')) {
       ;[
         customers.value,

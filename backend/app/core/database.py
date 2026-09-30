@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 35:
+        if version > 36:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -1143,3 +1143,29 @@ def migrate() -> None:
             db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
                            [(role, 'inventory_report.view') for role in ('admin', 'warehouse')])
             db.execute("PRAGMA user_version = 35")
+
+        if version < 36:
+            # 核价修订只追加新记录；历史库存流水及原始单据保持不变。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE inventory_cost_inputs (
+                id INTEGER PRIMARY KEY,
+                movement_id INTEGER NOT NULL REFERENCES stock_movements(id),
+                unit_cost TEXT NOT NULL,
+                reference TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (movement_id, reference)
+            )""")
+            db.execute("CREATE INDEX inventory_cost_inputs_movement ON inventory_cost_inputs(movement_id, id)")
+            db.execute("""INSERT INTO permission_groups(code, label, parent_code, sort_order)
+                VALUES ('finance.inventory_valuation', '库存计价', 'finance', 160)""")
+            db.executemany("""INSERT INTO permissions(code, label, group_code)
+                VALUES (?, ?, 'finance.inventory_valuation')""", [
+                ('inventory_valuation.view', '查看库存计价'),
+                ('inventory_valuation.record', '登记库存核价')])
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, code) for role in ('admin', 'finance')
+                            for code in ('inventory_valuation.view', 'inventory_valuation.record')])
+            db.execute("PRAGMA user_version = 36")
