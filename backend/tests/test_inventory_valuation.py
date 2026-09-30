@@ -121,7 +121,7 @@ def test_unpriced_stock_clears_only_after_full_depletion(monkeypatch, tmp_path):
         assert result["total_amount"] == "0.00"
 
 
-def test_v35_upgrade_preserves_stock_and_adds_cost_permissions(monkeypatch, tmp_path):
+def test_v35_upgrade_preserves_stock_and_adds_cost_permissions(monkeypatch, tmp_path, remove_v39_schema):
     monkeypatch.setenv("NEXORA_DB_PATH", str(tmp_path / "upgrade.db"))
     migrate()
     with connection() as db:
@@ -133,11 +133,12 @@ def test_v35_upgrade_preserves_stock_and_adds_cost_permissions(monkeypatch, tmp_
         # 回退版本夹具同步移除新版菜单表，模拟真实旧库。
         db.execute("DROP TABLE menu_icon_changes")
         db.execute("DROP TABLE menu_icons")
+        remove_v39_schema(db)
         db.execute("PRAGMA user_version = 35")
     migrate()
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 38
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 39
         assert db.execute("SELECT name FROM materials WHERE sku = 'OLD'").fetchone()[0] == "旧物料"
         assert db.execute("SELECT COUNT(*) FROM inventory_cost_inputs").fetchone()[0] == 0
         grants = set(db.execute("""SELECT role_code FROM role_permissions

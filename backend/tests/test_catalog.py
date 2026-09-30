@@ -85,7 +85,7 @@ def test_viewer_cannot_modify_catalog(client):
     assert client.delete("/api/v1/suppliers/1/materials/1").status_code == 403
 
 
-def test_v27_migration_preserves_existing_materials(client):
+def test_v27_migration_preserves_existing_materials(client, remove_v39_schema):
     material = create(client, "materials", {"sku": "OLD", "name": "旧物料", "unit": "件"})
     with connection() as db:
         db.execute("DROP TABLE inventory_cost_inputs")
@@ -131,11 +131,12 @@ def test_v27_migration_preserves_existing_materials(client):
         # 回退版本夹具同步移除新版菜单表，模拟真实旧库。
         db.execute("DROP TABLE menu_icon_changes")
         db.execute("DROP TABLE menu_icons")
+        remove_v39_schema(db)
         db.execute("PRAGMA user_version = 27")
     migrate()
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 38
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 39
         assert db.execute("SELECT name FROM materials WHERE id = ?", (material,)).fetchone()[0] == "旧物料"
         assert db.execute("SELECT COUNT(*) FROM supplier_materials").fetchone()[0] == 0
 

@@ -132,7 +132,7 @@ def test_access_management(monkeypatch, tmp_path):
                           json={"roles": ["viewer"]}).status_code == 409
 
 
-def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path):
+def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path, remove_v39_schema):
     path = tmp_path / "legacy-permissions.db"
     monkeypatch.setenv("NEXORA_DB_PATH", str(path))
     with sqlite3.connect(path) as db:
@@ -141,10 +141,11 @@ def test_legacy_permission_codes_gain_labels(monkeypatch, tmp_path):
         # 旧权限库的最小角色关联表，供新版权限种子验证升级路径。
         db.execute("CREATE TABLE role_permissions (role_code TEXT, permission_code TEXT)")
         db.execute("INSERT INTO permissions(code) VALUES ('bom.activate'), ('future.view')")
+        remove_v39_schema(db)
         db.execute("PRAGMA user_version = 24")
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 38
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 39
         labels = dict(db.execute("SELECT code, label FROM permissions").fetchall())
         assert labels["bom.activate"] == "启用生产物料清单版本"
         assert labels["future.view"] == "未命名权限"
@@ -199,7 +200,7 @@ def test_receipt_action_does_not_grant_same_action_on_shipment(monkeypatch, tmp_
         assert client.post("/api/v1/receipts/1/post", headers=clerk).status_code == 404
 
 
-def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, tmp_path):
+def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, tmp_path, remove_v39_schema):
     monkeypatch.setenv("NEXORA_DB_PATH", str(tmp_path / "permission-labels.db"))
     migrate()
     with connection() as db:
@@ -256,6 +257,7 @@ def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, 
         # 回退版本夹具同步移除新版菜单表，模拟真实旧库。
         db.execute("DROP TABLE menu_icon_changes")
         db.execute("DROP TABLE menu_icons")
+        remove_v39_schema(db)
         db.execute("PRAGMA user_version = 25")
 
     with TestClient(app, client=("127.0.0.1", 12345)) as client:
@@ -275,6 +277,6 @@ def test_code_labels_are_repaired_without_overwriting_custom_names(monkeypatch, 
 
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 38
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 39
         assert db.execute("SELECT role_code, permission_code FROM role_permissions ORDER BY 1, 2").fetchall() == grants
         assert db.execute("SELECT label FROM permissions WHERE code = 'inventory.view'").fetchone()[0] == "查看仓库实时库存"

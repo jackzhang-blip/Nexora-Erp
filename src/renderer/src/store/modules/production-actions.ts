@@ -20,7 +20,9 @@ export function createProductionActions(
     completionReversalReasons,
     materialValuationForm,
     productionChargeForm,
-    costReversalReasons
+    costReversalReasons,
+    productionSettlementForm,
+    settlementReversalReasons
   } = state
   async function createBom(): Promise<void> {
     if (!window.nexora) return
@@ -315,6 +317,23 @@ export function createProductionActions(
       delete costReversalReasons.value[entryId]
     }, `成本记录 #${entryId} 已冲销，原记录仍可查询。`)
   }
+  async function settleProductionCost(): Promise<void> {
+    if (!window.nexora) return
+    await perform(async () => {
+      await window.nexora!.callApi('settleProductionCost', { ...productionSettlementForm.value })
+      productionSettlementForm.value = { work_order_id: 0, reference: '', note: '' }
+    }, '完工成本已结算，各批次分摊及来源快照已保存。')
+  }
+
+  async function reverseProductionSettlement(settlementId: number): Promise<void> {
+    if (!window.nexora) return
+    const reason = settlementReversalReasons.value[settlementId]?.trim()
+    if (!reason) return
+    await perform(async () => {
+      await window.nexora!.callApi('reverseProductionSettlement', { settlementId, reason })
+      delete settlementReversalReasons.value[settlementId]
+    }, '成本结算已冲销，可更正来源后重新结算，原快照仍保留。')
+  }
   return {
     createBom,
     activateBom,
@@ -339,6 +358,8 @@ export function createProductionActions(
     reverseProductionCompletion,
     recordMaterialValuation,
     recordProductionCharge,
-    reverseProductionCost
+    reverseProductionCost,
+    settleProductionCost,
+    reverseProductionSettlement
   }
 }

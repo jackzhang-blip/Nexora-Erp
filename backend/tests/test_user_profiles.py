@@ -62,13 +62,20 @@ def test_user_profile_lifecycle(monkeypatch, tmp_path):
         assert client.post(f'{base}/auth/login', json={'username': 'worker', 'password': 'new-password-123'}).status_code == 200
 
 
-def test_v36_users_gain_empty_profiles_without_losing_accounts(monkeypatch, tmp_path):
+def test_v36_users_gain_empty_profiles_without_losing_accounts(monkeypatch, tmp_path, remove_v39_schema):
     path = tmp_path / 'legacy.db'
     monkeypatch.setenv('NEXORA_DB_PATH', str(path))
-    # 最小 v36 用户表直接验证本次迁移，不依赖新版建表后倒退版本号。
+    migrate()
+    # 结算迁移依赖完整业务结构，旧用户表仍去掉本次验证的资料列。
     with sqlite3.connect(path) as db:
-        db.execute('CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, is_active INTEGER)')
-        db.execute("INSERT INTO users VALUES (7, 'legacy', 'retained-hash', 1)")
+        db.execute('DROP INDEX users_employee_no')
+        for column in ('full_name', 'employee_no', 'phone'):
+            db.execute(f'ALTER TABLE users DROP COLUMN {column}')
+        db.execute('DROP TABLE user_profile_changes')
+        db.execute('DROP TABLE menu_icon_changes')
+        db.execute('DROP TABLE menu_icons')
+        db.execute("INSERT INTO users(id, username, password_hash, is_active) VALUES (7, 'legacy', 'retained-hash', 1)")
+        remove_v39_schema(db)
         db.execute('PRAGMA user_version = 36')
     migrate()
     migrate()
@@ -76,4 +83,4 @@ def test_v36_users_gain_empty_profiles_without_losing_accounts(monkeypatch, tmp_
         row = db.execute('SELECT * FROM users').fetchone()
         assert row['id'] == 7 and row['password_hash'] == 'retained-hash'
         assert (row['full_name'], row['employee_no'], row['phone']) == ('', '', '')
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 38
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 39

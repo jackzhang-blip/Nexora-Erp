@@ -34,7 +34,7 @@ export const workspacePageDescriptions: Partial<Record<WorkspaceRouteKey, string
   finance: '按订单核对业务净额、收付款净额与未结金额。',
   financePayments: '登记收款、付款与退款；录错时冲销更正，保留原始记录。',
   financeSources: '查看已确认出入库和退货产生的金额来源，追溯单据、物料与操作人。',
-  productionCosts: '材料单价按凭据人工核定，金额按已领减已退数量计算。存在待核价领料时，总成本显示待核价；这不是库存计价或总账凭证。',
+  productionCosts: '材料优先采用领料时的库存平均成本，净领料缺价时显示待核价。全部报工后按合格数量结算完工成本，分摊与来源保留快照；更正前先冲销结算。',
   users: '管理账号、姓名、工号和手机号，分配角色、切换账号状态及重置密码。',
   permissionCatalog: '名称用于页面展示；内部代码用于服务端授权，不能修改。',
   settings: '查看当前连接、修改账号密码并管理本机服务。',

@@ -10,6 +10,7 @@ from app.core.database import connection
 from app.inventory.warehouse import balance
 from app.access.security import require
 from app.production.work_orders import issued_quantity, posted_completion_totals, required_for_output
+from app.production.cost_lock import ensure_unsettled
 
 router = APIRouter(prefix="/api/v1")
 
@@ -205,6 +206,7 @@ def reverse_completion(completion_id: int, payload: ReversalInput,
             raise HTTPException(404, "生产完工单不存在")
         if row["status"] != "posted":
             raise HTTPException(409, "只有已确认的完工单可以冲销")
+        ensure_unsettled(db, row['work_order_id'])
         if db.execute("""SELECT 1 FROM production_completion_reversals
             WHERE production_completion_id = ?""", (completion_id,)).fetchone():
             raise HTTPException(409, "此完工单已冲销")

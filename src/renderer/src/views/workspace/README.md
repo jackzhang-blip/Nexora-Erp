@@ -30,7 +30,7 @@
 | `production/` | `MaterialIssuesView.vue` | 处理生产领料 |
 | `production/` | `MaterialReturnsView.vue` | 处理生产退料 |
 | `production/` | `ProductionCompletionsView.vue` | 报工、质检与成品入库 |
-| `production/` | `ProductionCostsView.vue` | 核价、费用归集与成本冲销 |
+| `production/` | `ProductionCostsView.vue` | 库存领料成本、核价、费用归集、完工批次结算与冲销 |
 | `system/` | `UserManagementView.vue` | 创建账号并管理用户状态与角色 |
 | `system/` | `RolePermissionsView.vue` | 在职务表格中搜索、筛选、新增和配置自定义角色；按模块、单据、操作树授权 |
 | `system/` | `PermissionCatalogView.vue` | 独立维护操作权限的中文名称，模块与单据仍按树状目录查看 |
