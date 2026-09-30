@@ -39,8 +39,8 @@ async function save(): Promise<void> {
         <button v-if="can('warehouse.manage')" class="primary" :disabled="busy || connectionLost" @click="edit()">新增仓库</button>
       </template>
       <template #filters>
-        <span class="muted">共 {{ warehouses.length }} 条</span>
         <label class="catalog-search">搜索仓库<input v-model="query" placeholder="输入名称或编码搜索" /></label>
+        <span class="muted">共 {{ warehouses.length }} 条</span>
       </template>
       <template #beforeTable>
         <NModal v-model:show="showForm" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">

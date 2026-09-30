@@ -86,6 +86,8 @@ defineSlots<{
   heading?: () => unknown
   actions?: () => unknown
   filters?: () => unknown
+  // 查询按钮与列表操作放进同一按钮组，窄窗时一起换行。
+  filterActions?: () => unknown
   beforeTable?: () => unknown
   empty?: () => unknown
   errorActions?: () => unknown
@@ -98,19 +100,26 @@ defineSlots<{
 
 <template>
   <section class="card workspace-table">
-    <header v-if="showTitle || description || $slots.heading || $slots.actions" class="workspace-table-heading">
+    <header v-if="showTitle || description || $slots.heading || ($slots.actions && !$slots.filters && !$slots.filterActions)" class="workspace-table-heading">
       <div v-if="showTitle || description || $slots.heading">
         <slot name="heading">
           <h2 v-if="showTitle">{{ title }}</h2>
           <p v-if="description" class="muted">{{ description }}</p>
         </slot>
       </div>
-      <div v-if="$slots.actions" class="workspace-table-actions">
+      <div v-if="$slots.actions && !$slots.filters && !$slots.filterActions" class="workspace-table-actions">
         <slot name="actions" />
       </div>
     </header>
-    <div v-if="$slots.filters" class="workspace-table-filters">
-      <slot name="filters" />
+    <!-- 条件与操作共用工具栏，避免单个新建或导出按钮独占一行。 -->
+    <div v-if="$slots.filters || $slots.filterActions" class="workspace-table-toolbar">
+      <div v-if="$slots.filters" class="workspace-table-filters">
+        <slot name="filters" />
+      </div>
+      <div v-if="$slots.filterActions || $slots.actions" class="workspace-table-toolbar-actions">
+        <slot name="filterActions" />
+        <slot name="actions" />
+      </div>
     </div>
     <div v-if="$slots.beforeTable" class="workspace-table-before">
       <slot name="beforeTable" />
@@ -158,12 +167,15 @@ defineSlots<{
 .workspace-table-heading .muted { margin: 0; line-height: 1.6; }
 .workspace-table-heading h2 + .muted { margin-top: 8px; }
 .workspace-table-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; }
-/* 所有业务表格复用台账的浅色筛选面板；按可用宽度换行，按钮与输入框底边对齐。 */
-.workspace-table-filters { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; padding: 16px; border: 1px solid #e4ebee; border-radius: 11px; background: #f8fafb; }
-.workspace-table-filters :deep(label) { flex: 1 1 170px; min-width: 0; max-width: 320px; }
-.workspace-table-filters :deep(button) { white-space: nowrap; }
+/* 筛选条件按合理宽度换行；操作按钮始终成组靠右，并与输入框底边对齐。 */
+.workspace-table-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin: 0 0 16px; padding: 16px; border: 1px solid #e4ebee; border-radius: 11px; background: #f8fafb; }
+.workspace-table-filters { display: flex; flex: 1 1 560px; min-width: 0; align-items: end; gap: 12px; flex-wrap: wrap; }
+.workspace-table-filters :deep(label) { flex: 1 1 170px; min-width: 0; max-width: 240px; }
+.workspace-table-filters :deep(label:only-child) { max-width: 320px; }
+.workspace-table-toolbar-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; }
+.workspace-table-toolbar :deep(button) { white-space: nowrap; }
 .workspace-table-filters :deep(input), .workspace-table-filters :deep(select) { min-width: 0; width: 100%; }
-:root[data-theme='dark'] .workspace-table-filters { border-color: #30445b; background: #192a40; }
+:root[data-theme='dark'] .workspace-table-toolbar { border-color: #30445b; background: #192a40; }
 .workspace-table-before { margin-bottom: 20px; }
 .workspace-table-before:empty { display: none; }
 .workspace-table-footer { margin-top: 16px; }
@@ -187,7 +199,8 @@ defineSlots<{
 .workspace-table-scrollbar:focus-visible { outline: 2px solid #278b87; outline-offset: 3px; }
 @media (max-width: 650px) {
   .workspace-table-heading { align-items: stretch; flex-direction: column; }
-  .workspace-table-filters :deep(label) { max-width: none; }
+  .workspace-table-filters :deep(label), .workspace-table-filters :deep(label:only-child) { max-width: none; }
+  .workspace-table-toolbar-actions { flex-wrap: wrap; max-width: 100%; }
   .workspace-table-actions { margin-left: 0; }
 }
 </style>

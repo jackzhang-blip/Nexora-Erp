@@ -44,7 +44,10 @@ test('公共表格加载真实 vxe 组件并渲染功能区、加载和空状态
   assert.match(populated, /aria-label="资料列表"/)
   assert.match(populated, /min-width:360px/)
   assert.match(populated, /workspace-vxe-table/)
-  assert.ok(populated.indexOf('新增') < populated.indexOf('搜索'))
+  // 键盘顺序先条件、后操作，且不再为操作单独保留顶部行。
+  assert.ok(populated.indexOf('搜索') < populated.indexOf('新增'))
+  assert.match(populated, /workspace-table-toolbar/)
+  assert.equal((populated.match(/>新增<\/button>/g) ?? []).length, 1)
 
   // 页面已有主标题时，仅隐藏卡片标题；操作、说明与表格读屏名称不能丢失。
   const mergedHeading = await render({ showTitle: false, description: '库存查询说明' })
@@ -54,6 +57,19 @@ test('公共表格加载真实 vxe 组件并渲染功能区、加载和空状态
   assert.match(mergedHeading, /aria-label="资料列表"/)
   const noHeading = await render({ showTitle: false }, {})
   assert.doesNotMatch(noHeading, /workspace-table-heading/)
+
+  const compactToolbar = await render({ showTitle: false }, {
+    ...slots,
+    filterActions: () => h('button', '查询')
+  })
+  assert.doesNotMatch(compactToolbar, /workspace-table-heading/)
+  assert.ok(compactToolbar.indexOf('搜索') < compactToolbar.indexOf('查询'))
+  assert.ok(compactToolbar.indexOf('查询') < compactToolbar.indexOf('新增'))
+  // 无筛选的辅助表格仍能显示原有操作，不能因为合并工具栏丢失按钮。
+  const actionsOnly = await render({ showTitle: false }, { actions: slots.actions })
+  assert.match(actionsOnly, /workspace-table-heading/)
+  assert.match(actionsOnly, /新增/)
+  assert.doesNotMatch(actionsOnly, /workspace-table-toolbar/)
 
   const empty = await render({ data: [] })
   assert.match(empty, /没有匹配的资料/)

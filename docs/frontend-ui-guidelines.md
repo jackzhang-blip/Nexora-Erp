@@ -69,3 +69,5 @@ const keyword = ref('')
 - 仓库、基础资料、采购、销售、财务、生产和系统列表复用 `components/workspace/WorkspaceTable.vue`，不再为单据单独堆叠卡片。筛选面板、行间距、按钮换行、空状态和明暗主题由共享组件维护。
 - 页面外部标题由 `WorkspaceShell.vue` 展示；页面说明集中在 `utils/workspace-page-copy.ts`，紧随大标题。主列表使用 `showTitle=false`，避免卡片再重复页面名称；辅助列表保留有意义的分区标题。
 - 业务单元格保留原有状态、权限、表单约束和事件参数。可见字段搜索使用 `utils/workspace-records.ts`，不得把密码等隐藏草稿加入搜索。权限树与设置表单保持适合自身功能的布局。
+
+- 列表的 `filters` 与 `actions` 共用一条工具栏；查询等筛选提交按钮放在 `filterActions`，与新建、导出等操作一起靠右。条件按可用宽度换行，按钮组整体移到末行；仅有操作且没有筛选的辅助表格仍保留标题栏操作。

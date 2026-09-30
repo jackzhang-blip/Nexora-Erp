@@ -40,7 +40,8 @@ async function submitPrice(): Promise<void> {
 
 <template>
   <section class="stack">
-    <WorkspaceTable :show-title="false" title="库存计价" description="按公司范围的物料移动加权平均计算；缺少价格来源时金额显示待核价。"
+    <!-- 页面说明随主标题展示，刷新和核价按钮共用筛选工具栏。 -->
+    <WorkspaceTable :show-title="false" title="库存计价"
       :columns="columns" :data="materials">
       <template #actions>
         <button class="secondary" :disabled="busy" @click="perform(refreshData, '库存金额已刷新。')">刷新</button>
