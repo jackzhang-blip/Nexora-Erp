@@ -12,9 +12,21 @@ export interface BackendTarget {
 let sessionToken: string | null = null
 let selectedTarget: BackendTarget | null = null
 
+function sameBackendIdentity(left: BackendTarget | null, right: BackendTarget | null): boolean {
+  // 地址可能因局域网变化而更新；实例编号和已信任证书同时一致才允许沿用会话。
+  return !!left && !!right && left.instanceId === right.instanceId
+    && left.certificate === right.certificate
+}
+
+// 令牌只跟随已经核验过的服务端身份，绝不因地址相同就信任另一张证书。
+export function retainedSessionToken(token: string | null, current: BackendTarget | null,
+                                     next: BackendTarget | null): string | null {
+  return sameBackendIdentity(current, next) ? token : null
+}
+
 export function selectBackend(target: BackendTarget | null): void {
-  // 切换服务端必须丢弃旧服务端令牌，避免把会话发到另一台机器。
-  sessionToken = null
+  // 刷新页面会重新选中同一服务端，只有真正切换实例或证书时才丢弃令牌。
+  sessionToken = retainedSessionToken(sessionToken, selectedTarget, target)
   selectedTarget = target
 }
 

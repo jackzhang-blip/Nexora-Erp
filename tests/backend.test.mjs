@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { callBackend, getBackendHealth } from '../src/main/backend.ts'
+import { callBackend, getBackendHealth, retainedSessionToken } from '../src/main/backend.ts'
+
+test('刷新同一已信任实例时保留会话，切换实例或证书时必须清除', () => {
+  const current = { host: '192.168.3.5', port: 8000, instanceId: 'server-a', certificate: 'trusted-cert-a' }
+  assert.equal(retainedSessionToken('private-token', current, { ...current }), 'private-token')
+  // 同一实例换局域网地址时，服务端身份仍由实例编号和证书共同确定。
+  assert.equal(retainedSessionToken('private-token', current, { ...current, host: '192.168.3.8' }), 'private-token')
+  assert.equal(retainedSessionToken('private-token', current, { ...current, instanceId: 'server-b' }), null)
+  assert.equal(retainedSessionToken('private-token', current, { ...current, certificate: 'changed-cert' }), null)
+  assert.equal(retainedSessionToken('private-token', current, null), null)
+  assert.equal(retainedSessionToken('private-token', null, current), null)
+  assert.equal(retainedSessionToken(null, current, current), null)
+})
 
 test('后端连接契约与失败处理', async (t) => {
   const originalUrl = process.env.NEXORA_API_URL
