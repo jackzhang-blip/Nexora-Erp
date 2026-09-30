@@ -12,7 +12,8 @@
     "dist:mac": "npm run build:backend && npm run build && electron-builder --mac dmg --arm64 --publish never",
     "dist:win": "npm run build:backend && npm run build && electron-builder --win nsis --x64 --publish never",
     "preview": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && vue-tsc --noEmit -p tsconfig.web.json"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && vue-tsc --noEmit -p tsconfig.web.json",
+    "docs:build": "node scripts/build-docs-site.mjs"
   },
   "engines": {
     "node": ">=22.12.0"
@@ -34,6 +35,7 @@
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "marked": "^17.0.4",
     "tailwindcss": "^4.3.3",
     "typescript": "~5.9.3",
     "unplugin-icons": "^24.0.0",
