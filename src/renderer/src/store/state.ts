@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import type { MenuIconSetting } from '../../../shared/menu-icons'
 import type {
   Bom,
   Customer,
@@ -108,6 +109,7 @@ export function createAppState() {
   const salesReturns = ref<SalesReturn[]>([])
   const selectedWarehouseId = ref(0)
   const roles = ref<Role[]>([])
+  const menuIcons = ref<MenuIconSetting[]>([])
   const permissions = ref<Permission[]>([])
   const permissionLabelDrafts = ref<Record<string, string>>({})
   const users = ref<User[]>([])
@@ -383,6 +385,7 @@ export function createAppState() {
     salesReturns,
     selectedWarehouseId,
     roles,
+    menuIcons,
     permissions,
     permissionLabelDrafts,
     users,

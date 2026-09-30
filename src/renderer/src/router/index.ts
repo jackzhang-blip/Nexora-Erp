@@ -41,6 +41,7 @@ const workspaceRouteComponents = {
   users: () => import('../views/workspace/system/UserManagementView.vue'),
   roles: () => import('../views/workspace/system/RolePermissionsView.vue'),
   permissionCatalog: () => import('../views/workspace/system/PermissionCatalogView.vue'),
+  menuManagement: () => import('../views/workspace/system/MenuManagementView.vue'),
   settings: () => import('../views/workspace/system/ConnectionSettingsView.vue')
 } satisfies Record<WorkspaceRouteKey, () => Promise<unknown>>
 

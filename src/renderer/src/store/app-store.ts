@@ -5,14 +5,8 @@ import {
   watch
 } from 'vue'
 import { defineStore } from 'pinia'
-// 从 Remix Icon 的 ri 图标集按需导入，构建时会把 SVG 打包进应用。
-import IconStackLine from '~icons/ri/stack-line'
-import IconArchiveLine from '~icons/ri/archive-line'
-import IconFileList3Line from '~icons/ri/file-list-3-line'
-import IconHistoryLine from '~icons/ri/history-line'
-import IconTeamLine from '~icons/ri/team-line'
-import IconSettings3Line from '~icons/ri/settings-3-line'
-import IconDashboardLine from '~icons/ri/dashboard-line'
+import { menuIconComponents } from '../utils/menu-icon-components'
+import { resolveMenuIcon } from '../../../shared/menu-icons'
 import type {
   ConnectionCandidate,
   DiscoveryResult,
@@ -48,6 +42,7 @@ import { createFinanceActions } from './modules/finance-actions'
 import { createValuationActions } from './modules/valuation-actions'
 import { createSalesActions } from './modules/sales-actions'
 import { createProductionActions } from './modules/production-actions'
+import { createMenuActions } from './modules/menu-actions'
 import { createAccessActions } from './modules/access-actions'
 import {
   displayError,
@@ -88,22 +83,14 @@ function createAppStore() {
 
   const can = (permission: string): boolean =>
     user.value?.permissions.includes(permission) ?? false
-  const routeIcons = {
-    dashboard: IconDashboardLine,
-    stack: IconStackLine,
-    archive: IconArchiveLine,
-    file: IconFileList3Line,
-    history: IconHistoryLine,
-    team: IconTeamLine,
-    settings: IconSettings3Line
-  }
   // 分类和权限来自同一张路由表，避免侧栏与地址访问使用两套规则。
   const visibleGroups = computed(() =>
     visibleRouteGroups(user.value?.permissions ?? []).map((group) => ({
       ...group,
+      icon: menuIconComponents[resolveMenuIcon(state.menuIcons.value, `group:${group.key}`, group.icon)],
       routes: group.routes.map((route) => ({
         ...route,
-        icon: routeIcons[route.icon]
+        icon: menuIconComponents[resolveMenuIcon(state.menuIcons.value, `route:${route.key}`, route.icon)]
       }))
     }))
   )
@@ -121,6 +108,7 @@ function createAppStore() {
   watch(screen, (current) => {
     // 再次登录时从全部收起开始，不保留上个账号的侧栏状态。
     if (current !== 'app') {
+      state.menuIcons.value = []
       expandedGroupKey.value = null
       // 页面栏只属于当前登录会话，退出后不向下一个账号展示访问记录。
       openedRouteKeys.value = []
@@ -220,6 +208,7 @@ function createAppStore() {
     navigateToRoute
   )
 
+  const menuActions = createMenuActions(state)
   const accessActions = createAccessActions(state, perform)
 
   let initialized = false
@@ -268,6 +257,7 @@ function createAppStore() {
     ...salesActions,
     ...productionActions,
     ...accessActions,
+    ...menuActions,
     can,
     visibleGroups,
     visibleTabs,

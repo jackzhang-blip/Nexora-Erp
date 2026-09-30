@@ -17,6 +17,7 @@ export const workspacePageDescriptions: Partial<Record<WorkspaceRouteKey, string
   catalog: '请按规格建立独立物料编码，同一规格无需为不同供应商重复建档。',
   customers: '集中查询和新增客户资料，销售订单使用同一份客户名单。',
   suppliers: '选择“供货物料”管理供应商与现有物料的绑定。',
+  menuManagement: '为导航分组和页面选择图标；保存后当前侧栏立即更新，其他客户端重新登录或刷新数据后生效。',
   roles: '新增职务后可按模块、单据和操作分别授权；内置职务仅供查看。',
   materialIssues: '按工单剩余需料分批领料，确认后更新源仓库存。',
   materialReturns: '按原领料单退回物料，确认后更新库存与工单净领料数量。',

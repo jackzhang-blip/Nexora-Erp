@@ -115,6 +115,9 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'logout': return { method: 'POST', path: '/api/v1/auth/logout' }
     case 'me': return { method: 'GET', path: '/api/v1/auth/me' }
     case 'changePassword': return { method: 'POST', path: '/api/v1/auth/change-password', body: payload }
+    // 使用固定地址，菜单标识和图标由服务端白名单再次校验。
+    case 'menuIcons': return { method: 'GET', path: '/api/v1/menu-icons' }
+    case 'saveMenuIcon': return { method: 'PUT', path: '/api/v1/menu-icons', body: payload }
     case 'permissions': return { method: 'GET', path: '/api/v1/permissions' }
     case 'updatePermissionLabel': return {
       method: 'PUT', path: `/api/v1/permissions/${permissionCode(payload)}/label`,

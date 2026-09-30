@@ -128,11 +128,14 @@ def test_v27_migration_preserves_existing_materials(client):
         db.execute("DELETE FROM permissions WHERE code LIKE 'purchase_request.%'")
         db.execute("DELETE FROM permission_groups WHERE code = 'purchase.purchase_request'")
         db.execute("DROP TABLE supplier_materials")
+        # 回退版本夹具同步移除新版菜单表，模拟真实旧库。
+        db.execute("DROP TABLE menu_icon_changes")
+        db.execute("DROP TABLE menu_icons")
         db.execute("PRAGMA user_version = 27")
     migrate()
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 37
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 38
         assert db.execute("SELECT name FROM materials WHERE id = ?", (material,)).fetchone()[0] == "旧物料"
         assert db.execute("SELECT COUNT(*) FROM supplier_materials").fetchone()[0] == 0
 

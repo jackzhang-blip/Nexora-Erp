@@ -130,11 +130,14 @@ def test_v35_upgrade_preserves_stock_and_adds_cost_permissions(monkeypatch, tmp_
         db.execute("DELETE FROM role_permissions WHERE permission_code LIKE 'inventory_valuation.%'")
         db.execute("DELETE FROM permissions WHERE code LIKE 'inventory_valuation.%'")
         db.execute("DELETE FROM permission_groups WHERE code = 'finance.inventory_valuation'")
+        # 回退版本夹具同步移除新版菜单表，模拟真实旧库。
+        db.execute("DROP TABLE menu_icon_changes")
+        db.execute("DROP TABLE menu_icons")
         db.execute("PRAGMA user_version = 35")
     migrate()
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 37
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 38
         assert db.execute("SELECT name FROM materials WHERE sku = 'OLD'").fetchone()[0] == "旧物料"
         assert db.execute("SELECT COUNT(*) FROM inventory_cost_inputs").fetchone()[0] == 0
         grants = set(db.execute("""SELECT role_code FROM role_permissions

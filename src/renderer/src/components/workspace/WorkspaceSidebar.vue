@@ -53,8 +53,10 @@ const {
             :aria-controls="`route-group-${group.key}`"
             @click="toggleRouteGroup(group.key)"
           >
-            {{ group.label
-            }}<IconArrowDownSLine
+            <span class="category-label">
+              <component :is="group.icon" class="nav-icon" aria-hidden="true" />
+              {{ group.label }}
+            </span><IconArrowDownSLine
               class="category-chevron"
               :class="{ expanded: expandedGroupKey === group.key }"
               aria-hidden="true"

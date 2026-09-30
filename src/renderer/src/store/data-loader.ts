@@ -71,6 +71,7 @@ export function createDataLoader(
     user.value = await window.nexora.callApi('me', undefined)
     syncWorkspaceRoute()
     await loadPermissions()
+    state.menuIcons.value = await window.nexora.callApi('menuIcons', undefined)
     // 页面只显示当前角色可访问的入口；数据访问仍以服务端授权为准。
     if (can('inventory.view')) {
       ;[
