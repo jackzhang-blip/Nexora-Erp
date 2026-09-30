@@ -13,7 +13,7 @@
 | `app/inventory/` | 仓库、其他入出库、调拨、盘点、独立调整、库存余额和台账。 |
 | `app/sales/` | 客户、销售订单、出库、销售退货。 |
 | `app/production/` | BOM、工单、领退料、报工、工单成本及完工批次结算。 |
-| `app/finance/` | 应收应付、订单余额、手工收付款、总账科目、会计期间、手工凭证与已过账报表。 |
+| `app/finance/` | 应收应付、订单余额、手工收付款、总账科目、会计期间、期初余额、手工凭证与已过账报表。 |
 | `app/reports/` | 采购执行、收退货、库存余额与收发存报表。 |
 | `app/service/` | 服务状态、局域网发现、系统服务、备份恢复。 |
 
@@ -102,7 +102,7 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 数据库第 39 版增加成本结算、分摊、来源依赖和独立冲销表。GET `/api/v1/production-costs/settlements` 查看历史；POST 同路径传入 `work_order_id`、`reference`、可选 `note`，仅可结算全部报工、无未处理草稿且净领料全部核价的工单。成本按合格入库数量累计比例分摊到各完工批次，以分为单位处理尾差；没有合格成品时拒绝结算。完工入库在库存计价中返回 `cost_source: production_settlement` 与 `settlement_id`，内部分摊金额不由四位展示单价倒算。POST `/{id}/reverse` 按原因冲销结算，原快照保留；有关联后续有效工单结算时拒绝冲销。结算冻结该工单费用、完工来源和有关核价依赖，先冲销后才能更正。结算、冲销分别要求 `production_cost.settle`、`production_cost.reopen`，默认授予管理员和财务员；查看沿用 `production_cost.view`。成本规则与边界见 [完工成本规则](../docs/production-cost-settlement.md)。
 
-现有业务接口的数据读写均已使用 SQLAlchemy 2.0 声明式模型，包括账号权限、基础资料、采购、销售、仓库、库存计价、生产和成本结算、业务财务及报表；服务启动和备份身份核对也通过 ORM。全部 82 张表使用静态模型，数据库为第 41 版，不通过运行时反射或 `create_all` 替换历史迁移。金额和数量继续用 Decimal 计算并以文本精确保存；一致读快照、写锁、提交、回滚和连接释放由统一会话处理。跨模块转单、数量额度、库存流水与审计在同一写事务中完成，异常后整体回滚，重复或超量操作仍返回冲突。备份身份检查独立只读打开指定文件并释放句柄；SQLite 结构迁移、连接设置、在线备份和完整性诊断保留必要的底层操作。转换范围及验证见 [ORM 迁移清单](../docs/backend-orm-migration.md)。接口字段与权限不变，客户端与服务端仍需同时升级。
+现有业务接口的数据读写均已使用 SQLAlchemy 2.0 声明式模型，包括账号权限、基础资料、采购、销售、仓库、库存计价、生产和成本结算、业务财务及报表；服务启动和备份身份核对也通过 ORM。全部 85 张表使用静态模型，数据库为第 42 版，不通过运行时反射或 `create_all` 替换历史迁移。金额和数量继续用 Decimal 计算并以文本精确保存；一致读快照、写锁、提交、回滚和连接释放由统一会话处理。跨模块转单、数量额度、库存流水与审计在同一写事务中完成，异常后整体回滚，重复或超量操作仍返回冲突。备份身份检查独立只读打开指定文件并释放句柄；SQLite 结构迁移、连接设置、在线备份和完整性诊断保留必要的底层操作。转换范围及验证见 [ORM 迁移清单](../docs/backend-orm-migration.md)。接口字段与权限不变，客户端与服务端仍需同时升级。
 
 ## 多仓库库存与调拨
 
@@ -182,7 +182,7 @@ PYTHONPATH=backend python3 -m pytest backend/tests -q
 
 ## 总账基础资料
 
-数据库第 40 版新增科目与会计期间基础资料及变更记录。接口放在 `app/finance/ledger.py`，桌面提供独立页面；管理员和财务员默认可维护。科目结构和期间日期固定，修改名称、启停须携带版本与原因；日志与资料同事务提交。期间禁止重叠。手工凭证另由 `app/finance/journals.py` 提供；仍不提供期初余额、结账或业务期间锁定，详见 [总账基础规则](../docs/ledger-foundation.md)。
+数据库第 40 版新增科目与会计期间基础资料及变更记录。接口放在 `app/finance/ledger.py`，桌面提供独立页面；管理员和财务员默认可维护。科目结构和期间日期固定，修改名称、启停须携带版本与原因；日志与资料同事务提交。期间禁止重叠。手工凭证另由 `app/finance/journals.py` 提供；正式期初余额另行提供；仍不提供结账或业务期间锁定，详见 [总账基础规则](../docs/ledger-foundation.md)。
 
 ## 手工凭证
 
@@ -190,4 +190,8 @@ PYTHONPATH=backend python3 -m pytest backend/tests -q
 
 ## 已过账总账报表
 
-已过账总账的科目明细和试算平衡见 [报表规则](../docs/ledger-reports.md)。`app/finance/ledger_reports.py` 使用 ORM 和 Decimal，接口为 `/api/v1/finance/ledger-reports/options`、`/query`，沿用 `journal.view`。日期范围包含首尾，期初从以前的已过账分录累计，冲销仅过账后计入；返回筛选、期间、行、合计和同快照 CSV。新增凭证 GET `/{id}` 支持下钻。当前没有正式期初录入、结账或业务自动凭证；第 41 版结构不变，客户端和服务端须同步升级。
+已过账总账的科目明细和试算平衡见 [报表规则](../docs/ledger-reports.md)。`app/finance/ledger_reports.py` 使用 ORM 和 Decimal，接口为 `/api/v1/finance/ledger-reports/options`、`/query`，沿用 `journal.view`。日期范围包含首尾，期初由已确认启用余额加以前的已过账分录累计，冲销仅过账后计入；返回筛选、期间、行、合计和同快照 CSV。新增凭证 GET `/{id}` 支持下钻。正式期初录入见下节；当前没有结账或业务自动凭证；数据库当前为第 42 版，客户端和服务端须同步升级。
+
+## 正式期初余额
+
+第 42 版新增 `opening_balances`、`opening_balance_lines`、`opening_balance_changes`。`app/finance/opening_balances.py` 使用 ORM，提供唯一启用方案、版本校验、独立审核、确认与启用前撤销。接口及规则见 [期初余额](../docs/opening-balances.md)。不存在过账凭证时可首次建立；确认后报表只计期初，不增加本期发生额；首次过账后不能重设期初。迁移不猜测历史余额，客户端和服务端须同步升级。

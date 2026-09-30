@@ -6,6 +6,14 @@ import pytest
 @pytest.fixture
 def remove_journal_schema():
     def remove(db):
+        for table in ('opening_balance_changes','opening_balance_lines','opening_balances'):
+            db.execute(f'DROP TABLE IF EXISTS {table}')
+        for operation in ('view','create','submit','review','confirm','cancel','reverse'):
+            code='opening_balance.'+operation
+            db.execute('DELETE FROM role_permissions WHERE permission_code=?',(code,))
+            db.execute('DELETE FROM permissions WHERE code=?',(code,))
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='permission_groups'").fetchone():
+            db.execute("DELETE FROM permission_groups WHERE code='finance.opening_balances'")
         for table in ('journal_changes', 'journal_lines', 'journals'):
             db.execute(f'DROP TABLE IF EXISTS {table}')
         for operation in ('view','create','submit','review','post','cancel','reverse'):

@@ -57,6 +57,15 @@ export interface Journal {
   lines: JournalLine[]; total_debit: string; total_credit: string
 }
 export interface JournalChange extends FinanceMetadataChange<Omit<Journal, 'period_code' | 'created_by_name' | 'reversal_journal_id' | 'author_ids'>> { action: JournalAction | 'create' | 'update' }
+export type OpeningBalanceStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'confirmed' | 'cancelled' | 'reversed'
+export type OpeningBalanceAction = 'submit' | 'approve' | 'reject' | 'confirm' | 'cancel' | 'reverse'
+export interface OpeningBalanceInput { reference: string; effective_date: string; note: string; reason: string; lines: JournalLineInput[] }
+export interface OpeningBalance extends Omit<Journal, 'journal_date' | 'status' | 'posted_by' | 'posted_at' | 'reversal_of_id' | 'reversal_journal_id' | 'lines'> {
+  effective_date: string; status: OpeningBalanceStatus; active_key: number | null
+  confirmed_by: number | null; confirmed_at: string | null; reversed_by: number | null; reversed_at: string | null
+  lines: (Omit<JournalLine, 'journal_id'> & { opening_balance_id: number })[]
+}
+export interface OpeningBalanceChange extends FinanceMetadataChange<Omit<OpeningBalance, 'period_code' | 'created_by_name' | 'author_ids'>> { action: OpeningBalanceAction | 'create' | 'update' }
 export interface LedgerReportQuery {
   kind: 'trial_balance' | 'account_ledger'; from_date: string; to_date: string; account_id: number | null
 }
@@ -68,6 +77,7 @@ export interface LedgerReportResult {
   kind: LedgerReportQuery['kind']; filters: LedgerReportQuery
   columns: { key: string; title: string }[]; rows: Record<string, string>[]
   totals: LedgerReportTotals; periods: AccountingPeriod[]; generated_at: string; csv: string
+  opening_balance: (OpeningBalance & { changes: OpeningBalanceChange[] }) | null
 }
 export interface AccountingPeriodInput {
   code: string; name: string; start_date: string; end_date: string; reason: string
@@ -919,6 +929,12 @@ export interface ErpOperations {
   financeAccounts: { input: undefined; output: FinanceAccount[] }
   ledgerAccounts: { input: undefined; output: LedgerAccount[] }
   journals: { input: undefined; output: Journal[] }
+  openingBalances: { input: undefined; output: OpeningBalance[] }
+  openingBalanceOptions: { input: undefined; output: { accounts: LedgerAccount[]; period: AccountingPeriod | null } }
+  createOpeningBalance: { input: OpeningBalanceInput; output: OpeningBalance }
+  updateOpeningBalance: { input: OpeningBalanceInput & { id: number; version: number }; output: OpeningBalance }
+  changeOpeningBalanceStatus: { input: { id: number; version: number; action: OpeningBalanceAction; reason: string }; output: OpeningBalance }
+  openingBalanceChanges: { input: { id: number }; output: OpeningBalanceChange[] }
   journalDetail: { input: { id: number }; output: Journal }
   ledgerReportOptions: { input: undefined; output: LedgerAccount[] }
   queryLedgerReport: { input: LedgerReportQuery; output: LedgerReportResult }

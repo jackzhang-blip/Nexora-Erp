@@ -237,6 +237,22 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
         body: { name: fields.name, version: fields.version, reason: fields.reason } }
     }
     case 'journals': return { method: 'GET', path: '/api/v1/finance/journals' }
+    case 'openingBalances': return { method: 'GET', path: '/api/v1/finance/opening-balances' }
+    case 'openingBalanceOptions': return { method: 'GET', path: '/api/v1/finance/opening-balances/options' }
+    case 'openingBalanceChanges': return { method: 'GET', path: `/api/v1/finance/opening-balances/${positiveId(payload, 'id')}/changes` }
+    case 'createOpeningBalance':
+    case 'updateOpeningBalance': {
+      const { reference, effective_date, note, reason, lines, ...rest } = payload as ErpOperations['updateOpeningBalance']['input']
+      const path = '/api/v1/finance/opening-balances'
+      return action === 'createOpeningBalance'
+        ? { method: 'POST', path, body: { reference, effective_date, note, reason, lines } }
+        : { method: 'PUT', path: `${path}/${positiveId(payload, 'id')}`, body: { version: rest.version, reference, effective_date, note, reason, lines } }
+    }
+    case 'changeOpeningBalanceStatus': {
+      const { action: command, version, reason } = payload as ErpOperations['changeOpeningBalanceStatus']['input']
+      if (!['submit','approve','reject','confirm','cancel','reverse'].includes(command)) throw new Error('不允许的期初状态操作')
+      return { method: 'POST', path: `/api/v1/finance/opening-balances/${positiveId(payload, 'id')}/${command}`, body: { version, reason } }
+    }
     case 'journalDetail': return { method: 'GET', path: `/api/v1/finance/journals/${positiveId(payload, 'id')}` }
     case 'ledgerReportOptions': return { method: 'GET', path: '/api/v1/finance/ledger-reports/options' }
     case 'queryLedgerReport': {

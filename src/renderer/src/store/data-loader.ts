@@ -27,6 +27,7 @@ export function createDataLoader(
     financeAccounts,
     ledgerAccounts,
     journals,
+    openingBalances,
     accountingPeriods,
     paymentRecords,
     boms,
@@ -76,6 +77,8 @@ export function createDataLoader(
     // 先清理已撤销查看授权的数据，避免其他模块读取失败留下旧的财务快照。
     if (!can('ledger_account.view')) ledgerAccounts.value = []
     if (!can('journal.view')) journals.value = []
+    if (!can('opening_balance.view')) openingBalances.value = []
+    if (!can('opening_balance.create')) state.openingBalanceOptions.value = { accounts: [], period: null }
     if (!can('journal.create')) state.journalOptions.value = { accounts: [], periods: [] }
     if (!can('accounting_period.view')) accountingPeriods.value = []
     syncWorkspaceRoute()
@@ -162,6 +165,7 @@ export function createDataLoader(
       financeAccounts.value = []
       paymentRecords.value = []
     }
+    openingBalances.value = can('opening_balance.view') ? await window.nexora.callApi('openingBalances', undefined) : []
     journals.value = can('journal.view') ? await window.nexora.callApi('journals', undefined) : []
     ledgerAccounts.value = can('ledger_account.view')
       ? await window.nexora.callApi('ledgerAccounts', undefined) : []

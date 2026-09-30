@@ -2,7 +2,7 @@
 
 [简体中文](development.zh-CN.md) · [Project overview](../README.en.md)
 
-This guide covers setup, architecture, business boundaries, testing and building. Status reflects verified main commit `0a834fd` on 2026-10-01, including merged manual journals and ledger reports. Bilingual documentation does not mean the application supports an English UI.
+This guide covers setup, architecture, business boundaries, testing and building. Status reflects verified main commit `0a834fd` on 2026-10-01, including merged manual journals and ledger reports. This version adds formal opening balances with independent review and confirmation. Bilingual documentation does not mean the application supports an English UI.
 
 ## Environment and startup
 
@@ -98,10 +98,12 @@ Put new APIs in their feature directory and assemble them in `main.py`, using ex
 | Valuation | Company-level material moving average; returns/transfers use source costs; eligible unknown inputs can be manually valued with revision history. | No period lock; revisions may change historical cost. Variances and formal COGS journals remain. |
 | Production | BOM versions/cycle checks, frozen requirements, partial issues/returns/completions and accepted-goods receipt; consumed reporting requirements cannot be returned. | Targets include rejected quantities; rework, MRP, scheduling and full quality management remain. |
 | Finished-goods cost | Inventory issue price first, manual valuation when unknown; material/labor/overhead allocated by accepted quantity with rounding reconciliation. | Includes rejected consumption; reverse dependent settlements before corrections. WIP/cross-period cost remain. |
-| Operational finance | Sources produce receivables/payables and order balances; manual settlements/refunds have limits, reversals append inverse records. | Does not prove bank receipt; RMB scope, taxes/multiple currencies/opening balances remain. |
-| Ledger foundations | Flat account structures are fixed; inclusive periods cannot overlap. Name/activation changes carry versions, reasons and transactional auditing. | No auxiliary accounting, opening balances or closing. “Open” period records do not lock operations. |
+| Operational finance | Sources produce receivables/payables and order balances; manual settlements/refunds have limits, reversals append inverse records. | Does not prove bank receipt; RMB scope, taxes/multiple currencies/subsidiary opening balances remain. |
+| Ledger foundations | Flat account structures are fixed; inclusive periods cannot overlap. Name/activation changes carry versions, reasons and transactional auditing. | No auxiliary accounting or closing. “Open” period records do not lock operations. |
 | Reports | Purchasing execution, receiving/returns, stock balances/movements and CSV. | Business summaries are not formal financial statements. Dashboard demo charts are not actual business metrics. |
-| Posted ledger reports | Trial balance, account ledgers, journal/reversal drill-down and snapshot CSV, counting posted journals only. | Opening amounts accumulate historical posted entries and do not represent formal opening-balance acceptance; no balance sheet or income statement. |
+| Posted ledger reports | Trial balance, account ledgers, journal/reversal drill-down and snapshot CSV, current activity counts posted journals only, while confirmed opening balances are carried separately. | Without formal opening setup, openings only accumulate historical posted entries and do not represent business acceptance; no balance sheet or income statement. |
+
+Formal opening setup is available before any journal is posted, with independent review/confirmation, versioned auditing and reversal before posting. It does not add current activity or generate subsidiary opening balances. See [opening balance rules (Chinese)](opening-balances.md).
 
 See [cost settlement rules (Chinese)](production-cost-settlement.md), [ledger foundations (Chinese)](ledger-foundation.md) and [manual journals (Chinese)](manual-journals.md). Manual journals support balanced entries, independent review, posting and linked reversals, with fixed posted snapshots and auditing. Automatic business journals, closing, formal statements, quality/after-sales, CRM, equipment, HR, multiple organizations, MySQL and offline synchronization remain future work. Entry conditions are in the [expansion assessment (Chinese)](erp-expansion-assessment.md).
 

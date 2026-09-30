@@ -7,6 +7,8 @@ import type {
   LedgerAccount,
   Journal,
   JournalInput,
+  OpeningBalance,
+  OpeningBalanceInput,
   LedgerReportQuery,
   LedgerReportResult,
   LedgerAccountInput,
@@ -103,6 +105,9 @@ export function createAppState() {
   const receivablesPayables = ref<ReceivablesPayables | null>(null)
   const financeAccounts = ref<FinanceAccount[]>([])
   const ledgerAccounts = ref<LedgerAccount[]>([])
+  const openingBalances = ref<OpeningBalance[]>([])
+  const openingBalanceOptions = ref<{ accounts: LedgerAccount[]; period: AccountingPeriod | null }>({ accounts: [], period: null })
+  const openingBalanceForm = ref<OpeningBalanceInput & { id: number | null; version: number }>({ id: null, version: 1, reference: '', effective_date: '', note: '', reason: '', lines: [] })
   const journals = ref<Journal[]>([])
   const ledgerReportQuery = ref<LedgerReportQuery>({ kind: 'trial_balance', from_date: '', to_date: '', account_id: null })
   const ledgerReportResult = ref<LedgerReportResult | null>(null)
@@ -404,6 +409,9 @@ export function createAppState() {
     financeAccounts,
     ledgerAccounts,
     journals,
+    openingBalances,
+    openingBalanceOptions,
+    openingBalanceForm,
     ledgerReportQuery,
     ledgerReportResult,
     ledgerReportAccounts,

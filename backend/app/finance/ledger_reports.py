@@ -16,6 +16,12 @@ from app.core.models import AccountingPeriod, Journal, JournalLine, LedgerAccoun
 from app.core.orm import orm_session
 from app.finance.ledger import PeriodInput, snapshot
 from app.reports.routes import csv_value
+from app.finance.opening_rules import active_opening
+from app.finance.opening_balances import (
+    lines_for as opening_lines,
+    view as opening_view,
+    history as opening_history,
+)
 
 router = APIRouter(prefix="/api/v1/finance/ledger-reports")
 ZERO = Decimal(0)
@@ -103,7 +109,10 @@ def posted_lines(db: Session, filters: LedgerReportQuery):
 
 def trial_balance(db: Session, filters: LedgerReportQuery) -> tuple[list[dict], dict]:
     # 不用 SQLite 对文本金额 SUM，避免它隐式转为二进制浮点。
-    amounts: dict[int, list[Decimal]] = {}
+    amounts: dict[int, list[Decimal]] = {
+        line.account_id: [Decimal(line.debit) - Decimal(line.credit), ZERO, ZERO]
+        for line in confirmed_opening_lines(db)
+    }
     for line, journal, _ in posted_lines(db, filters):
         values = amounts.setdefault(line.account_id, [ZERO, ZERO, ZERO])
         debit, credit = Decimal(line.debit), Decimal(line.credit)
@@ -148,7 +157,15 @@ def account_ledger(db: Session, filters: LedgerReportQuery) -> tuple[list[dict],
     account = db.get(LedgerAccount, filters.account_id)
     if account is None:
         raise HTTPException(404, "科目不存在")
-    opening, debit_sum, credit_sum, net = ZERO, ZERO, ZERO, ZERO
+    opening = sum(
+        (
+            Decimal(line.debit) - Decimal(line.credit)
+            for line in confirmed_opening_lines(db)
+            if line.account_id == account.id
+        ),
+        ZERO,
+    )
+    debit_sum, credit_sum, net = ZERO, ZERO, opening
     rows = []
     for line, journal, period_code in posted_lines(db, filters):
         debit, credit = Decimal(line.debit), Decimal(line.credit)
@@ -205,11 +222,29 @@ def options(_: dict = Depends(require("journal.view"))) -> list[dict]:
         ]
 
 
+def confirmed_opening_lines(db: Session):
+    record = active_opening(db)
+    return (
+        opening_lines(db, record.id)
+        if record is not None and record.status == "confirmed"
+        else []
+    )
+
+
 @router.post("/query")
 def query_report(
     filters: LedgerReportQuery, _: dict = Depends(require("journal.view"))
 ) -> dict:
     with orm_session() as db:
+        record = active_opening(db)
+        opening = None
+        if record is not None and record.status == "confirmed":
+            if filters.from_date < record.effective_date:
+                raise HTTPException(409, "查询开始日期不能早于总账启用日")
+            opening = {
+                **opening_view(db, record),
+                "changes": opening_history(db, record.id),
+            }
         rows, totals = (
             trial_balance(db, filters)
             if filters.kind == "trial_balance"
@@ -230,14 +265,27 @@ def query_report(
     columns = [{"key": key, "title": title} for key, title in COLUMNS[filters.kind]]
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(["报表", "开始日期", "结束日期", "生成时间（UTC）", "口径", "科目"])
+    writer.writerow(
+        ["报表", "开始日期", "结束日期", "生成时间（UTC）", "口径", "期初来源", "科目"]
+    )
     writer.writerow(
         [
             "试算平衡" if filters.kind == "trial_balance" else "科目明细",
             filters.from_date,
             filters.to_date,
             generated_at,
-            "仅已过账凭证；未结账数据可变化",
+            (
+                "已确认期初及已过账凭证；未结账数据可变化"
+                if opening
+                else "仅已过账凭证；未结账数据可变化"
+            ),
+            (
+                csv_value(
+                    f'期初-{opening["id"]} · {opening["reference"]} · {opening["effective_date"]}'
+                )
+                if opening
+                else "未录入正式期初"
+            ),
             (
                 csv_value(f'{totals["code"]} · {totals["name"]}')
                 if filters.kind == "account_ledger"
@@ -261,5 +309,6 @@ def query_report(
         totals=totals,
         periods=periods,
         generated_at=generated_at,
+        opening_balance=opening,
         csv="\ufeff" + output.getvalue(),
     )

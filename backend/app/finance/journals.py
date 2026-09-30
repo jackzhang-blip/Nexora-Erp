@@ -22,6 +22,7 @@ from app.core.models import (
 )
 from app.core.orm import add_model, model_data, orm_session
 from app.finance.ledger import PeriodInput
+from app.finance.opening_rules import check_journal_opening
 
 router = APIRouter(prefix="/api/v1/finance/journals")
 
@@ -377,6 +378,8 @@ def transition(journal_id: int, data: VersionInput, user: dict, action: str) -> 
                     409, "建单、编辑或提交过此凭证的人不能审核，请由另一账号处理"
                 )
         before = snapshot(db, record)
+        if action == "post":
+            check_journal_opening(db, record.journal_date)
         if action in ("submit", "approve", "post"):
             validate_for_post(db, record)
         record.status, record.version = target[action], record.version + 1
