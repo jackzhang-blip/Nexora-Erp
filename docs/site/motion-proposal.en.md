@@ -19,7 +19,9 @@ Three independent application windows retain sidebars, toolbars, tables, silver 
 | 85–95% | Reverse nodes trace finance → inventory → receipt. |
 | 95–100% | Completed relationship holds, then the sticky stage naturally releases into feature/progress content. |
 
-SVG paths follow actual transformed source anchors. Inventory paths meet row edges rather than crossing quantity text. During focused editing, links move behind the windows while continuing to follow their anchors, leaving forms unobstructed. Hide links for filtered/invisible source rows, drafts or mismatched documents. Mobile links travel vertically along window edges. Nodes do not loop indefinitely.
+Desktop uses native WebGL. The GPU projects silver frames, with shaders producing metallic highlights, contact shadows and fading reflections. A second transparent canvas renders teal connection ribbons and traveling nodes. HTML windows and the GPU share a 1800px perspective distance and scroll layout. Forms remain native interactive controls, and canvases never intercept pointer events.
+
+Paths follow actual transformed source anchors. Inventory paths meet row edges rather than crossing quantity text. During focused editing, links move behind the windows while continuing to follow their anchors, leaving forms unobstructed. Hide links for filtered/invisible source rows, drafts or mismatched documents. Mobile uses SVG links traveling vertically along window edges. Nodes do not loop indefinitely.
 
 ## Business interaction
 
@@ -43,9 +45,12 @@ Business data lives in page memory. Same-tab language links transfer data once v
 | `sandbox.mjs` | Pure business model, fixed-point amounts, derived stock/payables and transfer validation. |
 | `sandbox-ui.mjs` | Bilingual HTML, forms, filters, source navigation and local language transfer. |
 | `motion.mjs` | Sequential entry, focus, pause/resume, paths and media preferences. |
+| `webgl-stage.mjs` | GPU projection, metallic frames, shadows/reflections, ribbon paths, nodes and context recovery. |
 | `sandbox.css` | Independent window/stage styles, container queries, mobile and print. |
 
 Native controls support keyboard interaction. Errors are linked to fields and results announced in a status region. Hidden/receded windows cannot take focus. Demand-driven requestAnimationFrame batches updates, with no continuous loop while idle, off-screen or hidden. Teardown removes listeners and observers.
+
+WebGL initializes on the first dynamic desktop frame. Pixel density is capped at 2 and constrained by GPU renderbuffer limits. Initialization/shader failure or context loss immediately retains the HTML/CSS/SVG view without resetting business data. Context restoration rebuilds resources and requests a frame from current state; teardown releases programs and buffers. See the [WebGL interface](https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext) and [context-loss testing extension](https://developer.mozilla.org/en-US/docs/Web/API/WEBGL_lose_context).
 
 Mobile uses vertically stacked windows with a subtle visibility reveal and no sticky stage. All business operations remain available; wide tables scroll inside their windows. Reduced motion removes movement/perspective while retaining interaction and static links. Without JavaScript, static examples and documentation remain readable; demo controls do not perform operations.
 

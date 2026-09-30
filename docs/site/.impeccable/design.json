@@ -1,0 +1,477 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-30T16:47:17.406Z",
+  "title": "Design System: Nexora ERP 官网",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "paper",
+        "tonalRamp": [
+          "oklch(15% 0.0017 247.84)",
+          "oklch(26% 0.0017 247.84)",
+          "oklch(37% 0.0017 247.84)",
+          "oklch(49% 0.0017 247.84)",
+          "oklch(61% 0.0017 247.84)",
+          "oklch(73% 0.0017 247.84)",
+          "oklch(85% 0.0017 247.84)",
+          "oklch(95% 0.0017 247.84)"
+        ]
+      },
+      "stage": {
+        "role": "neutral",
+        "displayName": "stage",
+        "tonalRamp": [
+          "oklch(15% 0.0034 247.86)",
+          "oklch(26% 0.0034 247.86)",
+          "oklch(37% 0.0034 247.86)",
+          "oklch(49% 0.0034 247.86)",
+          "oklch(61% 0.0034 247.86)",
+          "oklch(73% 0.0034 247.86)",
+          "oklch(85% 0.0034 247.86)",
+          "oklch(95% 0.0034 247.86)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "ink",
+        "tonalRamp": [
+          "oklch(15% 0.0309 232.41)",
+          "oklch(26% 0.0309 232.41)",
+          "oklch(37% 0.0309 232.41)",
+          "oklch(49% 0.0309 232.41)",
+          "oklch(61% 0.0309 232.41)",
+          "oklch(73% 0.0309 232.41)",
+          "oklch(85% 0.0309 232.41)",
+          "oklch(95% 0.0309 232.41)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "muted",
+        "tonalRamp": [
+          "oklch(15% 0.0253 239.84)",
+          "oklch(26% 0.0253 239.84)",
+          "oklch(37% 0.0253 239.84)",
+          "oklch(49% 0.0253 239.84)",
+          "oklch(61% 0.0253 239.84)",
+          "oklch(73% 0.0253 239.84)",
+          "oklch(85% 0.0253 239.84)",
+          "oklch(95% 0.0253 239.84)"
+        ]
+      },
+      "teal": {
+        "role": "primary",
+        "displayName": "teal",
+        "tonalRamp": [
+          "oklch(15% 0.0796 185.69)",
+          "oklch(26% 0.0796 185.69)",
+          "oklch(37% 0.0796 185.69)",
+          "oklch(49% 0.0796 185.69)",
+          "oklch(61% 0.0796 185.69)",
+          "oklch(73% 0.0796 185.69)",
+          "oklch(85% 0.0796 185.69)",
+          "oklch(95% 0.0796 185.69)"
+        ]
+      },
+      "action": {
+        "role": "primary",
+        "displayName": "action",
+        "tonalRamp": [
+          "oklch(15% 0.0930 185.14)",
+          "oklch(26% 0.0930 185.14)",
+          "oklch(37% 0.0930 185.14)",
+          "oklch(49% 0.0930 185.14)",
+          "oklch(61% 0.0930 185.14)",
+          "oklch(73% 0.0930 185.14)",
+          "oklch(85% 0.0930 185.14)",
+          "oklch(95% 0.0930 185.14)"
+        ]
+      },
+      "action-hover": {
+        "role": "primary",
+        "displayName": "action-hover",
+        "tonalRamp": [
+          "oklch(15% 0.0817 183.41)",
+          "oklch(26% 0.0817 183.41)",
+          "oklch(37% 0.0817 183.41)",
+          "oklch(49% 0.0817 183.41)",
+          "oklch(61% 0.0817 183.41)",
+          "oklch(73% 0.0817 183.41)",
+          "oklch(85% 0.0817 183.41)",
+          "oklch(95% 0.0817 183.41)"
+        ]
+      },
+      "selected": {
+        "role": "primary",
+        "displayName": "selected",
+        "tonalRamp": [
+          "oklch(15% 0.0971 183.76)",
+          "oklch(26% 0.0971 183.76)",
+          "oklch(37% 0.0971 183.76)",
+          "oklch(49% 0.0971 183.76)",
+          "oklch(61% 0.0971 183.76)",
+          "oklch(73% 0.0971 183.76)",
+          "oklch(85% 0.0971 183.76)",
+          "oklch(95% 0.0971 183.76)"
+        ]
+      },
+      "linked": {
+        "role": "primary",
+        "displayName": "linked",
+        "tonalRamp": [
+          "oklch(15% 0.1294 179.26)",
+          "oklch(26% 0.1294 179.26)",
+          "oklch(37% 0.1294 179.26)",
+          "oklch(49% 0.1294 179.26)",
+          "oklch(61% 0.1294 179.26)",
+          "oklch(73% 0.1294 179.26)",
+          "oklch(85% 0.1294 179.26)",
+          "oklch(95% 0.1294 179.26)"
+        ]
+      },
+      "linked-row": {
+        "role": "primary",
+        "displayName": "linked-row",
+        "tonalRamp": [
+          "oklch(15% 0.0272 173.74)",
+          "oklch(26% 0.0272 173.74)",
+          "oklch(37% 0.0272 173.74)",
+          "oklch(49% 0.0272 173.74)",
+          "oklch(61% 0.0272 173.74)",
+          "oklch(73% 0.0272 173.74)",
+          "oklch(85% 0.0272 173.74)",
+          "oklch(95% 0.0272 173.74)"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "panel",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(26% 0.0000 89.88)",
+          "oklch(37% 0.0000 89.88)",
+          "oklch(49% 0.0000 89.88)",
+          "oklch(61% 0.0000 89.88)",
+          "oklch(73% 0.0000 89.88)",
+          "oklch(85% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "rule",
+        "tonalRamp": [
+          "oklch(15% 0.0094 232.38)",
+          "oklch(26% 0.0094 232.38)",
+          "oklch(37% 0.0094 232.38)",
+          "oklch(49% 0.0094 232.38)",
+          "oklch(61% 0.0094 232.38)",
+          "oklch(73% 0.0094 232.38)",
+          "oklch(85% 0.0094 232.38)",
+          "oklch(95% 0.0094 232.38)"
+        ]
+      },
+      "field-rule": {
+        "role": "neutral",
+        "displayName": "field-rule",
+        "tonalRamp": [
+          "oklch(15% 0.0213 236.79)",
+          "oklch(26% 0.0213 236.79)",
+          "oklch(37% 0.0213 236.79)",
+          "oklch(49% 0.0213 236.79)",
+          "oklch(61% 0.0213 236.79)",
+          "oklch(73% 0.0213 236.79)",
+          "oklch(85% 0.0213 236.79)",
+          "oklch(95% 0.0213 236.79)"
+        ]
+      },
+      "field-focus": {
+        "role": "neutral",
+        "displayName": "field-focus",
+        "tonalRamp": [
+          "oklch(15% 0.1085 181.59)",
+          "oklch(26% 0.1085 181.59)",
+          "oklch(37% 0.1085 181.59)",
+          "oklch(49% 0.1085 181.59)",
+          "oklch(61% 0.1085 181.59)",
+          "oklch(73% 0.1085 181.59)",
+          "oklch(85% 0.1085 181.59)",
+          "oklch(95% 0.1085 181.59)"
+        ]
+      },
+      "status-bg": {
+        "role": "primary",
+        "displayName": "status-bg",
+        "tonalRamp": [
+          "oklch(15% 0.0485 178.68)",
+          "oklch(26% 0.0485 178.68)",
+          "oklch(37% 0.0485 178.68)",
+          "oklch(49% 0.0485 178.68)",
+          "oklch(61% 0.0485 178.68)",
+          "oklch(73% 0.0485 178.68)",
+          "oklch(85% 0.0485 178.68)",
+          "oklch(95% 0.0485 178.68)"
+        ]
+      },
+      "status-ink": {
+        "role": "primary",
+        "displayName": "status-ink",
+        "tonalRamp": [
+          "oklch(15% 0.0866 179.86)",
+          "oklch(26% 0.0866 179.86)",
+          "oklch(37% 0.0866 179.86)",
+          "oklch(49% 0.0866 179.86)",
+          "oklch(61% 0.0866 179.86)",
+          "oklch(73% 0.0866 179.86)",
+          "oklch(85% 0.0866 179.86)",
+          "oklch(95% 0.0866 179.86)"
+        ]
+      },
+      "draft-bg": {
+        "role": "semantic",
+        "displayName": "draft-bg",
+        "tonalRamp": [
+          "oklch(15% 0.0385 89.09)",
+          "oklch(26% 0.0385 89.09)",
+          "oklch(37% 0.0385 89.09)",
+          "oklch(49% 0.0385 89.09)",
+          "oklch(61% 0.0385 89.09)",
+          "oklch(73% 0.0385 89.09)",
+          "oklch(85% 0.0385 89.09)",
+          "oklch(95% 0.0385 89.09)"
+        ]
+      },
+      "draft-ink": {
+        "role": "semantic",
+        "displayName": "draft-ink",
+        "tonalRamp": [
+          "oklch(15% 0.0943 76.70)",
+          "oklch(26% 0.0943 76.70)",
+          "oklch(37% 0.0943 76.70)",
+          "oklch(49% 0.0943 76.70)",
+          "oklch(61% 0.0943 76.70)",
+          "oklch(73% 0.0943 76.70)",
+          "oklch(85% 0.0943 76.70)",
+          "oklch(95% 0.0943 76.70)"
+        ]
+      },
+      "error": {
+        "role": "semantic",
+        "displayName": "error",
+        "tonalRamp": [
+          "oklch(15% 0.1569 23.05)",
+          "oklch(26% 0.1569 23.05)",
+          "oklch(37% 0.1569 23.05)",
+          "oklch(49% 0.1569 23.05)",
+          "oklch(61% 0.1569 23.05)",
+          "oklch(73% 0.1569 23.05)",
+          "oklch(85% 0.1569 23.05)",
+          "oklch(95% 0.1569 23.05)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "现代无衬线展示",
+        "purpose": "仅官网首页主标题；中文使用既定回退。",
+        "provenance": "https://github.com/rsms/inter",
+        "license": "SIL Open Font License 1.1",
+        "licenseFile": "fonts/LICENSE.txt"
+      },
+      "body": {
+        "displayName": "文档正文",
+        "purpose": "长文阅读，不采用舞台密度。"
+      }
+    },
+    "shadows": [
+      {
+        "name": "window-webgl-ready-html",
+        "value": "0 2px 2px #3d566429,0 20px 40px #29434f16",
+        "purpose": "GPU 可用时 HTML 窗轻阴影。"
+      },
+      {
+        "name": "window-css-fallback",
+        "value": "0 2px 2px #3d566451,0 18px 30px #29434f20,0 32px 70px #28454b16",
+        "purpose": "CSS 回退窗口。"
+      },
+      {
+        "name": "home-action",
+        "value": "0 8px 22px #087f7518",
+        "purpose": "首页主行动。"
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-css",
+        "value": "cubic-bezier(.16,1,.3,1)",
+        "purpose": "CSS 交互与手机显现。"
+      },
+      {
+        "name": "ease-camera",
+        "value": "1-(1-clamp(p))^3",
+        "purpose": "镜头与来源线段插值。"
+      },
+      {
+        "name": "focus",
+        "value": "450ms",
+        "purpose": "放大对应窗至85%。"
+      },
+      {
+        "name": "resume",
+        "value": "300ms",
+        "purpose": "恢复实际滚动镜头。"
+      },
+      {
+        "name": "mobile-reveal",
+        "value": "400ms; translate:0 18px",
+        "purpose": "手机轻微显现，减少动态偏好取消。"
+      },
+      {
+        "name": "stage",
+        "value": "340vh; perspective:1800px; transform-style:flat",
+        "purpose": "独立应用窗及准确控件命中。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "site-medium",
+        "value": "1100px"
+      },
+      {
+        "name": "site-single-column",
+        "value": "720px"
+      },
+      {
+        "name": "stage-static-mobile",
+        "value": "760px"
+      },
+      {
+        "name": "window-compact-container",
+        "value": "650px"
+      },
+      {
+        "name": "window-small-container",
+        "value": "400px"
+      }
+    ],
+    "renderer": {
+      "source": "webgl-stage.mjs",
+      "scope": "docs/site",
+      "layers": [
+        "GPU下层银框/接触阴影/渐隐反射",
+        "HTML业务交互",
+        "GPU上层曲线/光点；聚焦退至HTML后"
+      ],
+      "input": "canvas pointer-events:none; aria-hidden:true",
+      "pixelDensity": "max 2; limited by MAX_RENDERBUFFER_SIZE",
+      "initialization": "首次桌面动态绘制；手机/reduced不初始化",
+      "fallback": "初始化/编译失败或contextlost回退HTML/CSS/SVG",
+      "restoration": "重建GPU资源；保留业务状态并请求当前帧",
+      "palettePreview": "colorMeta tonalRamp 为展示生成色阶，不是生产token"
+    }
+  },
+  "components": [
+    {
+      "name": "业务主行动",
+      "kind": "button",
+      "refersTo": "sandbox-primary",
+      "description": "确认入库与登记付款的原生 HTML 入口。",
+      "html": "<button class=\"ds-primary\">确认入库</button>",
+      "css": ".ds-primary{font:12px Inter,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;color:#fff;background:#087f75;border:1px solid #087f75;padding:8px 11px;min-height:34px;border-radius:5px;cursor:pointer}.ds-primary:hover{background:#06695f}.ds-primary:disabled{opacity:.5;cursor:not-allowed}.ds-primary:focus-visible{outline:3px solid var(--teal,#176f67);outline-offset:5px}"
+    },
+    {
+      "name": "业务次行动",
+      "kind": "button",
+      "refersTo": "sandbox-secondary",
+      "description": "新增、复制草稿等辅助动作。",
+      "html": "<button class=\"ds-secondary\">复制为草稿</button>",
+      "css": ".ds-secondary{font:12px Inter,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;color:#365d6a;border:1px solid #cbdce3;background:#fff;padding:8px 11px;min-height:34px;border-radius:5px;cursor:pointer}.ds-secondary:hover{color:#006c60;background:#ecf9f5;border-color:#84c9be}.ds-secondary:focus-visible{outline:3px solid var(--teal,#176f67);outline-offset:5px}"
+    },
+    {
+      "name": "业务字段",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "字段标签、输入与失败说明；原生表单负责交互。",
+      "html": "<label class=\"ds-field\">数量<input value=\"12\" inputmode=\"decimal\" aria-label=\"数量\"></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:6px;font:11px Inter,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;color:#566e7e}.ds-field input{font:12px Inter,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;color:#203440;background:#fff;border:1px solid #ccdbe5;border-radius:5px;padding:8px;min-height:34px;font-variant-numeric:tabular-nums}.ds-field input:focus-visible{outline:2px solid #2ca998;outline-offset:1px}.ds-field input[readonly]{color:#3c5463;background:#f7fafc}.ds-field input[aria-invalid=true]{border-color:#b53d43}"
+    },
+    {
+      "name": "已入库状态",
+      "kind": "chip",
+      "refersTo": "status-chip",
+      "description": "状态始终配文字。",
+      "html": "<span class=\"ds-status\">已入库</span>",
+      "css": ".ds-status{display:inline-block;font:11px Inter,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;padding:5px 10px;border-radius:5px;color:#076f61;background:#c9f6eb;white-space:nowrap}"
+    },
+    {
+      "name": "草稿状态",
+      "kind": "chip",
+      "refersTo": "status-chip-draft",
+      "description": "草稿不产生库存或应付。",
+      "html": "<span class=\"ds-draft\">草稿</span>",
+      "css": ".ds-draft{display:inline-block;font:11px Inter,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;padding:5px 10px;border-radius:5px;color:#7d5712;background:#fcf1d5;white-space:nowrap}"
+    },
+    {
+      "name": "分步控件",
+      "kind": "button",
+      "refersTo": "stage-button",
+      "description": "静态外观示例；实际页面由 motion.mjs 维护 aria-pressed 与手动模式。",
+      "html": "<div class=\"ds-track\" role=\"group\" aria-label=\"演示步骤\"><button aria-pressed=\"true\">入库</button><button aria-pressed=\"false\">库存</button><button aria-pressed=\"false\">财务</button><button aria-pressed=\"false\">追溯</button></div>",
+      "css": ".ds-track{display:inline-flex;gap:2px;padding:4px;border-radius:26px;border:1px solid #c8d9de;background:#edf3f6;box-shadow:inset 0 1px #fff,0 3px 8px #395d6a08}.ds-track button{font:12px Inter,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;line-height:1.4;padding:8px 16px;border:0;border-radius:22px;background:transparent;color:#47616d;cursor:pointer}.ds-track button[aria-pressed=true]{background:#078579;color:#fff;box-shadow:0 3px 8px #087f7520}.ds-track button:hover{background:#d3eee8;color:#076c60}.ds-track button:focus-visible{outline:3px solid var(--teal,#176f67);outline-offset:5px}"
+    },
+    {
+      "name": "应用窗回退外观",
+      "kind": "custom",
+      "refersTo": "demo-window",
+      "description": "CSS 回退的自包含静态样例；实际桌面另有 WebGL 下层材质，预览不初始化 GPU。",
+      "html": "<section class=\"ds-window\"><div class=\"ds-chrome\"><i></i><i></i><i></i><span>Nexora ERP · 交互演示</span></div><div class=\"ds-window-body\"><h2>采购入库</h2><p>DEMO-001 · 库存 +12 · 应付 ¥120.00</p></div></section>",
+      "css": ".ds-window{font-family:Inter,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;padding:3px;border-radius:14px;background:linear-gradient(112deg,#a6b4bf,#f9fcfd 1%,#d6dee5 2%,#fff 3%,#eef3f6 98%,#a7b5c0);box-shadow:0 2px 2px #3d566451,0 18px 30px #29434f20,0 32px 70px #28454b16}.ds-chrome{height:34px;display:flex;align-items:center;gap:6px;padding:0 13px;background:linear-gradient(#f9fcfe,#e9eff4);border-radius:11px 11px 0 0;border-bottom:1px solid #dbe4eb;font-size:10px;color:#354955}.ds-chrome i{width:8px;height:8px;border-radius:50%;background:#ff655b}.ds-chrome i:nth-child(2){background:#f5bf4f}.ds-chrome i:nth-child(3){background:#48c775}.ds-chrome span{margin-left:6px}.ds-window-body{padding:25px 26px 20px;background:#fbfdff;color:#203440;border-radius:0 0 10px 10px;font-size:12px}.ds-window-body h2{font-size:27px;line-height:1.2;letter-spacing:-.025em;margin:0 0 20px}"
+    },
+    {
+      "name": "官网导航",
+      "kind": "nav",
+      "description": "青绿表示当前页，焦点可见。",
+      "html": "<nav class=\"ds-nav\" aria-label=\"官网导航\"><a href=\"#overview\" aria-current=\"page\">概览</a><a href=\"#docs\">开发文档</a></nav>",
+      "css": ".ds-nav{display:flex;gap:30px;font:14px Inter,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif}.ds-nav a{text-decoration:none;color:var(--muted,#596873)}.ds-nav a:hover,.ds-nav a[aria-current]{color:var(--teal,#176f67)}.ds-nav a:focus-visible{outline:3px solid var(--teal,#176f67);outline-offset:5px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "清晰的业务舞台",
+    "overview": "浅色舞台、银灰独立应用窗、现代无衬线文字与青绿来源关系共同解释业务。本规范覆盖当前 WebGL 视觉层与 HTML 业务沙盒，取代此前卡片、深色概念图和衬线方案。保留 Nexora/联光 ERP 名称与品牌资源；网站示例不连接 ERP 服务，也不代表桌面应用已支持双语。",
+    "keyCharacteristics": [
+      "浅色独立应用窗，GPU 银框、柔和阴影与渐隐反射。",
+      "入库大窗、库存右进、财务右进、三屏关联。",
+      "HTML 管理业务、表单、焦点；GPU 仅负责视觉。",
+      "文档平实可读，静态回退保留业务操作。"
+    ],
+    "rules": [
+      {
+        "name": "The Business Accent Rule",
+        "body": "品牌色强调操作与来源关系，不替代字段文字。",
+        "section": "colors"
+      },
+      {
+        "name": "The Readable Documentation Rule",
+        "body": "产品展示的密度与标题尺度不扩散到长文正文。",
+        "section": "typography"
+      },
+      {
+        "name": "The Purposeful Depth Rule",
+        "body": "空间感解释窗口关系，编辑时保证可点击与可读，文档保持平面阅读。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** 将规范限制在 docs/site，保留浅色独立窗与既定无衬线字体。",
+      "**Do** 保留真实锚点、字段验证、键盘路径、手动模式与 GPU 失效回退。",
+      "**Do** 区分本地演示、桌面能力和计划，随字体保留 OFL 许可。"
+    ],
+    "donts": [
+      "**Don't** 恢复旧卡片、深色概念图或衬线默认方案。",
+      "**Don't** 用画布承载业务表单、截获输入或在恢复 GPU 时重置业务数据。",
+      "**Don't** 在编辑时移动镜头、以连线遮挡字段或以滚动触发业务操作。",
+      "**Don't** 将本规范覆盖到 ERP 应用，或把预览色阶视为生产 token。"
+    ]
+  }
+}

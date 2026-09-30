@@ -16,3 +16,12 @@
 
 /* 各窗口独立透视，平面合成避免倾斜窗的控件命中区域偏离。 */
 .scene-board{transform-style:flat}
+
+/* WebGL 与 HTML 使用同一透视距离；画布只绘制，不截获任何鼠标或键盘事件。 */
+.webgl-materials,.webgl-connections{position:absolute;left:-40px;top:-40px;pointer-events:none;max-width:none}
+.webgl-materials{z-index:0}.webgl-connections{z-index:5}
+.webgl-ready .connection-layer{visibility:hidden}
+.webgl-ready .demo-window::after{display:none}
+.webgl-ready .demo-window{box-shadow:0 2px 2px #3d566429,0 20px 40px #29434f16}
+.scroll-scene[data-mode="focus"] .webgl-connections{z-index:1;opacity:.45}
+@media print{.webgl-materials,.webgl-connections{display:none}}

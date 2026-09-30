@@ -152,7 +152,7 @@ npm run build
 PowerShell does not expand native-command wildcards, so enumerate tests. `npm run build` includes typechecking; `npm run preview` previews an existing build. Website-specific checks:
 
 ```bash
-node --test tests/docs-site.test.mjs
+node --test tests/docs-site.test.mjs tests/docs-sandbox.test.mjs tests/docs-webgl.test.mjs
 npm run docs:build
 ```
 
@@ -210,11 +210,13 @@ The website is static HTML/CSS. `scripts/build-docs-site.mjs` uses Marked to con
 
 Build with `npm run docs:build`, then run `python -m http.server 4173 --directory dist/site` and visit `http://localhost:4173/`. Language links retain the page type. Text and contents work without JavaScript. Existing specialist documents remain in Chinese, clearly labeled in this guide.
 
-The homepage contains an independent interactive sandbox. A full receipt window appears first; inventory and payable windows enter from the right as the page scrolls, with SVG paths connected to actual source anchors. It supports multiple receipts and materials, warehouse/supplier selection, receipt confirmation, stock filtering and tracing, and partial/full demo payments. Quantities use three fixed decimal places; money uses integer cents. Drafts do not produce movements, confirmation cannot repeat, confirmed receipts can only be copied to drafts, and payments cannot exceed the balance.
+The homepage contains an independent interactive sandbox. A full receipt window appears first; inventory and payable windows enter from the right as the page scrolls, with WebGL paths connected to actual source anchors. It supports multiple receipts and materials, warehouse/supplier selection, receipt confirmation, stock filtering and tracing, and partial/full demo payments. Quantities use three fixed decimal places; money uses integer cents. Drafts do not produce movements, confirmation cannot repeat, confirmed receipts can only be copied to drafts, and payments cannot exceed the balance.
 
 `sandbox.mjs` manages business state, `sandbox-ui.mjs` renders and mounts HTML controls, `motion.mjs` handles the camera and paths only, and `sandbox.css` styles the stage. Scrolling never changes business data, and no ERP service is contacted. In the same tab, a language-link click transfers data once through `sessionStorage`; refreshing restores the seed. Navigation still works if storage is unavailable. Pause, steps and expanded windows enter manual mode; resume smoothly aligns to scroll position. Mobile windows are stacked vertically; reduced motion disables movement. Without JavaScript, static business examples and documentation remain available.
 
-Run `node --test tests/docs-site.test.mjs tests/docs-sandbox.test.mjs` to check page paths, business rules and motion stages. See the [website motion and sandbox guide](site/motion-proposal.en.md).
+`webgl-stage.mjs` uses native WebGL for perspective frames, metallic highlights, contact shadows, fading reflections and source connections. HTML controls share the same camera layout. GPU layers never intercept input or draw continuously while idle. Context loss or unavailable WebGL restores the CSS/SVG fallback without resetting data. Mobile and reduced-motion modes retain static relationships without creating GPU contexts.
+
+Run `node --test tests/docs-site.test.mjs tests/docs-sandbox.test.mjs tests/docs-webgl.test.mjs` to check page paths, business rules, motion stages and GPU lifecycle. See the [website motion and sandbox guide](site/motion-proposal.en.md).
 
 **Online hosting is intentionally not enabled yet.** When ready, an administrator selects GitHub Actions under Settings → Pages → Source, sets repository variable `PAGES_ENABLED=true`, and manually runs the website workflow. Push permission alone cannot configure Pages. Only `dist/site/` is uploaded; PRs validate without publishing. The expected URL is `https://zhangzzj2003.github.io/Nexora-Erp/`; it is not a live website until deployment succeeds.
 

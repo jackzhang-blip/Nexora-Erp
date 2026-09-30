@@ -152,7 +152,7 @@ npm run build
 PowerShell 不替原生命令展开通配符，显式枚举测试。`npm run build` 已含类型检查，`npm run preview` 预览已有构建。网站专用检查：
 
 ```bash
-node --test tests/docs-site.test.mjs
+node --test tests/docs-site.test.mjs tests/docs-sandbox.test.mjs tests/docs-webgl.test.mjs
 npm run docs:build
 ```
 
@@ -210,11 +210,13 @@ Actions 安装包是测试构建，尚未签名/公证，可能触发 SmartScree
 
 本地 `npm run docs:build` 后运行 `python -m http.server 4173 --directory dist/site`，访问 `http://localhost:4173/`。语言切换保留页面类型，正文和目录无需 JavaScript；已有专题文档保留中文原文，英文指南明确标注语言。
 
-首页使用独立的网页交互沙盒：先显示完整入库窗口，再随滚动从右侧引入库存和应付窗口，用 SVG 连接实际来源锚点。支持多单据、多物料、仓库与供应商选择、确认入库、库存筛选和来源追溯、部分或全部模拟付款。数量使用三位定点小数，金额以整数分计算；草稿不生成业务流水，确认不能重复，已确认单据只能复制为草稿，付款不得超过未付余额。
+首页使用独立的网页交互沙盒：先显示完整入库窗口，再随滚动从右侧引入库存和应付窗口，用 WebGL 连接实际来源锚点。支持多单据、多物料、仓库与供应商选择、确认入库、库存筛选和来源追溯、部分或全部模拟付款。数量使用三位定点小数，金额以整数分计算；草稿不生成业务流水，确认不能重复，已确认单据只能复制为草稿，付款不得超过未付余额。
 
 `sandbox.mjs` 管理业务状态，`sandbox-ui.mjs` 生成并装配 HTML 控件，`motion.mjs` 只控制镜头与连接线，`sandbox.css` 提供舞台样式。业务数据不由滚动改变，也不连接 ERP 服务。同一标签页点击语言链接时通过一次性 `sessionStorage` 交接数据，刷新恢复初始示例；存储不可用时仍允许导航。暂停、分步与放大操作进入手动模式，恢复时平滑对齐滚动位置。手机纵向排列，减少动态效果时取消运动；无 JavaScript 时保留静态业务示例和文档入口。
 
-运行 `node --test tests/docs-site.test.mjs tests/docs-sandbox.test.mjs` 验证页面路径、业务规则与滚动阶段。详细说明见 [官网动效与沙盒说明](site/motion-proposal.zh-CN.md)。
+`webgl-stage.mjs` 使用原生 WebGL 绘制透视窗框、金属高光、接触阴影、渐隐反射与来源连接线，HTML 控件共享同一镜头布局。GPU 图层不截获输入，静止时不连续绘制；上下文丢失或 WebGL 不可用时自动显示 CSS/SVG 兼容层，不重置业务数据。手机和减少动态效果模式保留静态关系，不创建 GPU 上下文。
+
+运行 `node --test tests/docs-site.test.mjs tests/docs-sandbox.test.mjs tests/docs-webgl.test.mjs` 验证页面路径、业务规则、滚动阶段及 GPU 生命周期。详细说明见 [官网动效与沙盒说明](site/motion-proposal.zh-CN.md)。
 
 目前按要求**暂不启用线上网站**。准备发布时由管理员在 Settings → Pages → Source 选 GitHub Actions，再启用仓库变量 `PAGES_ENABLED=true` 并手动运行官网工作流。普通推送权限不足以配置 Pages。工作流只上传 `dist/site/`；PR 只验证不发布。预期地址 `https://zhangzzj2003.github.io/Nexora-Erp/`，部署成功前不可称为可用官网。
 

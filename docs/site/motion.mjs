@@ -1,4 +1,5 @@
 import { mountSandbox } from './sandbox-ui.mjs'
+import { createWebGLStage, cubicPoints, pointOnPath } from './webgl-stage.mjs'
 
 const clamp = value => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0))
 const lerp = (a, b, p) => a + (b - a) * p
@@ -33,6 +34,7 @@ export function mountScene(doc = document, win = window) {
   let progress = 0, focused = null, manual = false, frame = 0, onScreen = true, tween = null, disposed = false
   let renderedWindows = sceneAt(0).windows, lastStage = -1, sandbox
   let pendingFocus = null
+  let graphics
   const staticMode = () => reduced.matches || mobile.matches
   const targetProgress = () => {
     const rect = scene.getBoundingClientRect()
@@ -61,6 +63,7 @@ export function mountScene(doc = document, win = window) {
     const svg = board.querySelector('.connection-layer')
     svg.setAttribute('viewBox', `0 0 ${Math.max(1, root.width)} ${Math.max(1, root.height)}`)
     svg.style.height = `${root.height}px`
+    const connections = []
     for (let i = 0; i < 2; i++) {
       const group = svg.querySelector(`[data-connection="${i}"]`), a = points[i], b = points[i + 1]
       const financeSource = board.querySelector('[data-anchor="finance"]')?.textContent.trim()
@@ -73,12 +76,17 @@ export function mountScene(doc = document, win = window) {
       const bend = mobile.matches ? 30 : Math.max(36, Math.abs(x2 - x1) * .45)
       const rail = root.width + 8
       const d = mobile.matches ? `M ${x1} ${y1} C ${rail} ${y1}, ${rail} ${y1}, ${rail} ${y1 + 24} L ${rail} ${y2 - 24} C ${rail} ${y2}, ${rail} ${y2}, ${x2} ${y2}` : `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`
+      const curve = mobile.matches
+        ? [...cubicPoints([x1, y1], [rail, y1], [rail, y1], [rail, y1 + 24]), ...cubicPoints([rail, y2 - 24], [rail, y2], [rail, y2], [x2, y2])]
+        : cubicPoints([x1, y1], [x1 + bend, y1], [x2 - bend, y2], [x2, y2])
       const paths = group.querySelectorAll('path')
       paths.forEach(path => { path.setAttribute('d', d); path.setAttribute('pathLength', '1'); path.style.strokeDasharray = '1'; path.style.strokeDashoffset = String(1 - amount) })
-      const node = group.querySelector('circle'), path = paths[1]
-      const pos = path.getPointAtLength(path.getTotalLength() * (staticMode() || focused ? 1 : state.nodes[i]))
-      node.setAttribute('cx', String(pos.x)); node.setAttribute('cy', String(pos.y))
+      const node = group.querySelector('circle'), nodeProgress = staticMode() || focused ? 1 : state.nodes[i]
+      const pos = pointOnPath(curve, nodeProgress)
+      node.setAttribute('cx', String(pos[0])); node.setAttribute('cy', String(pos[1]))
+      connections.push({ points: curve, amount, node: nodeProgress, visible: amount > 0 && sameSource })
     }
+    graphics?.draw({ width: root.width, height: root.height, layout: renderedWindows, connections, progress, staticMode: staticMode(), ratio: win.devicePixelRatio })
   }
   const apply = layout => {
     renderedWindows = layout
@@ -129,6 +137,7 @@ export function mountScene(doc = document, win = window) {
     }
   }
   const schedule = () => { if (!frame && !disposed && !doc.hidden && onScreen) frame = win.requestAnimationFrame(update) }
+  graphics = createWebGLStage(board, schedule)
   const move = (p, key = null, duration = 450) => {
     manual = true; focused = key
     pendingFocus = key
@@ -195,7 +204,7 @@ export function mountScene(doc = document, win = window) {
   return () => {
     disposed = true
     if (frame) win.cancelAnimationFrame(frame)
-    observer.disconnect(); reveals.disconnect(); sandbox.destroy()
+    observer.disconnect(); reveals.disconnect(); sandbox.destroy(); graphics.destroy()
     scene.removeEventListener('click', onClick); scene.removeEventListener('sandbox:focus', onFocus); scene.removeEventListener('sandbox:render', schedule)
     scene.removeEventListener('focusin', onInputFocus); scene.removeEventListener('scroll', schedule, true)
     win.removeEventListener('scroll', onScroll); win.removeEventListener('resize', schedule); doc.removeEventListener('visibilitychange', onVisibility)
