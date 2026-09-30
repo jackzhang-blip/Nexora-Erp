@@ -1,12 +1,28 @@
 """生产工单以启用 BOM 创建需料快照，并汇总净领料数量。"""
 
-import sqlite3
+from sqlalchemy import select, update, func, literal
+from sqlalchemy.orm import Session
 from decimal import Decimal, ROUND_CEILING
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from app.core.database import connection
+from app.core.orm import orm_session, add_model
+from app.core.models import (
+    Bom,
+    BomLine,
+    Material,
+    MaterialIssue,
+    MaterialIssueLine,
+    MaterialReturn,
+    MaterialReturnLine,
+    ProductionCompletion,
+    ProductionCompletionReversal,
+    User,
+    Warehouse,
+    WorkOrder,
+    WorkOrderLine,
+)
 from app.inventory.warehouse import require_warehouse
 from app.access.security import require
 
@@ -28,128 +44,258 @@ class WorkOrderInput(BaseModel):
         return value
 
 
-def issued_quantity(db: sqlite3.Connection, work_order_line_id: int) -> Decimal:
+def issued_quantity(db: Session, work_order_line_id: int) -> Decimal:
     # 原领料和退料都保留，工单可领量按已确认单据的净数量计算。
-    issued = sum((Decimal(row[0]) for row in db.execute("""SELECT mil.quantity
-        FROM material_issue_lines mil JOIN material_issues mi ON mi.id = mil.material_issue_id
-        WHERE mil.work_order_line_id = ? AND mi.status = 'posted'""", (work_order_line_id,))), Decimal(0))
-    returned = sum((Decimal(row[0]) for row in db.execute("""SELECT mrl.quantity
-        FROM material_return_lines mrl JOIN material_returns mr ON mr.id = mrl.material_return_id
-        JOIN material_issue_lines mil ON mil.id = mrl.material_issue_line_id
-        WHERE mil.work_order_line_id = ? AND mr.status = 'posted'""", (work_order_line_id,))), Decimal(0))
+    issued = sum(
+        (
+            Decimal(row)
+            for row in db.scalars(
+                select(MaterialIssueLine.quantity)
+                .select_from(MaterialIssueLine)
+                .join(MaterialIssue, MaterialIssue.id == MaterialIssueLine.material_issue_id)
+                .where(
+                    MaterialIssueLine.work_order_line_id == work_order_line_id,
+                    MaterialIssue.status == "posted",
+                )
+            )
+        ),
+        Decimal(0),
+    )
+    returned = sum(
+        (
+            Decimal(row)
+            for row in db.scalars(
+                select(MaterialReturnLine.quantity)
+                .select_from(MaterialReturnLine)
+                .join(MaterialReturn, MaterialReturn.id == MaterialReturnLine.material_return_id)
+                .join(MaterialIssueLine, MaterialIssueLine.id == MaterialReturnLine.material_issue_line_id)
+                .where(
+                    MaterialIssueLine.work_order_line_id == work_order_line_id,
+                    MaterialReturn.status == "posted",
+                )
+            )
+        ),
+        Decimal(0),
+    )
     return issued - returned
 
 
-def posted_completion_totals(db: sqlite3.Connection, order_id: int) -> tuple[Decimal, Decimal, Decimal]:
-    rows = db.execute("""SELECT pc.reported_quantity, pc.accepted_quantity, pc.rejected_quantity
-        FROM production_completions pc WHERE pc.work_order_id = ? AND pc.status = 'posted'
-        AND NOT EXISTS (SELECT 1 FROM production_completion_reversals r
-            WHERE r.production_completion_id = pc.id)""", (order_id,))
+def posted_completion_totals(db: Session, order_id: int) -> tuple[Decimal, Decimal, Decimal]:
+    rows = db.execute(
+        select(
+            ProductionCompletion.reported_quantity,
+            ProductionCompletion.accepted_quantity,
+            ProductionCompletion.rejected_quantity,
+        )
+        .select_from(ProductionCompletion)
+        .where(
+            ProductionCompletion.work_order_id == order_id,
+            ProductionCompletion.status == "posted",
+            ~select(literal(1))
+            .select_from(ProductionCompletionReversal)
+            .where(ProductionCompletionReversal.production_completion_id == ProductionCompletion.id)
+            .exists(),
+        )
+    ).mappings()
     totals = [Decimal(0), Decimal(0), Decimal(0)]
     for row in rows:
-        for index in range(3):
-            totals[index] += Decimal(row[index])
+        for index, field in enumerate(("reported_quantity", "accepted_quantity", "rejected_quantity")):
+            totals[index] += Decimal(row[field])
     return totals[0], totals[1], totals[2]
 
 
-def required_for_output(required_quantity: Decimal, target_quantity: Decimal,
-                        reported_quantity: Decimal) -> Decimal:
+def required_for_output(
+    required_quantity: Decimal, target_quantity: Decimal, reported_quantity: Decimal
+) -> Decimal:
     # 分批报工按累计产出向上取整需料，最后一批不会突破工单原需料快照。
     return (required_quantity * reported_quantity / target_quantity).quantize(
-        Decimal("0.001"), rounding=ROUND_CEILING)
+        Decimal("0.001"), rounding=ROUND_CEILING
+    )
 
 
-def work_order_data(db: sqlite3.Connection, order_id: int) -> dict:
-    row = db.execute("""SELECT wo.*, b.version AS bom_version,
-        b.product_material_id, m.sku AS product_sku, m.name AS product_name,
-        m.unit AS product_unit, w.name AS warehouse_name, u.username AS created_by_name
-        FROM work_orders wo JOIN boms b ON b.id = wo.bom_id
-        JOIN materials m ON m.id = b.product_material_id
-        JOIN warehouses w ON w.id = wo.warehouse_id
-        JOIN users u ON u.id = wo.created_by WHERE wo.id = ?""", (order_id,)).fetchone()
+def work_order_data(db: Session, order_id: int) -> dict:
+    row = (
+        db.execute(
+            select(
+                WorkOrder.id,
+                WorkOrder.bom_id,
+                WorkOrder.warehouse_id,
+                WorkOrder.target_quantity,
+                WorkOrder.reference,
+                WorkOrder.note,
+                WorkOrder.status,
+                WorkOrder.created_by,
+                WorkOrder.released_by,
+                WorkOrder.cancelled_by,
+                WorkOrder.created_at,
+                WorkOrder.released_at,
+                WorkOrder.cancelled_at,
+                WorkOrder.completed_by,
+                WorkOrder.completed_at,
+                Bom.version.label("bom_version"),
+                Bom.product_material_id,
+                Material.sku.label("product_sku"),
+                Material.name.label("product_name"),
+                Material.unit.label("product_unit"),
+                Warehouse.name.label("warehouse_name"),
+                User.username.label("created_by_name"),
+            )
+            .select_from(WorkOrder)
+            .join(Bom, (Bom.id == WorkOrder.bom_id))
+            .join(Material, (Material.id == Bom.product_material_id))
+            .join(Warehouse, (Warehouse.id == WorkOrder.warehouse_id))
+            .join(User, (User.id == WorkOrder.created_by))
+            .where((WorkOrder.id == order_id))
+        )
+        .mappings()
+        .first()
+    )
     if not row:
         raise HTTPException(404, "生产工单不存在")
-    lines = db.execute("""SELECT wol.id, wol.component_material_id, m.sku,
-        m.name AS material_name, m.unit, wol.required_quantity
-        FROM work_order_lines wol JOIN materials m ON m.id = wol.component_material_id
-        WHERE wol.work_order_id = ? ORDER BY wol.id""", (order_id,)).fetchall()
+    lines = (
+        db.execute(
+            select(
+                WorkOrderLine.id,
+                WorkOrderLine.component_material_id,
+                Material.sku,
+                Material.name.label("material_name"),
+                Material.unit,
+                WorkOrderLine.required_quantity,
+            )
+            .select_from(WorkOrderLine)
+            .join(Material, (Material.id == WorkOrderLine.component_material_id))
+            .where((WorkOrderLine.work_order_id == order_id))
+            .order_by(WorkOrderLine.id)
+        )
+        .mappings()
+        .all()
+    )
     details = []
     for line in lines:
         issued = issued_quantity(db, line["id"])
-        details.append({**dict(line), "issued_quantity": str(issued),
-                        "remaining_quantity": str(Decimal(line["required_quantity"]) - issued)})
+        details.append(
+            {
+                **dict(line),
+                "issued_quantity": str(issued),
+                "remaining_quantity": str(Decimal(line["required_quantity"]) - issued),
+            }
+        )
     reported, accepted, rejected = posted_completion_totals(db, order_id)
-    return {**dict(row), "lines": details, "reported_quantity": str(reported),
-            "accepted_quantity": str(accepted), "rejected_quantity": str(rejected),
-            "remaining_output_quantity": str(Decimal(row["target_quantity"]) - reported)}
+    return {
+        **dict(row),
+        "lines": details,
+        "reported_quantity": str(reported),
+        "accepted_quantity": str(accepted),
+        "rejected_quantity": str(rejected),
+        "remaining_output_quantity": str(Decimal(row["target_quantity"]) - reported),
+    }
 
 
 @router.get("/work-orders")
 def list_work_orders(_: dict = Depends(require("production.view"))) -> list[dict]:
-    with connection() as db:
-        ids = [row[0] for row in db.execute("SELECT id FROM work_orders ORDER BY id DESC")]
+    with orm_session() as db:
+        ids = [
+            row
+            for row in db.scalars(select(WorkOrder.id).select_from(WorkOrder).order_by(WorkOrder.id.desc()))
+        ]
         return [work_order_data(db, order_id) for order_id in ids]
 
 
 @router.post("/work-orders", status_code=201)
-def create_work_order(payload: WorkOrderInput,
-                      user: dict = Depends(require("work_order.create"))) -> dict:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        bom = db.execute("SELECT status, base_quantity FROM boms WHERE id = ?", (payload.bom_id,)).fetchone()
+def create_work_order(payload: WorkOrderInput, user: dict = Depends(require("work_order.create"))) -> dict:
+    with orm_session(write=True) as db:
+        bom = (
+            db.execute(
+                select(Bom.status, Bom.base_quantity).select_from(Bom).where((Bom.id == payload.bom_id))
+            )
+            .mappings()
+            .first()
+        )
         if not bom:
             raise HTTPException(422, "BOM 不存在")
         if bom["status"] != "active":
             raise HTTPException(409, "只有启用中的 BOM 可用于新工单")
         require_warehouse(db, payload.warehouse_id)
         requirements = []
-        for line in db.execute("""SELECT component_material_id, quantity FROM bom_lines
-            WHERE bom_id = ?""", (payload.bom_id,)):
+        for line in db.execute(
+            select(BomLine.component_material_id, BomLine.quantity)
+            .select_from(BomLine)
+            .where((BomLine.bom_id == payload.bom_id))
+        ).mappings():
             # 需求按库存的三位精度向上取整，防止比例换算后低估领料量。
-            needed = (payload.target_quantity * Decimal(line["quantity"]) /
-                      Decimal(bom["base_quantity"])).quantize(Decimal("0.001"), rounding=ROUND_CEILING)
+            needed = (
+                payload.target_quantity * Decimal(line["quantity"]) / Decimal(bom["base_quantity"])
+            ).quantize(Decimal("0.001"), rounding=ROUND_CEILING)
             if needed > 1_000_000:
                 raise HTTPException(422, "工单组件需求超过一百万，请拆分工单")
             requirements.append((line["component_material_id"], str(needed)))
         if not requirements:
             raise HTTPException(409, "BOM 没有组件，无法创建工单")
-        cursor = db.execute("""INSERT INTO work_orders(
-            bom_id, warehouse_id, target_quantity, reference, note, created_by)
-            VALUES (?, ?, ?, ?, ?, ?)""", (payload.bom_id, payload.warehouse_id,
-                str(payload.target_quantity), payload.reference.strip(), payload.note.strip(), user["id"]))
-        db.executemany("""INSERT INTO work_order_lines(
-            work_order_id, component_material_id, required_quantity) VALUES (?, ?, ?)""",
-            [(cursor.lastrowid, material_id, quantity) for material_id, quantity in requirements])
-        return work_order_data(db, cursor.lastrowid)
+        cursor = add_model(
+            db,
+            WorkOrder(
+                bom_id=payload.bom_id,
+                warehouse_id=payload.warehouse_id,
+                target_quantity=str(payload.target_quantity),
+                reference=payload.reference.strip(),
+                note=payload.note.strip(),
+                created_by=user["id"],
+            ),
+        )
+        db.add_all(
+            [
+                WorkOrderLine(
+                    work_order_id=cursor.id, component_material_id=material_id, required_quantity=quantity
+                )
+                for material_id, quantity in requirements
+            ]
+        )
+        return work_order_data(db, cursor.id)
 
 
 @router.post("/work-orders/{order_id}/release")
 def release_work_order(order_id: int, user: dict = Depends(require("work_order.release"))) -> dict:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        row = db.execute("""SELECT wo.status, b.status AS bom_status FROM work_orders wo
-            JOIN boms b ON b.id = wo.bom_id WHERE wo.id = ?""", (order_id,)).fetchone()
+    with orm_session(write=True) as db:
+        row = (
+            db.execute(
+                select(WorkOrder.status, Bom.status.label("bom_status"))
+                .select_from(WorkOrder)
+                .join(Bom, (Bom.id == WorkOrder.bom_id))
+                .where((WorkOrder.id == order_id))
+            )
+            .mappings()
+            .first()
+        )
         if not row:
             raise HTTPException(404, "生产工单不存在")
         if row["status"] != "draft":
             raise HTTPException(409, "只有工单草稿可以下达")
         if row["bom_status"] != "active":
             raise HTTPException(409, "BOM 已停用，请取消草稿并使用新版本建单")
-        db.execute("""UPDATE work_orders SET status = 'released', released_by = ?,
-            released_at = CURRENT_TIMESTAMP WHERE id = ?""", (user["id"], order_id))
+        db.execute(
+            update(WorkOrder)
+            .where((WorkOrder.id == order_id))
+            .values(status="released", released_by=user["id"], released_at=func.current_timestamp())
+        )
         return work_order_data(db, order_id)
 
 
 @router.post("/work-orders/{order_id}/cancel")
 def cancel_work_order(order_id: int, user: dict = Depends(require("work_order.cancel"))) -> dict:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        row = db.execute("SELECT status FROM work_orders WHERE id = ?", (order_id,)).fetchone()
+    with orm_session(write=True) as db:
+        row = (
+            db.execute(select(WorkOrder.status).select_from(WorkOrder).where((WorkOrder.id == order_id)))
+            .mappings()
+            .first()
+        )
         if not row:
             raise HTTPException(404, "生产工单不存在")
         # 发料后由后续更正流程处理，不能用取消抹去真实库存流水。
         if row["status"] not in ("draft", "released"):
             raise HTTPException(409, "已发料或已完工的生产工单不可取消")
-        db.execute("""UPDATE work_orders SET status = 'cancelled', cancelled_by = ?,
-            cancelled_at = CURRENT_TIMESTAMP WHERE id = ?""", (user["id"], order_id))
+        db.execute(
+            update(WorkOrder)
+            .where((WorkOrder.id == order_id))
+            .values(status="cancelled", cancelled_by=user["id"], cancelled_at=func.current_timestamp())
+        )
         return work_order_data(db, order_id)

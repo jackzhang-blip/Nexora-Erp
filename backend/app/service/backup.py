@@ -13,6 +13,11 @@ from pathlib import Path
 
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import NullPool
+
+from app.core.models import ServerIdentity
 
 
 FILES = ("nexora.db", "server.crt", "server.key")
@@ -25,14 +30,23 @@ def _instance_id(data_dir: Path) -> str:
     if not database.is_file():
         raise ValueError("实例数据库不存在")
     # 只读打开可防止路径写错时静默创建一个空数据库。
-    # sqlite3 的连接上下文只结束事务，不会关闭句柄；Windows 恢复临时目录前必须释放文件锁。
-    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as db:
-        if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-            raise ValueError("实例数据库完整性检查失败")
-        row = db.execute("SELECT id FROM server_identity LIMIT 1").fetchone()
-        if row is None:
-            raise ValueError("实例身份不存在")
-        return row[0]
+    # 备份路径不依赖当前服务环境；NullPool 确保 Windows 发布恢复目录前释放文件句柄。
+    engine = create_engine(
+        "sqlite://",
+        poolclass=NullPool,
+        creator=lambda: sqlite3.connect(database.as_uri() + "?mode=ro", uri=True),
+    )
+    try:
+        with Session(engine) as session:
+            # SQLite 完整性诊断没有 ORM 等价物；实例身份查询仍通过声明式模型。
+            if session.connection().exec_driver_sql("PRAGMA integrity_check").scalar() != "ok":
+                raise ValueError("实例数据库完整性检查失败")
+            instance_id = session.scalar(select(ServerIdentity.id).limit(1))
+            if instance_id is None:
+                raise ValueError("实例身份不存在")
+            return instance_id
+    finally:
+        engine.dispose()
 
 
 def _verify_identity(data_dir: Path) -> str:

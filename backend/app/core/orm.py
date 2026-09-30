@@ -4,7 +4,7 @@ import os
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, TypeVar
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine, URL
@@ -12,6 +12,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
 from app.core.database import database_path
+from app.core.models import Base
+
+Model = TypeVar("Model", bound=Base)
 
 
 @lru_cache(maxsize=8)
@@ -46,3 +49,10 @@ def orm_session(*, write: bool = False) -> Iterator[Session]:
 
 def model_data(model) -> dict:
     return {column.key: getattr(model, column.key) for column in model.__mapper__.columns}
+
+
+def add_model(session: Session, model: Model) -> Model:
+    # 主单和独立冲销需要编号后才能写入来源关系；刷新失败由外层事务整体回滚。
+    session.add(model)
+    session.flush()
+    return model

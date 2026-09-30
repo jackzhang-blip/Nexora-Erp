@@ -71,7 +71,7 @@
 | `backend/app/server.py`、`backup.py` | 保留桌面程序与命令行使用的 HTTPS 服务及备份入口。 |
 | `backend/app/access/` | 登录、账号、角色、权限接口及服务端授权。 |
 | `backend/app/catalog/` | 供应商与物料基础资料接口。 |
-| `backend/app/core/` | SQLite 连接与数据库迁移等全局基础能力。 |
+| `backend/app/core/` | SQLAlchemy ORM 模型、会话事务与数据库迁移等全局基础能力。 |
 | `backend/app/purchase/` | 采购订单、入库单及采购退货。 |
 | `backend/app/inventory/` | 仓库、调拨、盘点、库存余额与流水。 |
 | `backend/app/sales/` | 客户、销售订单、出库与销售退货。 |
@@ -93,6 +93,7 @@
 
 ## 后端与数据
 
+- 业务数据查询与写入统一使用 SQLAlchemy 声明式模型和 ORM 会话，既有业务不得重新引入直接 SQL。结构迁移、SQLite 事务与连接配置、在线备份及完整性诊断保留必要的底层操作；这些例外不能用于业务 CRUD。
 - 财务、库存、人力和 CRM 数据变更应保留可审计的信息，不能未经说明地使用“最后写入覆盖”作为通用冲突策略。
 - 数据库结构、同步协议和冲突处理在尚未正式确定前，应明确标注为候选方案或设计草案。
 - API 响应格式和错误语义一旦被前端使用，修改时要同步更新调用方、类型和测试。
