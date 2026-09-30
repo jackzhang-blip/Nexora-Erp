@@ -28,6 +28,7 @@ export const workspacePageDescriptions: Partial<Record<WorkspaceRouteKey, string
   purchaseRequests: '登记采购需求，审批通过后可按剩余数量分批生成采购订单。',
   goodsReceipts: '按采购订单登记实收与拒收数量，确认合格数量后生成待入库单。',
   purchaseReports: '按供应商、物料和日期查询采购报表，表格与 CSV 使用同一份服务端筛选结果。',
+  inventoryValuation: '按公司范围的物料移动加权平均计算；缺少价格来源时金额显示待核价。',
   finance: '核对应收应付、订单余额与收付款记录，保留业务来源和冲销记录。',
   productionCosts: '材料单价按凭据人工核定，金额按已领减已退数量计算。存在待核价领料时，总成本显示待核价；这不是库存计价或总账凭证。',
   users: '管理用户、角色分配和账号状态，支持为其他用户重置密码。',
