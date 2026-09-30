@@ -88,6 +88,12 @@ def test_viewer_cannot_modify_catalog(client):
 def test_v27_migration_preserves_existing_materials(client):
     material = create(client, "materials", {"sku": "OLD", "name": "旧物料", "unit": "件"})
     with connection() as db:
+        db.execute("DROP TABLE warehouse_inbound_reversals")
+        db.execute("DROP TABLE warehouse_inbound_lines")
+        db.execute("DROP TABLE warehouse_inbounds")
+        db.execute("DELETE FROM role_permissions WHERE permission_code LIKE 'other_inbound.%'")
+        db.execute("DELETE FROM permissions WHERE code LIKE 'other_inbound.%'")
+        db.execute("DELETE FROM permission_groups WHERE code = 'warehouse.other_inbound'")
         db.execute("DROP TABLE purchase_goods_receipt_lines")
         db.execute("DROP TABLE purchase_goods_receipts")
         db.execute("DELETE FROM role_permissions WHERE permission_code LIKE 'purchase_receiving.%'")
@@ -105,6 +111,6 @@ def test_v27_migration_preserves_existing_materials(client):
     migrate()
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 30
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 31
         assert db.execute("SELECT name FROM materials WHERE id = ?", (material,)).fetchone()[0] == "旧物料"
         assert db.execute("SELECT COUNT(*) FROM supplier_materials").fetchone()[0] == 0

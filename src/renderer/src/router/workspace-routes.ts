@@ -34,6 +34,13 @@ export const workspaceRouteGroups = [
     label: '仓库管理',
     routes: [
       {
+        key: 'otherInbounds',
+        path: '/workspace/warehouse-inbounds',
+        label: '其他入库',
+        permission: 'other_inbound.view',
+        icon: 'archive'
+      },
+      {
         key: 'stock',
         path: '/workspace/stock',
         label: '库存总览',

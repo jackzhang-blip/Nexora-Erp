@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | `home/` | `HomeDashboardView.vue` | 以演示数据展示经营指标、趋势、单据构成和待处理事项；数据集中在 `dashboard-data.ts`，尚未接入真实统计 |
 | `warehouse/` | `InventoryOverviewView.vue` | 查看当前库存与库存流水 |
+| `warehouse/` | `OtherInboundsView.vue` | 处理期初、赠品等非采购入库及冲销 |
 | `warehouse/` | `WarehouseTransfersView.vue` | 建立、确认及冲销仓库调拨 |
 | `warehouse/` | `InventoryStocktakesView.vue` | 建立、确认及冲销库存盘点 |
 | `catalog/` | `MaterialsView.vue` | 物料列表、搜索、增删改及关联供应商展示；沿用 `/workspace/catalog` 地址 |

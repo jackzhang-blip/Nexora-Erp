@@ -144,6 +144,15 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'materials': return { method: 'GET', path: '/api/v1/materials' }
     case 'createMaterial': return { method: 'POST', path: '/api/v1/materials', body: payload }
     case 'warehouses': return { method: 'GET', path: '/api/v1/warehouses' }
+    case 'otherInbounds': return { method: 'GET', path: '/api/v1/warehouse-inbounds' }
+    case 'createOtherInbound': return { method: 'POST', path: '/api/v1/warehouse-inbounds', body: payload }
+    case 'postOtherInbound': return { method: 'POST', path: `/api/v1/warehouse-inbounds/${positiveId(payload, 'inboundId')}/post` }
+    case 'cancelOtherInbound': return { method: 'POST', path: `/api/v1/warehouse-inbounds/${positiveId(payload, 'inboundId')}/cancel` }
+    case 'reverseOtherInbound': {
+      const inboundId = positiveId(payload, 'inboundId')
+      const fields = payload as ErpOperations['reverseOtherInbound']['input']
+      return { method: 'POST', path: `/api/v1/warehouse-inbounds/${inboundId}/reverse`, body: { reason: fields.reason } }
+    }
     case 'createWarehouse': return { method: 'POST', path: '/api/v1/warehouses', body: payload }
     case 'receipts': return { method: 'GET', path: '/api/v1/receipts' }
     case 'goodsReceipts': return { method: 'GET', path: '/api/v1/purchase-goods-receipts' }

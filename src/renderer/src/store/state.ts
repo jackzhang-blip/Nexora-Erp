@@ -9,6 +9,7 @@ import type {
   MaterialIssue,
   MaterialReturn,
   Movement,
+  OtherInbound,
   PaymentRecord,
   Permission,
   ProductionCompletion,
@@ -61,6 +62,7 @@ export function createAppState() {
   const suppliers = ref<Supplier[]>([])
   const stock = ref<Stock[]>([])
   const movements = ref<Movement[]>([])
+  const otherInbounds = ref<OtherInbound[]>([])
   const receipts = ref<Receipt[]>([])
   const goodsReceipts = ref<GoodsReceipt[]>([])
   const purchaseOrders = ref<PurchaseOrder[]>([])
@@ -187,6 +189,14 @@ export function createAppState() {
   })
   const costReversalReasons = ref<Record<number, string>>({})
   const warehouseForm = ref({ code: '', name: '' })
+  const otherInboundForm = ref({
+    warehouse_id: 1,
+    reason: 'other' as 'opening' | 'gift' | 'other',
+    note: '',
+    reference: '',
+    lines: [{ material_id: 0, quantity: '1' }]
+  })
+  const otherInboundReversalReasons = ref<Record<number, string>>({})
   const transferForm = ref({
     from_warehouse_id: 1,
     to_warehouse_id: 0,
@@ -299,6 +309,7 @@ export function createAppState() {
     supplierMaterials,
     stock,
     movements,
+    otherInbounds,
     receipts,
     goodsReceipts,
     purchaseOrders,
@@ -351,6 +362,8 @@ export function createAppState() {
     productionChargeForm,
     costReversalReasons,
     warehouseForm,
+    otherInboundForm,
+    otherInboundReversalReasons,
     transferForm,
     transferReversalReasons,
     salesReturnReversalReasons,

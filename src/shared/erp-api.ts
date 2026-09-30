@@ -16,6 +16,30 @@ export interface Supplier { id: number; name: string }
 export interface Customer { id: number; name: string }
 export interface Material { id: number; sku: string; name: string; unit: string }
 export interface Warehouse { id: number; code: string; name: string }
+// 非采购入库沿用单据确认和冲销模式，不进入采购应付来源。
+export interface OtherInbound {
+  id: number
+  warehouse_id: number
+  warehouse_name: string
+  reason: 'opening' | 'gift' | 'other'
+  note: string
+  reference: string
+  status: 'draft' | 'posted' | 'cancelled'
+  created_by: number
+  created_by_name: string
+  posted_by: number | null
+  posted_by_name: string | null
+  cancelled_by: number | null
+  created_at: string
+  posted_at: string | null
+  cancelled_at: string | null
+  reversal_id: number | null
+  reversal_reason: string | null
+  reversed_by: number | null
+  reversed_by_name: string | null
+  reversed_at: string | null
+  lines: ReceiptLine[]
+}
 export interface Stock extends Material { quantity: string }
 export interface ReceiptLine {
   id: number
@@ -558,11 +582,13 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'receipt_reversal' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'shipment_reversal' | 'sales_return' | 'sales_return_reversal' | 'purchase_return' | 'purchase_return_reversal' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
+  source_type: 'receipt' | 'receipt_reversal' | 'other_inbound' | 'other_inbound_reversal' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'shipment_reversal' | 'sales_return' | 'sales_return_reversal' | 'purchase_return' | 'purchase_return_reversal' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
   source_id: number
   source_line_id: number
   receipt_id: number | null
   receipt_reversal_id: number | null
+  other_inbound_id: number | null
+  other_inbound_reversal_id: number | null
   transfer_id: number | null
   transfer_reversal_id: number | null
   stocktake_id: number | null
@@ -615,6 +641,11 @@ export interface ErpOperations {
   materials: { input: undefined; output: Material[] }
   createMaterial: { input: { sku: string; name: string; unit: string }; output: Material }
   warehouses: { input: undefined; output: Warehouse[] }
+  otherInbounds: { input: undefined; output: OtherInbound[] }
+  createOtherInbound: { input: { warehouse_id: number; reason: 'opening' | 'gift' | 'other'; note: string; reference: string; lines: { material_id: number; quantity: string }[] }; output: OtherInbound }
+  postOtherInbound: { input: { inboundId: number }; output: OtherInbound }
+  cancelOtherInbound: { input: { inboundId: number }; output: OtherInbound }
+  reverseOtherInbound: { input: { inboundId: number; reason: string }; output: OtherInbound }
   createWarehouse: { input: { code: string; name: string }; output: Warehouse }
   receipts: { input: undefined; output: Receipt[] }
   goodsReceipts: { input: undefined; output: GoodsReceipt[] }
