@@ -359,6 +359,10 @@ export async function callBackend(action: keyof ErpOperations, payload: unknown)
   if (!response.ok) {
     if (response.status === 401 && !publicAction) sessionToken = null
     const detail = data && typeof data === 'object' && 'detail' in data ? data.detail : undefined
+    // FastAPI 的默认 404 文案没有操作语境，提示用户核对桌面端与服务端版本。
+    if (response.status === 404 && detail === 'Not Found') {
+      throw new Error('服务端未找到此功能（HTTP 404）。请确认桌面端与服务端版本一致。')
+    }
     throw new Error(typeof detail === 'string' ? detail : `请求失败（HTTP ${response.status}）`)
   }
   if (action === 'login') {
