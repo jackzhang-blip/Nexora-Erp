@@ -102,7 +102,7 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 数据库第 39 版增加成本结算、分摊、来源依赖和独立冲销表。GET `/api/v1/production-costs/settlements` 查看历史；POST 同路径传入 `work_order_id`、`reference`、可选 `note`，仅可结算全部报工、无未处理草稿且净领料全部核价的工单。成本按合格入库数量累计比例分摊到各完工批次，以分为单位处理尾差；没有合格成品时拒绝结算。完工入库在库存计价中返回 `cost_source: production_settlement` 与 `settlement_id`，内部分摊金额不由四位展示单价倒算。POST `/{id}/reverse` 按原因冲销结算，原快照保留；有关联后续有效工单结算时拒绝冲销。结算冻结该工单费用、完工来源和有关核价依赖，先冲销后才能更正。结算、冲销分别要求 `production_cost.settle`、`production_cost.reopen`，默认授予管理员和财务员；查看沿用 `production_cost.view`。成本规则与边界见 [完工成本规则](../docs/production-cost-settlement.md)。
 
-库存计价、生产成本和结算的数据读写已使用 SQLAlchemy 2.0 ORM，金额仍用 Decimal 计算并以文本精确保存；会话统一处理一致读快照、写锁、提交、回滚和连接释放。其他既有业务接口仍有直接 SQL，按 [ORM 迁移清单](../docs/backend-orm-migration.md) 继续转换，尚未完成全后端迁移。客户端与服务端需同时升级。
+账号会话、角色权限、导航图标、供应商与物料资料及供货关系、初始化状态、实例公开信息、库存计价、生产成本和结算的数据读写已使用 SQLAlchemy 2.0 ORM，金额仍用 Decimal 计算并以文本精确保存；会话统一处理一致读快照、写锁、提交、回滚和连接释放。账号资料、角色及审计保存失败时整体回滚；并发创建首位管理员和停用最后管理员仍受写锁保护。供应商分页查询的总数和数据来自同一快照，重复供货绑定保持幂等，业务引用的删除保护与级联关系仍由原数据库约束执行。本次 ORM 转换不改变数据库版本或接口字段。其他既有业务接口仍有直接 SQL，按 [ORM 迁移清单](../docs/backend-orm-migration.md) 继续转换，尚未完成全后端迁移。客户端与服务端需同时升级。
 
 ## 多仓库库存与调拨
 

@@ -1,8 +1,10 @@
 """共享导航图标配置；不改变路由、名称或业务权限。"""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import select
 from app.access.security import current_user, require
-from app.core.database import connection
+from app.core.models import MenuIcon, MenuIconChange
+from app.core.orm import orm_session, model_data
 
 router = APIRouter(prefix="/api/v1/menu-icons")
 # 固定菜单与图标白名单；契约测试核对桌面登记表，防止新增入口遗漏。
@@ -98,21 +100,22 @@ class MenuIconInput(BaseModel):
 @router.get("")
 def list_menu_icons(_: dict = Depends(current_user)) -> list[dict]:
     # 所有登录用户使用同一份配置；是否可进入页面仍取决于原有权限。
-    with connection() as db:
-        return [dict(row) for row in db.execute("SELECT key, icon, version FROM menu_icons ORDER BY key")]
+    with orm_session() as db:
+        return [model_data(row) for row in db.scalars(select(MenuIcon).order_by(MenuIcon.key))]
 
 @router.put("")
 def save_menu_icon(payload: MenuIconInput, actor: dict = Depends(require("users.manage"))) -> dict:
-    with connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        row = db.execute("SELECT icon, version FROM menu_icons WHERE key = ?", (payload.key,)).fetchone()
-        version = row["version"] if row else 0
+    with orm_session(write=True) as db:
+        row = db.get(MenuIcon, payload.key)
+        version = row.version if row else 0
         # 按菜单逐项比较版本，不覆盖其他管理员在读取后保存的修改。
         if version != payload.version:
             raise HTTPException(409, "该图标已被其他管理员修改，请重新加载后再保存")
-        db.execute("""INSERT INTO menu_icons(key, icon, version) VALUES (?, ?, ?)
-                      ON CONFLICT(key) DO UPDATE SET icon=excluded.icon, version=excluded.version""",
-                   (payload.key, payload.icon, version + 1))
-        db.execute("""INSERT INTO menu_icon_changes(menu_key, before_icon, after_icon, changed_by)
-                      VALUES (?, ?, ?, ?)""", (payload.key, row["icon"] if row else None, payload.icon, actor["id"]))
+        before_icon = row.icon if row else None
+        if row is None:
+            db.add(MenuIcon(key=payload.key, icon=payload.icon, version=version + 1))
+        else:
+            row.icon, row.version = payload.icon, version + 1
+        db.add(MenuIconChange(menu_key=payload.key, before_icon=before_icon,
+            after_icon=payload.icon, changed_by=actor['id']))
         return {"key": payload.key, "icon": payload.icon, "version": version + 1}
