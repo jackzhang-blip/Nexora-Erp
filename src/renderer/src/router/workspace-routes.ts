@@ -213,6 +213,7 @@ export const workspaceRouteGroups = [
     icon: 'finance',
     label: '财务管理',
     routes: [
+      { key: 'journals', path: '/workspace/journals', label: '总账凭证', permission: 'journal.view', icon: 'file' },
       {
         key: 'ledgerAccounts',
         path: '/workspace/ledger-accounts',

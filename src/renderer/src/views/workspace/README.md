@@ -60,4 +60,4 @@
 
 `system/MenuManagementView.vue` 提供「菜单管理」（`/workspace/menu-management`），沿用 `users.manage` 权限。一级导航分组与全部页面入口均可从内置图标库选择图标，支持搜索、预览和恢复默认；选择后点击保存才会写入服务端。页面从路由表构建菜单树，配置由 Pinia 共享，保存失败保留编辑内容。配置不支持上传图片，不改变菜单名称、顺序、路由和授权；其他客户端需重新登录或刷新数据后更新。
 
-`finance/LedgerAccountsView.vue` 与 `finance/AccountingPeriodsView.vue` 分别维护总账科目与会计期间，按独立查看、维护权限控制。共享草稿和快照在 Pinia，修改携带旧版本，冲突保留输入；`MetadataHistory.vue` 展示建立、名称、启停及版本变更，读取失败可重试。科目结构和期间日期保存后固定；当前没有凭证、结账和业务期间锁定。
+`finance/LedgerAccountsView.vue` 与 `finance/AccountingPeriodsView.vue` 分别维护总账科目与会计期间，按独立查看、维护权限控制。共享草稿和快照在 Pinia，修改携带旧版本，冲突保留输入；`MetadataHistory.vue` 展示建立、名称、启停及版本变更，读取失败可重试。科目结构和期间日期保存后固定；`JournalsView.vue` 提供手工凭证，`JournalHistory.vue` 展示操作审计；当前没有结账和业务期间锁定。

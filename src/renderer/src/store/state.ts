@@ -5,6 +5,8 @@ import type {
   Customer,
   FinanceAccount,
   LedgerAccount,
+  Journal,
+  JournalInput,
   LedgerAccountInput,
   AccountingPeriod,
   AccountingPeriodInput,
@@ -99,6 +101,11 @@ export function createAppState() {
   const receivablesPayables = ref<ReceivablesPayables | null>(null)
   const financeAccounts = ref<FinanceAccount[]>([])
   const ledgerAccounts = ref<LedgerAccount[]>([])
+  const journals = ref<Journal[]>([])
+  const journalOptions = ref<{ accounts: LedgerAccount[]; periods: AccountingPeriod[] }>({ accounts: [], periods: [] })
+  const journalForm = ref<JournalInput & { id: number | null; version: number }>({
+    id: null, version: 1, reference: '', journal_date: '', note: '', reason: '', lines: []
+  })
   const accountingPeriods = ref<AccountingPeriod[]>([])
   const ledgerAccountForm = ref<LedgerAccountInput & { id: number | null; version: number; is_active: boolean }>({
     id: null, version: 1, code: '', name: '', category: 'asset', normal_balance: 'debit', is_active: true, reason: ''
@@ -386,6 +393,9 @@ export function createAppState() {
     receivablesPayables,
     financeAccounts,
     ledgerAccounts,
+    journals,
+    journalOptions,
+    journalForm,
     accountingPeriods,
     ledgerAccountForm,
     accountingPeriodForm,

@@ -30,6 +30,7 @@ const workspaceRouteComponents = {
   salesReturns: () => import('../views/workspace/sales/SalesReturnsView.vue'),
   finance: () => import('../views/workspace/finance/ReceivablesPayablesView.vue'),
   ledgerAccounts: () => import('../views/workspace/finance/LedgerAccountsView.vue'),
+  journals: () => import('../views/workspace/finance/JournalsView.vue'),
   accountingPeriods: () => import('../views/workspace/finance/AccountingPeriodsView.vue'),
   financePayments: () => import('../views/workspace/finance/PaymentRecordsView.vue'),
   financeSources: () => import('../views/workspace/finance/FinancialSourcesView.vue'),

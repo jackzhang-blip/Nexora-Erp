@@ -1,0 +1,6 @@
+.journal-line-editor input, .journal-line-editor select { width: 100%; box-sizing: border-box; }
+/* 此列表由外层负责横向滚动；弹窗归还焦点时禁止内部隐藏容器纵向滚动移走表头。 */
+.journal-list-table .vxe-table--viewport-wrapper { overflow: clip; }
+.journal-line-editor input[inputmode='decimal'] { font-variant-numeric: tabular-nums; }
+.journal-total { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-variant-numeric: tabular-nums; }
+.journal-amount { white-space: nowrap; font-variant-numeric: tabular-nums; }

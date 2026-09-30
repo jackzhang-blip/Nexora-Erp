@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 40:
+        if version > 41:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -1307,3 +1307,42 @@ def migrate() -> None:
             db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
                            [(role, code) for role in ('admin', 'finance') for code, _, _ in operations])
             db.execute("PRAGMA user_version = 40")
+
+        if version < 41:
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE journals (
+                id INTEGER PRIMARY KEY, reference TEXT NOT NULL UNIQUE,
+                journal_date TEXT NOT NULL, period_id INTEGER NOT NULL REFERENCES accounting_periods(id),
+                note TEXT NOT NULL, currency TEXT NOT NULL DEFAULT 'CNY' CHECK(currency = 'CNY'),
+                status TEXT NOT NULL CHECK(status IN ('draft','submitted','approved','rejected','posted','cancelled')),
+                version INTEGER NOT NULL CHECK(version > 0),
+                reversal_of_id INTEGER REFERENCES journals(id),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                submitted_by INTEGER REFERENCES users(id), reviewed_by INTEGER REFERENCES users(id),
+                posted_by INTEGER REFERENCES users(id), cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                submitted_at TEXT, reviewed_at TEXT, posted_at TEXT, cancelled_at TEXT
+            )""")
+            db.execute("""CREATE UNIQUE INDEX journals_active_reversal ON journals(reversal_of_id)
+                WHERE reversal_of_id IS NOT NULL AND status != 'cancelled'""")
+            db.execute("""CREATE TABLE journal_lines (
+                id INTEGER PRIMARY KEY, journal_id INTEGER NOT NULL REFERENCES journals(id),
+                position INTEGER NOT NULL, account_id INTEGER NOT NULL REFERENCES ledger_accounts(id),
+                account_code TEXT NOT NULL, account_name TEXT NOT NULL, category TEXT NOT NULL,
+                normal_balance TEXT NOT NULL, summary TEXT NOT NULL, debit TEXT NOT NULL, credit TEXT NOT NULL,
+                UNIQUE(journal_id, position)
+            )""")
+            db.execute("""CREATE TABLE journal_changes (
+                id INTEGER PRIMARY KEY, journal_id INTEGER NOT NULL REFERENCES journals(id),
+                action TEXT NOT NULL, before_json TEXT, after_json TEXT NOT NULL, reason TEXT NOT NULL,
+                changed_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.execute("INSERT INTO permission_groups(code,label,parent_code,sort_order) VALUES ('finance.journals','总账凭证','finance',52)")
+            operations = [('journal.view','查看总账凭证'), ('journal.create','建立和修改凭证'),
+                ('journal.submit','提交凭证'), ('journal.review','审核凭证'), ('journal.post','过账凭证'),
+                ('journal.cancel','取消未过账凭证'), ('journal.reverse','建立冲销凭证')]
+            db.executemany("INSERT INTO permissions(code,label,group_code) VALUES (?,?,'finance.journals')", operations)
+            db.executemany("INSERT INTO role_permissions(role_code,permission_code) VALUES (?,?)",
+                [(role, code) for role in ('admin','finance') for code, _ in operations])
+            db.execute("PRAGMA user_version = 41")
