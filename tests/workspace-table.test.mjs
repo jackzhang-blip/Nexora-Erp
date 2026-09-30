@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { createSSRApp, h } from 'vue'
 import { renderToString } from '@vue/server-renderer'
@@ -60,7 +61,8 @@ test('业务页面不再直接创建原生表格或 vxe 表格', () => {
   const component = readFileSync(new URL('../src/renderer/src/components/workspace/WorkspaceTable.vue', import.meta.url), 'utf8')
   assert.match(component, /<VxeTable\b/)
   assert.match(component, /<VxeColumn\b/)
-  for (const path of vueFiles(viewRoot.pathname)) {
+  // Windows 的 URL pathname 会带有额外的盘符前缀，先转换为本机文件路径。
+  for (const path of vueFiles(fileURLToPath(viewRoot))) {
     const source = readFileSync(path, 'utf8')
     assert.doesNotMatch(source, /<table\b|<VxeTable\b/, path)
   }
