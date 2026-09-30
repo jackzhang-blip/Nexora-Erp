@@ -5,9 +5,11 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import func, select
 
 from app.access.security import require
-from app.core.database import connection
+from app.core.models import Warehouse, Material, StockMovement, User
+from app.core.orm import orm_session
 
 router = APIRouter(prefix="/api/v1")
 
@@ -25,31 +27,28 @@ def query_ledger(filters: LedgerQuery,
                  _: dict = Depends(require("inventory.view"))) -> dict:
     if filters.from_date and filters.to_date and filters.to_date < filters.from_date:
         raise HTTPException(422, "结束日期不能早于开始日期")
-    with connection() as db:
-        if filters.warehouse_id and not db.execute(
-            "SELECT 1 FROM warehouses WHERE id = ?", (filters.warehouse_id,)).fetchone():
-            raise HTTPException(422, "仓库不存在")
-        if filters.material_id and not db.execute(
-            "SELECT 1 FROM materials WHERE id = ?", (filters.material_id,)).fetchone():
-            raise HTTPException(422, "物料不存在")
-        # 所有参数都绑定到 SQL；来源筛选后余额表示该来源范围内的累计变动。
-        movement_rows = db.execute("""SELECT sm.id, sm.warehouse_id, w.name AS warehouse_name,
-            sm.material_id, m.sku, m.name AS material_name, m.unit, sm.quantity,
-            sm.source_type, sm.source_id, sm.source_line_id, sm.created_at,
-            u.username AS created_by_name
-            FROM stock_movements sm JOIN warehouses w ON w.id = sm.warehouse_id
-            JOIN materials m ON m.id = sm.material_id
-            LEFT JOIN users u ON u.id = sm.created_by
-            WHERE (? IS NULL OR sm.warehouse_id = ?)
-              AND (? IS NULL OR sm.material_id = ?)
-              AND (? IS NULL OR sm.source_type = ?)
-              AND (? IS NULL OR DATE(sm.created_at) <= ?)
-            ORDER BY sm.id""", (
-                filters.warehouse_id, filters.warehouse_id,
-                filters.material_id, filters.material_id,
-                filters.source_type, filters.source_type,
-                str(filters.to_date) if filters.to_date else None,
-                str(filters.to_date) if filters.to_date else None)).fetchall()
+    with orm_session() as db:
+        if filters.warehouse_id and db.get(Warehouse, filters.warehouse_id) is None:
+            raise HTTPException(422, '仓库不存在')
+        if filters.material_id and db.get(Material, filters.material_id) is None:
+            raise HTTPException(422, '物料不存在')
+        # 筛选条件绑定到模型表达式；来源筛选后的余额仍表示该来源的累计变动。
+        stmt = select(StockMovement.id, StockMovement.warehouse_id, Warehouse.name.label('warehouse_name'),
+            StockMovement.material_id, Material.sku, Material.name.label('material_name'), Material.unit,
+            StockMovement.quantity, StockMovement.source_type, StockMovement.source_id, StockMovement.source_line_id,
+            StockMovement.created_at, User.username.label('created_by_name')).select_from(StockMovement)
+        stmt = stmt.join(Warehouse, Warehouse.id == StockMovement.warehouse_id)
+        stmt = stmt.join(Material, Material.id == StockMovement.material_id)
+        stmt = stmt.outerjoin(User, User.id == StockMovement.created_by)
+        if filters.warehouse_id is not None:
+            stmt = stmt.where(StockMovement.warehouse_id == filters.warehouse_id)
+        if filters.material_id is not None:
+            stmt = stmt.where(StockMovement.material_id == filters.material_id)
+        if filters.source_type is not None:
+            stmt = stmt.where(StockMovement.source_type == filters.source_type)
+        if filters.to_date is not None:
+            stmt = stmt.where(func.date(StockMovement.created_at) <= str(filters.to_date))
+        movement_rows = db.execute(stmt.order_by(StockMovement.id)).mappings().all()
         groups: dict[tuple[int, int], dict] = {}
         rows: list[dict] = []
         for item in movement_rows:
