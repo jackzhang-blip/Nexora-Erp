@@ -8,6 +8,7 @@ import type { WorkspaceRouteKey } from './workspace-routes.ts'
 const workspaceRouteComponents = {
   home: () => import('../views/workspace/home/HomeDashboardView.vue'),
   otherInbounds: () => import('../views/workspace/warehouse/OtherInboundsView.vue'),
+  warehouseOutbounds: () => import('../views/workspace/warehouse/WarehouseOutboundsView.vue'),
   stock: () => import('../views/workspace/warehouse/InventoryOverviewView.vue'),
   transfers: () => import('../views/workspace/warehouse/WarehouseTransfersView.vue'),
   stocktakes: () => import('../views/workspace/warehouse/InventoryStocktakesView.vue'),

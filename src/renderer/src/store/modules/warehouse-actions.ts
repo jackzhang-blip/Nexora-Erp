@@ -10,6 +10,8 @@ export function createWarehouseActions(
     warehouseForm,
     otherInboundForm,
     otherInboundReversalReasons,
+    otherOutboundForm,
+    otherOutboundReversalReasons,
     transferForm,
     transferReversalReasons,
     stocktakeForm,
@@ -47,6 +49,40 @@ export function createWarehouseActions(
       await window.nexora!.callApi('reverseOtherInbound', { inboundId, reason })
       delete otherInboundReversalReasons.value[inboundId]
     }, `其他入库单 #${inboundId} 已冲销。`)
+  }
+
+  // 其他出库草稿不影响库存；仓库确认后再刷新余额与台账。
+  async function createOtherOutbound(): Promise<void> {
+    if (!window.nexora) return
+    await perform(async () => {
+      await window.nexora!.callApi('createOtherOutbound', {
+        ...otherOutboundForm.value,
+        lines: otherOutboundForm.value.lines.map((line) => ({ ...line }))
+      })
+      otherOutboundForm.value = { warehouse_id: otherOutboundForm.value.warehouse_id,
+        reason: 'other', note: '', reference: '', lines: [{ material_id: 0, quantity: '1' }] }
+    }, '其他出库草稿已创建。')
+  }
+
+  async function postWarehouseOutbound(outboundId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('postWarehouseOutbound', { outboundId }),
+      `仓库出库单 #${outboundId} 已确认，库存流水已生成。`)
+  }
+
+  async function cancelOtherOutbound(outboundId: number): Promise<void> {
+    if (!window.nexora) return
+    await perform(() => window.nexora!.callApi('cancelOtherOutbound', { outboundId }),
+      `其他出库单 #${outboundId} 已取消。`)
+  }
+
+  async function reverseOtherOutbound(outboundId: number): Promise<void> {
+    if (!window.nexora) return
+    const reason = otherOutboundReversalReasons.value[outboundId]?.trim() ?? ''
+    await perform(async () => {
+      await window.nexora!.callApi('reverseOtherOutbound', { outboundId, reason })
+      delete otherOutboundReversalReasons.value[outboundId]
+    }, `其他出库单 #${outboundId} 已冲销。`)
   }
 
   async function createWarehouse(): Promise<void> {
@@ -164,6 +200,10 @@ export function createWarehouseActions(
     postOtherInbound,
     cancelOtherInbound,
     reverseOtherInbound,
+    createOtherOutbound,
+    postWarehouseOutbound,
+    cancelOtherOutbound,
+    reverseOtherOutbound,
     saveWarehouse,
     deleteWarehouse,
     createWarehouse,

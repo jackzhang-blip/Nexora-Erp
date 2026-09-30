@@ -39,3 +39,5 @@
 应用业务状态和主题状态由 Pinia 管理。`store/app-store.ts` 的 `useAppStore()` 保留页面现有的响应式 `ref` 取值接口；应用启动与监听器清理由根组件负责。
 
 业务操作的临时成功与错误反馈写入共享 `notice` / `error` 后，由根组件内的 `AppMessageProvider.vue` 统一显示为右上角通知；页面不再占用内容区显示整行横幅。新页面在组件内需要主动提示时使用 `composables/use-app-message.ts`，不要直接建立第二个消息提供器。底栏继续显示服务端连接状态。
+
+`warehouse/WarehouseOutboundsView.vue` 展示其他出库草稿、仓库确认、取消和冲销；库存仅在确认时变化。

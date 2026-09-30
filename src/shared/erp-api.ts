@@ -40,6 +40,31 @@ export interface OtherInbound {
   reversed_at: string | null
   lines: ReceiptLine[]
 }
+// 出库确认才扣库存；后续采购退货沿用仓库确认单。
+export interface WarehouseOutbound {
+  id: number
+  warehouse_id: number
+  warehouse_name: string
+  source_kind: 'other' | 'purchase_return'
+  reason: 'scrap' | 'sample' | 'other' | 'purchase_return'
+  note: string
+  reference: string
+  status: 'draft' | 'posted' | 'cancelled'
+  created_by: number
+  created_by_name: string
+  posted_by: number | null
+  posted_by_name: string | null
+  cancelled_by: number | null
+  created_at: string
+  posted_at: string | null
+  cancelled_at: string | null
+  reversal_id: number | null
+  reversal_reason: string | null
+  reversed_by: number | null
+  reversed_by_name: string | null
+  reversed_at: string | null
+  lines: ReceiptLine[]
+}
 export interface Stock extends Material { quantity: string }
 export interface ReceiptLine {
   id: number
@@ -582,13 +607,15 @@ export interface Movement {
   material_name: string
   unit: string
   quantity: string
-  source_type: 'receipt' | 'receipt_reversal' | 'other_inbound' | 'other_inbound_reversal' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'shipment_reversal' | 'sales_return' | 'sales_return_reversal' | 'purchase_return' | 'purchase_return_reversal' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
+  source_type: 'receipt' | 'receipt_reversal' | 'other_inbound' | 'other_inbound_reversal' | 'other_outbound' | 'other_outbound_reversal' | 'transfer_out' | 'transfer_in' | 'transfer_reversal_out' | 'transfer_reversal_in' | 'stocktake' | 'stocktake_reversal' | 'shipment' | 'shipment_reversal' | 'sales_return' | 'sales_return_reversal' | 'purchase_return' | 'purchase_return_reversal' | 'material_issue' | 'material_return' | 'production_completion' | 'production_completion_reversal'
   source_id: number
   source_line_id: number
   receipt_id: number | null
   receipt_reversal_id: number | null
   other_inbound_id: number | null
   other_inbound_reversal_id: number | null
+  other_outbound_id: number | null
+  other_outbound_reversal_id: number | null
   transfer_id: number | null
   transfer_reversal_id: number | null
   stocktake_id: number | null
@@ -646,6 +673,11 @@ export interface ErpOperations {
   postOtherInbound: { input: { inboundId: number }; output: OtherInbound }
   cancelOtherInbound: { input: { inboundId: number }; output: OtherInbound }
   reverseOtherInbound: { input: { inboundId: number; reason: string }; output: OtherInbound }
+  warehouseOutbounds: { input: undefined; output: WarehouseOutbound[] }
+  createOtherOutbound: { input: { warehouse_id: number; reason: 'scrap' | 'sample' | 'other'; note: string; reference: string; lines: { material_id: number; quantity: string }[] }; output: WarehouseOutbound }
+  postWarehouseOutbound: { input: { outboundId: number }; output: WarehouseOutbound }
+  cancelOtherOutbound: { input: { outboundId: number }; output: WarehouseOutbound }
+  reverseOtherOutbound: { input: { outboundId: number; reason: string }; output: WarehouseOutbound }
   createWarehouse: { input: { code: string; name: string }; output: Warehouse }
   receipts: { input: undefined; output: Receipt[] }
   goodsReceipts: { input: undefined; output: GoodsReceipt[] }

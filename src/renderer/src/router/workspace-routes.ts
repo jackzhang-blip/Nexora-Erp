@@ -41,6 +41,13 @@ export const workspaceRouteGroups = [
         icon: 'archive'
       },
       {
+        key: 'warehouseOutbounds',
+        path: '/workspace/warehouse-outbounds',
+        label: '仓库出库',
+        permission: 'other_outbound.view',
+        icon: 'archive'
+      },
+      {
         key: 'stock',
         path: '/workspace/stock',
         label: '库存总览',

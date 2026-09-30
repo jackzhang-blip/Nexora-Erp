@@ -39,7 +39,7 @@ def connection() -> Iterator[sqlite3.Connection]:
 def migrate() -> None:
     with connection() as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version > 31:
+        if version > 32:
             raise RuntimeError(f"数据库版本 {version} 高于当前程序支持的版本")
         if version == 0:
             # 整个初始迁移放在一个事务中，避免中途失败留下半套表。
@@ -989,3 +989,54 @@ def migrate() -> None:
             db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
                            [("admin", "other_inbound.reverse")])
             db.execute("PRAGMA user_version = 31")
+
+        if version < 32:
+            # 仓库出库单先承载其他出库；后续采购退货可关联同一单据类型。
+            if not db.in_transaction:
+                db.execute("BEGIN IMMEDIATE")
+            db.execute("""CREATE TABLE warehouse_outbounds (
+                id INTEGER PRIMARY KEY,
+                warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+                source_kind TEXT NOT NULL DEFAULT 'other' CHECK (source_kind IN ('other', 'purchase_return')),
+                reason TEXT NOT NULL,
+                note TEXT NOT NULL,
+                reference TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'posted', 'cancelled')),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                posted_by INTEGER REFERENCES users(id),
+                cancelled_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                posted_at TEXT,
+                cancelled_at TEXT
+            )""")
+            db.execute("""CREATE TABLE warehouse_outbound_lines (
+                id INTEGER PRIMARY KEY,
+                outbound_id INTEGER NOT NULL REFERENCES warehouse_outbounds(id),
+                material_id INTEGER NOT NULL REFERENCES materials(id),
+                quantity TEXT NOT NULL,
+                UNIQUE (outbound_id, material_id)
+            )""")
+            db.execute("""CREATE TABLE warehouse_outbound_reversals (
+                id INTEGER PRIMARY KEY,
+                outbound_id INTEGER NOT NULL UNIQUE REFERENCES warehouse_outbounds(id),
+                reason TEXT NOT NULL,
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            db.execute("""INSERT INTO permission_groups(code, label, parent_code, sort_order)
+                VALUES ('warehouse.other_outbound', '其他出库', 'warehouse', 130)""")
+            outbound_permissions = (
+                ("other_outbound.view", "查看仓库出库"),
+                ("other_outbound.create", "创建其他出库单"),
+                ("other_outbound.post", "确认仓库出库"),
+                ("other_outbound.cancel", "取消出库草稿"),
+                ("other_outbound.reverse", "冲销其他出库"),
+            )
+            db.executemany("INSERT INTO permissions(code, label, group_code) VALUES (?, ?, 'warehouse.other_outbound')",
+                           outbound_permissions)
+            db.executemany("INSERT INTO role_permissions(role_code, permission_code) VALUES (?, ?)",
+                           [(role, code) for role in ("admin", "warehouse")
+                            for code in ("other_outbound.view", "other_outbound.create",
+                                         "other_outbound.post", "other_outbound.cancel")])
+            db.execute("INSERT INTO role_permissions(role_code, permission_code) VALUES ('admin', 'other_outbound.reverse')")
+            db.execute("PRAGMA user_version = 32")
