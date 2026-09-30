@@ -1,0 +1,6 @@
+.ledger-report-money { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ledger-reports-page .ledger-report-note { color: #596b82; margin: 0; line-height: 1.6; }
+.ledger-report-caption { font-variant-numeric: tabular-nums; }
+/* 横向滚动交给工作台外层；详情关闭时不让内部隐藏滚动移走表头。 */
+.ledger-report-table .vxe-table--viewport-wrapper { overflow: clip; }
+.ledger-reports-page > form { min-width: 0; width: 100%; }
