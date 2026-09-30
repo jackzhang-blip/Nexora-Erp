@@ -29,6 +29,7 @@
 | 接口 | 权限 | 行为 |
 | --- | --- | --- |
 | GET 空路径 | `journal.view` | 凭证列表及分录、作者、冲销关联 |
+| GET `/{id}` | `journal.view` | 单张详情，用于已过账总账报表下钻 |
 | GET `/options` | `journal.create` | 启用科目与开放期间选项，无需资料维护权限 |
 | POST 空路径 | `journal.create` | 建立草稿，返回 201 |
 | PUT `/{id}` | `journal.create` | 修改手工草稿或驳回凭证 |

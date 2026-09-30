@@ -57,6 +57,18 @@ export interface Journal {
   lines: JournalLine[]; total_debit: string; total_credit: string
 }
 export interface JournalChange extends FinanceMetadataChange<Omit<Journal, 'period_code' | 'created_by_name' | 'reversal_journal_id' | 'author_ids'>> { action: JournalAction | 'create' | 'update' }
+export interface LedgerReportQuery {
+  kind: 'trial_balance' | 'account_ledger'; from_date: string; to_date: string; account_id: number | null
+}
+export interface LedgerReportTotals {
+  opening_debit: string; opening_credit: string; debit: string; credit: string
+  closing_debit: string; closing_credit: string; balanced?: boolean; code?: string; name?: string
+}
+export interface LedgerReportResult {
+  kind: LedgerReportQuery['kind']; filters: LedgerReportQuery
+  columns: { key: string; title: string }[]; rows: Record<string, string>[]
+  totals: LedgerReportTotals; periods: AccountingPeriod[]; generated_at: string; csv: string
+}
 export interface AccountingPeriodInput {
   code: string; name: string; start_date: string; end_date: string; reason: string
 }
@@ -907,6 +919,9 @@ export interface ErpOperations {
   financeAccounts: { input: undefined; output: FinanceAccount[] }
   ledgerAccounts: { input: undefined; output: LedgerAccount[] }
   journals: { input: undefined; output: Journal[] }
+  journalDetail: { input: { id: number }; output: Journal }
+  ledgerReportOptions: { input: undefined; output: LedgerAccount[] }
+  queryLedgerReport: { input: LedgerReportQuery; output: LedgerReportResult }
   journalOptions: { input: undefined; output: { accounts: LedgerAccount[]; periods: AccountingPeriod[] } }
   createJournal: { input: JournalInput; output: Journal }
   updateJournal: { input: JournalInput & { id: number; version: number }; output: Journal }

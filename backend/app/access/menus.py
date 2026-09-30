@@ -24,6 +24,7 @@ MENU_KEYS = {
     'route:financeSources',
     'route:ledgerAccounts',
     'route:journals',
+    'route:ledgerReports',
     'route:accountingPeriods',
     'route:goodsReceipts',
     'route:home',

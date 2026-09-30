@@ -494,6 +494,14 @@ def reverse(
         raise HTTPException(409, "凭证依据编号已使用") from None
 
 
+@router.get("/{journal_id}")
+def journal_detail(
+    journal_id: int = Path(gt=0), _: dict = Depends(require("journal.view"))
+) -> dict:
+    with orm_session() as db:
+        return view(db, get_journal(db, journal_id))
+
+
 @router.get("/{journal_id}/changes")
 def journal_changes(
     journal_id: int = Path(gt=0), _: dict = Depends(require("journal.view"))
