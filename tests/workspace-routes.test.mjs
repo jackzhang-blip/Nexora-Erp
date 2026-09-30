@@ -13,7 +13,7 @@ test('每个工作台页面只有一个路由，且都对应实际页面', () =>
   const registered = router.getRoutes().filter((route) => route.name)
 
   // 路由记录由同一张业务表生成，组件由 Vue Router 装载，避免侧栏出现空白页面。
-  assert.equal(workspaceRoutes.length, 33)
+  assert.equal(workspaceRoutes.length, 34)
   assert.deepEqual(new Set(registered.map(route => route.name)), new Set(workspaceRoutes.map(route => route.key)))
   assert.ok(registered.every((route) => route.components?.default))
   assert.match(shell, /<RouterView \/>/)
@@ -23,9 +23,9 @@ test('每个工作台页面只有一个路由，且都对应实际页面', () =>
 
 test('侧栏按查看权限分类，隐藏空分类及未授权页面', () => {
   const groups = visibleRouteGroups(['sales.view', 'production_cost.view'])
-  assert.deepEqual(groups.map(group => group.label), ['工作台', '销售管理', '生产管理', '系统管理'])
+  assert.deepEqual(groups.map(group => group.label), ['工作台', '基础资料', '销售管理', '生产管理', '系统管理'])
   assert.deepEqual(groups.flatMap(group => group.routes.map(route => route.key)), [
-    'home', 'sales', 'shipments', 'salesReturns', 'productionCosts', 'settings'
+    'home', 'customers', 'sales', 'shipments', 'salesReturns', 'productionCosts', 'settings'
   ])
   assert.equal(canVisitRoute(routeByKey('home'), []), true)
   assert.equal(canVisitRoute(routeByKey('stock'), ['sales.view']), false)

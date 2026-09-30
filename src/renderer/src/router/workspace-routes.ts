@@ -109,6 +109,14 @@ export const workspaceRouteGroups = [
         permission: 'inventory.view',
         icon: 'archive'
       },
+      // 客户列表沿用服务端销售查看权限，新增仍单独检查客户管理权限。
+      {
+        key: 'customers',
+        path: '/workspace/customers',
+        label: '客户资料',
+        permission: 'sales.view',
+        icon: 'team'
+      },
       {
         key: 'warehouses',
         path: '/workspace/warehouses',
