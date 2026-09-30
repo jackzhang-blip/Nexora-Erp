@@ -76,7 +76,10 @@ def receipt_data(db: sqlite3.Connection, receipt_id: int) -> dict:
         detailed_lines.append({**dict(line), "returned_quantity": str(returned),
                                "returnable_quantity": str(Decimal(0) if row["reversal_id"] else
                                                           Decimal(line["quantity"]) - returned)})
+    goods_receipt = db.execute("SELECT id FROM purchase_goods_receipts WHERE inbound_receipt_id = ?",
+                               (receipt_id,)).fetchone()
     return {**dict(row), "purchase_order_id": linked_order_for_receipt(db, receipt_id),
+            "goods_receipt_id": goods_receipt["id"] if goods_receipt else None,
             "lines": detailed_lines}
 
 @router.get("/receipts")

@@ -4,6 +4,7 @@ import type {
   Customer,
   FinanceAccount,
   FinancialEntry,
+  GoodsReceipt,
   Material,
   MaterialIssue,
   MaterialReturn,
@@ -61,6 +62,7 @@ export function createAppState() {
   const stock = ref<Stock[]>([])
   const movements = ref<Movement[]>([])
   const receipts = ref<Receipt[]>([])
+  const goodsReceipts = ref<GoodsReceipt[]>([])
   const purchaseOrders = ref<PurchaseOrder[]>([])
   const purchaseRequests = ref<PurchaseRequest[]>([])
   const purchaseReturns = ref<PurchaseReturn[]>([])
@@ -97,6 +99,13 @@ export function createAppState() {
     purchase_order_id: null as number | null,
     reference: '',
     lines: [{ material_id: 0, quantity: '1' }]
+  })
+  const goodsReceiptForm = ref({
+    purchase_order_id: 0,
+    warehouse_id: 1,
+    reference: '',
+    lines: [] as { purchase_order_line_id: number; accepted_quantity: string;
+      rejected_quantity: string; rejection_reason: string }[]
   })
   const purchaseForm = ref({
     supplier_id: 0,
@@ -291,6 +300,7 @@ export function createAppState() {
     stock,
     movements,
     receipts,
+    goodsReceipts,
     purchaseOrders,
     purchaseRequests,
     purchaseReturns,
@@ -322,6 +332,7 @@ export function createAppState() {
     materialForm,
     supplierForm,
     receiptForm,
+    goodsReceiptForm,
     purchaseForm,
     purchaseRequestForm,
     requestConversionForm,

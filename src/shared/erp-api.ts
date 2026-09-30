@@ -34,6 +34,7 @@ export interface Receipt {
   supplier_id: number
   supplier_name: string
   purchase_order_id: number | null
+  goods_receipt_id: number | null
   warehouse_id: number
   warehouse_name: string
   reference: string
@@ -49,6 +50,40 @@ export interface Receipt {
   reversed_by_name: string | null
   reversed_at: string | null
   lines: ReceivedLine[]
+}
+// 收货单记录合格与拒收事实；只有合格数量会生成待确认入库单。
+export interface GoodsReceiptLine {
+  id: number
+  purchase_order_line_id: number
+  material_id: number
+  sku: string
+  material_name: string
+  unit: string
+  accepted_quantity: string
+  rejected_quantity: string
+  rejection_reason: string
+}
+export interface GoodsReceipt {
+  id: number
+  purchase_order_id: number
+  supplier_id: number
+  supplier_name: string
+  warehouse_id: number
+  warehouse_name: string
+  inbound_receipt_id: number | null
+  inbound_status: 'draft' | 'posted' | null
+  inbound_reversal_id: number | null
+  reference: string
+  status: 'draft' | 'confirmed' | 'cancelled'
+  created_by: number
+  created_by_name: string
+  confirmed_by: number | null
+  confirmed_by_name: string | null
+  cancelled_by: number | null
+  created_at: string
+  confirmed_at: string | null
+  cancelled_at: string | null
+  lines: GoodsReceiptLine[]
 }
 // 申请的已转数量包含未取消的订单草稿，由服务端在写事务内核算。
 export interface PurchaseRequestLine extends ReceiptLine {
@@ -582,6 +617,10 @@ export interface ErpOperations {
   warehouses: { input: undefined; output: Warehouse[] }
   createWarehouse: { input: { code: string; name: string }; output: Warehouse }
   receipts: { input: undefined; output: Receipt[] }
+  goodsReceipts: { input: undefined; output: GoodsReceipt[] }
+  createGoodsReceipt: { input: { purchase_order_id: number; warehouse_id: number; reference: string; lines: { purchase_order_line_id: number; accepted_quantity: string; rejected_quantity: string; rejection_reason: string }[] }; output: GoodsReceipt }
+  confirmGoodsReceipt: { input: { goodsReceiptId: number }; output: GoodsReceipt }
+  cancelGoodsReceipt: { input: { goodsReceiptId: number }; output: GoodsReceipt }
   createReceipt: {
     input: { supplier_id: number; warehouse_id: number; purchase_order_id: number | null; reference: string; lines: { material_id: number; quantity: string }[] }
     output: Receipt

@@ -15,6 +15,7 @@ const workspaceRouteComponents = {
   warehouses: () => import('../views/workspace/catalog/WarehousesView.vue'),
   purchaseRequests: () => import('../views/workspace/purchase/PurchaseRequestsView.vue'),
   purchase: () => import('../views/workspace/purchase/PurchaseOrdersView.vue'),
+  goodsReceipts: () => import('../views/workspace/purchase/PurchaseGoodsReceiptsView.vue'),
   receipts: () => import('../views/workspace/purchase/PurchaseReceiptsView.vue'),
   purchaseReturns: () => import('../views/workspace/purchase/PurchaseReturnsView.vue'),
   sales: () => import('../views/workspace/sales/SalesOrdersView.vue'),

@@ -9,7 +9,7 @@
 | `app/access/` | 账号登录、用户、角色、权限及授权检查。 |
 | `app/catalog/` | 供应商与物料基础资料。 |
 | `app/core/` | SQLite 连接和数据库迁移。 |
-| `app/purchase/` | 采购申请、采购订单、入库单、采购退货。 |
+| `app/purchase/` | 采购申请、采购订单、采购收货、入库单、采购退货。 |
 | `app/inventory/` | 仓库、调拨、盘点、库存余额和流水。 |
 | `app/sales/` | 客户、销售订单、出库、销售退货。 |
 | `app/production/` | BOM、工单、领退料、报工、工单成本。 |
@@ -56,6 +56,8 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 `POST /api/v1/purchase-orders` 可选传 `purchase_request_id`，并为每条明细传 `purchase_request_line_id`。服务端在写事务内校验申请已批准、物料匹配以及数量不超过待转量；未取消的订单草稿也占用申请额度，取消订单后释放。每张订单只关联一张申请，同一申请可按明细和数量拆成多张订单、分别选择供应商；不关联申请的直接采购继续可用。旧订单保留原样，不推断申请来源。申请和订单本身均不改变库存或应付。
 
 `POST /api/v1/purchase-orders` 创建含供应商、物料、数量与单价的草稿；`POST /api/v1/purchase-orders/{id}/confirm` 确认后才能关联入库单；未入库的订单可调用 `/cancel` 取消。`GET /api/v1/purchase-orders` 返回订单金额、每行已入库与剩余数量。金额按每行数量乘单价后四舍五入到分；当前只按人民币展示。创建、确认和取消分别需要 `purchase_order.create`、`purchase_order.confirm`、`purchase_order.cancel` 权限。
+
+数据库第 30 版新增采购收货单。`POST /api/v1/purchase-goods-receipts` 从已确认或部分入库的订单建立草稿，逐行记录合格实收、拒收数量与拒收原因；`GET` 查询单据，`/{id}/confirm` 确认收货，`/{id}/cancel` 取消草稿。确认时在同一写事务内重核订单剩余量及其他已确认收货生成的待入库数量；合格数量自动生成唯一的采购入库草稿，仓库再调用现有 `/receipts/{id}/post` 确认实物入库。全数拒收仅保留收货记录，不生成空入库单；拒收数量不占用订单余量。确认收货不增加库存或应付，入库确认后才增加；重复确认及并发超量返回 409。查看、创建、确认、取消分别要求 `purchase_receiving.view`、`purchase_receiving.create`、`purchase_receiving.confirm`、`purchase_receiving.cancel`；管理员与仓库员默认可确认，采购员默认可建单及取消。旧 `/receipts` 直接建单接口继续供旧客户端使用，桌面采购流程改从采购收货进入。
 
 新入库单可选填 `purchase_order_id`。服务端核对供应商、物料及剩余数量，确认入库时在同一写事务内重新核算并更新订单为“部分入库”或“全部入库”，防止多个草稿使订单超量。旧入库单没有采购订单关联，仍可正常确认。已入库订单不可取消。管理员可用 `POST /api/v1/receipts/{id}/reverse` 填写原因，一次性冲销误确认入库：原仓库存须足够，所有已确认采购退货必须先冲销；随后追加关联原入库明细的负库存与负应付来源，订单已入库数量和状态按有效入库重新计算。原单和原流水保留，重复冲销返回 409；已冲销入库不可再创建或确认采购退货。历史无价入库的原应付及冲销仍显示未知金额。
 

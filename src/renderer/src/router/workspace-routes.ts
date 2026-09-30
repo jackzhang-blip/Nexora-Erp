@@ -102,6 +102,13 @@ export const workspaceRouteGroups = [
         icon: 'file'
       },
       {
+        key: 'goodsReceipts',
+        path: '/workspace/purchase-goods-receipts',
+        label: '采购收货',
+        permission: 'purchase_receiving.view',
+        icon: 'file'
+      },
+      {
         key: 'receipts',
         path: '/workspace/receipts',
         label: '采购入库',

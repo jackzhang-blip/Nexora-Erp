@@ -146,6 +146,10 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'warehouses': return { method: 'GET', path: '/api/v1/warehouses' }
     case 'createWarehouse': return { method: 'POST', path: '/api/v1/warehouses', body: payload }
     case 'receipts': return { method: 'GET', path: '/api/v1/receipts' }
+    case 'goodsReceipts': return { method: 'GET', path: '/api/v1/purchase-goods-receipts' }
+    case 'createGoodsReceipt': return { method: 'POST', path: '/api/v1/purchase-goods-receipts', body: payload }
+    case 'confirmGoodsReceipt': return { method: 'POST', path: `/api/v1/purchase-goods-receipts/${positiveId(payload, 'goodsReceiptId')}/confirm` }
+    case 'cancelGoodsReceipt': return { method: 'POST', path: `/api/v1/purchase-goods-receipts/${positiveId(payload, 'goodsReceiptId')}/cancel` }
     case 'createReceipt': return { method: 'POST', path: '/api/v1/receipts', body: payload }
     case 'postReceipt': return { method: 'POST', path: `/api/v1/receipts/${positiveId(payload, 'receiptId')}/post` }
     case 'reverseReceipt': {
