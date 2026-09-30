@@ -32,7 +32,7 @@ def setup(client):
 def test_migrated_modules_do_not_reintroduce_sql_connections():
     root = Path(__file__).resolve().parents[1] / 'app'
     for relative in ('access/security.py', 'access/routes.py', 'access/menus.py',
-                     'catalog/routes.py', 'service/routes.py'):
+                     'catalog/routes.py', 'service/routes.py', 'finance/routes.py'):
         tree = ast.parse((root / relative).read_text('utf-8'))
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module == 'app.core.database':
