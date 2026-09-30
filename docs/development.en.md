@@ -2,7 +2,7 @@
 
 [简体中文](development.zh-CN.md) · [Project overview](../README.en.md)
 
-This guide covers setup, architecture, business boundaries, testing and building. Status reflects verified main commit `0a834fd` on 2026-10-01, including merged manual journals and ledger reports. This version adds formal opening balances with independent review and confirmation. Bilingual documentation does not mean the application supports an English UI.
+This guide covers setup, architecture, business boundaries, testing and building. Status reflects verified main commit `9f5a8cf` on 2026-10-01, including merged manual journals, ledger reports and independently reviewed/confirmed opening balances. This version adds period closing and historical cost locks, retaining the later mainline website perspective and composition fixes. Bilingual documentation does not mean the application supports an English UI.
 
 ## Environment and startup
 
@@ -95,17 +95,20 @@ Put new APIs in their feature directory and assemble them in `main.py`, using ex
 | Sales | Partial shipments check remaining quantity/stock in one transaction; returns reference original lines/prices. | Refunds are separately recorded, not automatically paid. |
 | Warehousing | Single posting, two-sided transfers, stocktake snapshots/change checks; adjustments need independent approval and warehouse posting. | Not a general approval engine; full physical batch tracing remains future work. |
 | Reversals | Preserve originals, append inverse movements/amount sources and reasons; check stock, dependent returns and duplicate correction. | Rules differ by document; deleting history/overwriting balances is not correction. |
-| Valuation | Company-level material moving average; returns/transfers use source costs; eligible unknown inputs can be manually valued with revision history. | No period lock; revisions may change historical cost. Variances and formal COGS journals remain. |
+| Valuation | Company-level material moving average; returns/transfers use source costs; eligible unknown inputs can be manually valued with revision history. | Revisions may change open-period costs; historical valuation and allocation are locked through the last closed period. Variances and formal COGS journals remain. |
 | Production | BOM versions/cycle checks, frozen requirements, partial issues/returns/completions and accepted-goods receipt; consumed reporting requirements cannot be returned. | Targets include rejected quantities; rework, MRP, scheduling and full quality management remain. |
 | Finished-goods cost | Inventory issue price first, manual valuation when unknown; material/labor/overhead allocated by accepted quantity with rounding reconciliation. | Includes rejected consumption; reverse dependent settlements before corrections. WIP/cross-period cost remain. |
 | Operational finance | Sources produce receivables/payables and order balances; manual settlements/refunds have limits, reversals append inverse records. | Does not prove bank receipt; RMB scope, taxes/multiple currencies/subsidiary opening balances remain. |
-| Ledger foundations | Flat account structures are fixed; inclusive periods cannot overlap. Name/activation changes carry versions, reasons and transactional auditing. | No auxiliary accounting or closing. “Open” period records do not lock operations. |
+| Ledger foundations | Flat account structures are fixed; inclusive periods cannot overlap. Name/activation changes carry versions, reasons and transactional auditing. | Closing/reopening is provided separately; auxiliary accounting remains. |
+| Period closing | Close ended periods in order, reopen in reverse order; archive balances/cost sources and lock historical valuation/allocations. | Does not generate business journals, profit transfer or statutory statements. |
 | Reports | Purchasing execution, receiving/returns, stock balances/movements and CSV. | Business summaries are not formal financial statements. Dashboard demo charts are not actual business metrics. |
 | Posted ledger reports | Trial balance, account ledgers, journal/reversal drill-down and snapshot CSV, current activity counts posted journals only, while confirmed opening balances are carried separately. | Without formal opening setup, openings only accumulate historical posted entries and do not represent business acceptance; no balance sheet or income statement. |
 
 Formal opening setup is available before any journal is posted, with independent review/confirmation, versioned auditing and reversal before posting. It does not add current activity or generate subsidiary opening balances. See [opening balance rules (Chinese)](opening-balances.md).
 
-See [cost settlement rules (Chinese)](production-cost-settlement.md), [ledger foundations (Chinese)](ledger-foundation.md) and [manual journals (Chinese)](manual-journals.md). Manual journals support balanced entries, independent review, posting and linked reversals, with fixed posted snapshots and auditing. Automatic business journals, closing, formal statements, quality/after-sales, CRM, equipment, HR, multiple organizations, MySQL and offline synchronization remain future work. Entry conditions are in the [expansion assessment (Chinese)](erp-expansion-assessment.md).
+See [cost settlement rules (Chinese)](production-cost-settlement.md), [ledger foundations (Chinese)](ledger-foundation.md) and [manual journals (Chinese)](manual-journals.md). Manual journals support balanced entries, independent review, posting and linked reversals, with fixed posted snapshots and auditing. Automatic business journals, profit transfer, formal statements, quality/after-sales, CRM, equipment, HR, multiple organizations, MySQL and offline synchronization remain future work. Entry conditions are in the [expansion assessment (Chinese)](erp-expansion-assessment.md).
+
+Closing conditions, historical locks and archive boundaries are in [period closing rules (Chinese)](period-closing.md).
 
 Posted ledger query rules and source tracing are described in [posted ledger reports (Chinese)](ledger-reports.md).
 
@@ -203,7 +206,7 @@ Actions installers are test builds, unsigned/unnotarized, and may trigger SmartS
 
 ## Website and HTML documentation
 
-The website is static HTML/CSS. `scripts/build-docs-site.mjs` uses Marked to convert version-controlled Markdown without business APIs, a database or browser-side Markdown compilation. Chinese lives at `/zh-CN/`, English at `/en/`, with `development.html` for each guide; the root opens Chinese.
+The website uses a static HTML/CSS/JavaScript build. `scripts/build-docs-site.mjs` uses Marked to convert version-controlled Markdown without business APIs, a database or browser-side Markdown compilation. Chinese lives at `/zh-CN/`, English at `/en/`, with `development.html` for each guide; the root opens Chinese.
 
 | File | Maintenance |
 | --- | --- |
@@ -217,9 +220,9 @@ Build with `npm run docs:build`, then run `python -m http.server 4173 --director
 
 The homepage contains an independent interactive sandbox. A full receipt window appears first; inventory and payable windows enter from the right as the page scrolls, with WebGL paths connected to actual source anchors. It supports multiple receipts and materials, warehouse/supplier selection, receipt confirmation, stock filtering and tracing, and partial/full demo payments. Quantities use three fixed decimal places; money uses integer cents. Drafts do not produce movements, confirmation cannot repeat, confirmed receipts can only be copied to drafts, and payments cannot exceed the balance.
 
-`sandbox.mjs` manages business state, `sandbox-ui.mjs` renders and mounts HTML controls, `motion.mjs` handles the camera and paths only, and `sandbox.css` styles the stage. Scrolling never changes business data, and no ERP service is contacted. In the same tab, a language-link click transfers data once through `sessionStorage`; refreshing restores the seed. Navigation still works if storage is unavailable. Pause, steps and expanded windows enter manual mode; resume smoothly aligns to scroll position. Mobile windows are stacked vertically; reduced motion disables movement. Without JavaScript, static business examples and documentation remain available.
+`sandbox.mjs` manages business state, `sandbox-ui.mjs` renders and mounts HTML controls, `scene-geometry.mjs` defines the shared HTML/WebGL projection, `motion.mjs` handles the camera and paths only, and `sandbox.css` styles the stage. Scrolling never changes business data, and no ERP service is contacted. In the same tab, a language-link click transfers data once through `sessionStorage`; refreshing restores the seed. Navigation still works if storage is unavailable. Pause, steps and expanded windows enter manual mode; resume smoothly aligns to scroll position. Mobile windows are stacked vertically; reduced motion disables movement. Without JavaScript, static business examples and documentation remain available.
 
-`webgl-stage.mjs` uses native WebGL for perspective frames, metallic highlights, contact shadows, fading reflections and source connections. HTML controls share the same camera layout. GPU layers never intercept input or draw continuously while idle. Context loss or unavailable WebGL restores the CSS/SVG fallback without resetting data. Mobile and reduced-motion modes retain static relationships without creating GPU contexts.
+`webgl-stage.mjs` uses native WebGL for perspective frames, metallic highlights, contact shadows, fading reflections and source connections. HTML controls share the 1400px camera layout. Entire desktop windows scale with their text sidebars intact; side windows use opposing 30° angles and stock uses 4°. Actual HTML mirrors fade below each base. GPU layers never intercept input or draw continuously while idle. Context loss or unavailable WebGL restores the CSS/SVG fallback without resetting data. Mobile and reduced-motion modes retain static relationships without creating GPU contexts.
 
 Run `node --test tests/docs-site.test.mjs tests/docs-sandbox.test.mjs tests/docs-webgl.test.mjs` to check page paths, business rules, motion stages and GPU lifecycle. See the [website motion and sandbox guide](site/motion-proposal.en.md).
 
