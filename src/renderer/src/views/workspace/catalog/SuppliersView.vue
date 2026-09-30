@@ -57,14 +57,13 @@ async function submitBinding(): Promise<void> {
 
 <template>
   <section class="stack catalog-page">
-    <WorkspaceTable :data="filtered" title="供应商列表" :columns="supplierColumns" :min-table-width="360">
-      <template #heading>
-        <p class="eyebrow">SUPPLIERS</p><h2>供应商列表 <span class="pill">{{ suppliers.length }}</span></h2>
-      </template>
+    <!-- 主标题和说明统一由工作台外壳展示。 -->
+    <WorkspaceTable :show-title="false" :data="filtered" title="供应商列表" :columns="supplierColumns" :min-table-width="360">
       <template #actions>
         <button v-if="can('catalog.manage')" class="primary" :disabled="busy || connectionLost" @click="edit()">新增供应商</button>
       </template>
       <template #filters>
+        <span class="muted">共 {{ suppliers.length }} 条</span>
         <label class="catalog-search">搜索供应商<input v-model="query" placeholder="输入名称搜索" /></label>
       </template>
       <template #beforeTable>
@@ -77,7 +76,7 @@ async function submitBinding(): Promise<void> {
           <div class="form-actions"><button class="primary" :disabled="busy || connectionLost">保存</button><button class="secondary" type="button" :disabled="busy" @click="showForm = false">取消</button></div>
         </form>
         </NModal>
-        <p class="muted">选择“供货物料”管理供应商与现有物料的绑定。</p>
+
       </template>
       <template #cell-name="{ row: item }">{{ item.name }}</template>
       <template #cell-actions="{ row: item }"><div class="catalog-actions"><button class="text-button" type="button" @click="selectedId = item.id">供货物料</button>

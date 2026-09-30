@@ -42,6 +42,8 @@ Windows 可把 `python3` 改为 `python`。如果 Python 不在默认路径，�
 
 新增或修改前端界面时，请遵循 [前端 UI 开发规范](docs/frontend-ui-guidelines.md)。
 
+工作台各业务模块统一使用 `WorkspaceTable` 展示列表：青色 Nexora 标识、页面大标题和说明位于卡片外，卡片内组织操作、筛选、明细及空状态。辅助列表保留各自标题；系统权限目录继续使用权限树，连接设置和成本录入保留表单。明暗主题与窄窗口横向滚动由公共组件统一处理。
+
 工作台页面按仓库、基础资料、采购、销售、财务、生产及系统分类；各页面地址与查看权限见 [工作台路由表](docs/workspace-routing.md)。
 
 完整财务、质量、售后、CRM 等后续模块的现状、候选顺序和进入条件见 [ERP 后续模块评估](docs/erp-expansion-assessment.md)；该文档不代表相应功能已实现。

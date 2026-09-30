@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { matchesRecordQuery } from '../../../utils/workspace-records'
+import { computed, ref } from 'vue'
 import { NModal } from 'naive-ui'
 import { useAppStore } from '../../../store/app-store'
 import { submitCreateDialog } from '../../../utils/create-dialog'
@@ -25,15 +26,21 @@ const {
 } = useAppStore()
 // 财务两张核对表沿用同一表格实现，来源与金额仍按现有快照展示。
 const accountColumns = [
-  { key: 'kind', title: '类别' }, { key: 'party', title: '往来单位' },
-  { key: 'order', title: '订单' }, { key: 'business', title: '业务净额' },
-  { key: 'settled', title: '收付款净额' }, { key: 'outstanding', title: '未结金额' },
+  { key: 'kind', title: '类别' },
+  { key: 'party', title: '往来单位' },
+  { key: 'order', title: '订单' },
+  { key: 'business', title: '业务净额' },
+  { key: 'settled', title: '收付款净额' },
+  { key: 'outstanding', title: '未结金额' },
   { key: 'sources', title: '来源明细' }
 ]
 const sourceColumns = [
-  { key: 'time', title: '确认时间' }, { key: 'kind', title: '类别' },
-  { key: 'party', title: '往来单位' }, { key: 'source', title: '来源单据' },
-  { key: 'material', title: '物料' }, { key: 'amount', title: '金额变动' },
+  { key: 'time', title: '确认时间' },
+  { key: 'kind', title: '类别' },
+  { key: 'party', title: '往来单位' },
+  { key: 'source', title: '来源单据' },
+  { key: 'material', title: '物料' },
+  { key: 'amount', title: '金额变动' },
   { key: 'actor', title: '操作人' }
 ]
 
@@ -42,25 +49,35 @@ const createOpen = ref(false)
 async function submitCreate(): Promise<void> {
   await submitCreateDialog(createPaymentRecord, { busy, error, notice }, createOpen)
 }
+// 查询只过滤显示，收付款与冲销仍关联完整订单和审计记录。
+const accountQuery = ref('')
+const paymentQuery = ref('')
+const paymentColumns = [
+  { key: 'document', title: '收付款记录' },
+  { key: 'actions', title: '操作', width: '300' }
+]
+const filteredAccounts = computed(() =>
+  financeAccounts.value.filter((item) =>
+    matchesRecordQuery(accountQuery.value, [item.order_id, item.party_name])
+  )
+)
+const filteredPayments = computed(() =>
+  paymentRecords.value.filter((item) =>
+    matchesRecordQuery(paymentQuery.value, [
+      item.id,
+      item.order_id,
+      item.party_name,
+      item.reference,
+      item.created_by_name
+    ])
+  )
+)
 </script>
 
 <template>
   <section v-if="activeTab === 'finance' && receivablesPayables" class="stack">
-    <div class="summary-grid">
-      <div class="metric">
-        <span>业务应收净额</span
-        ><strong>¥{{ receivablesPayables.receivable_amount }}</strong>
-      </div>
-      <div class="metric">
-        <span>业务应付净额</span
-        ><strong>¥{{ receivablesPayables.payable_amount }}</strong>
-      </div>
-      <div class="metric">
-        <span>待定价明细</span
-        ><strong>{{ receivablesPayables.unpriced_count }}</strong>
-      </div>
-    </div>
-    <div class="form-actions"><button v-if="can('finance.record')" class="primary" type="button" :disabled="busy" @click="createOpen = true">登记收付款</button></div>
+
+
     <NModal v-if="can('finance.record')" v-model:show="createOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
       <div class="section-heading">
         <div>
@@ -144,50 +161,90 @@ async function submitCreate(): Promise<void> {
         </button>
       </form>
     </NModal>
-    <WorkspaceTable title="订单核对" :columns="accountColumns" :data="financeAccounts" :min-table-width="980">
-      <template #heading><p class="eyebrow">OPEN BALANCES</p><h2>订单核对</h2></template>
-      <template #beforeTable><p class="muted">
-        未结金额 = 已确认业务净额 −
-        收付款净额。负数表示应退客户或应收供应商退款。
-      </p></template>
-      <template #cell-kind="{ row: item }">{{ item.kind === 'receivable' ? '应收' : '应付' }}</template>
+    <WorkspaceTable
+      title="订单核对"
+      :columns="accountColumns"
+      :data="filteredAccounts"
+      :min-table-width="980"
+    >
+      <template #actions>
+        <button
+          v-if="can('finance.record')"
+          class="primary"
+          type="button"
+          :disabled="busy"
+          @click="createOpen = true"
+        >
+          登记收付款
+        </button>
+      </template>
+      <template #filters>
+        <label>
+          搜索订单
+          <input v-model="accountQuery" placeholder="输入编号或名称" />
+        </label>
+      </template>
+      <template #beforeTable>
+        <div class="summary-grid">
+          <div class="metric">
+            <span>业务应收净额</span>
+            <strong>¥{{ receivablesPayables.receivable_amount }}</strong>
+          </div>
+          <div class="metric">
+            <span>业务应付净额</span>
+            <strong>¥{{ receivablesPayables.payable_amount }}</strong>
+          </div>
+          <div class="metric">
+            <span>待定价明细</span>
+            <strong>{{ receivablesPayables.unpriced_count }}</strong>
+          </div>
+        </div>
+        <p class="muted">
+          未结金额 = 已确认业务净额 − 收付款净额。负数表示应退客户或应收供应商退款。
+        </p>
+      </template>
+      <template #cell-kind="{ row: item }">
+        {{ item.kind === 'receivable' ? '应收' : '应付' }}
+      </template>
       <template #cell-party="{ row: item }">{{ item.party_name }}</template>
       <template #cell-order="{ row: item }">#{{ item.order_id }}</template>
       <template #cell-business="{ row: item }">¥{{ item.business_amount }}</template>
       <template #cell-settled="{ row: item }">¥{{ item.settled_amount }}</template>
-      <template #cell-outstanding="{ row: item }"><strong>¥{{ item.outstanding_amount }}</strong></template>
+      <template #cell-outstanding="{ row: item }">
+        <strong>¥{{ item.outstanding_amount }}</strong>
+      </template>
       <template #cell-sources="{ row: item }">{{ item.source_keys.length }} 笔</template>
       <template #empty>暂无可核对的订单金额。</template>
     </WorkspaceTable>
-    <div class="card">
-      <div class="section-heading">
+    <!-- 冲销入口仍按原记录和反向记录判断，列表筛选不影响防重复冲销。 -->
+    <WorkspaceTable
+      title="收付款与冲销记录"
+      :columns="paymentColumns"
+      :data="filteredPayments"
+      :min-table-width="900"
+    >
+      <template #filters>
+        <label>
+          搜索收付款记录
+          <input v-model="paymentQuery" placeholder="输入编号或名称" />
+        </label>
+      </template>
+      <template #cell-document="{ row: item }">
         <div>
-          <p class="eyebrow">PAYMENT AUDIT</p>
-          <h2>收付款与冲销记录</h2>
+          <strong>#{{ item.id }} · {{ paymentActionLabel(item) }} · {{ item.party_name }}</strong>
+          <p class="muted">
+            {{ localTime(item.created_at) }} ·
+            {{ item.kind === 'receivable' ? '销售订单' : '采购订单' }} #{{ item.order_id }} · ¥{{
+              item.amount
+            }}
+            · 参考号 {{ item.reference }} · 操作人
+            {{ item.created_by_name }}
+            <span v-if="item.reverses_id">· 冲销记录 #{{ item.reverses_id }}</span>
+            <span v-if="item.note">· {{ item.note }}</span>
+          </p>
         </div>
-      </div>
-      <div v-if="!paymentRecords.length" class="muted">暂无收付款记录。</div>
-      <article v-for="item in paymentRecords" :key="item.id" class="receipt">
-        <div class="receipt-head">
-          <div>
-            <strong
-              >#{{ item.id }} · {{ paymentActionLabel(item) }} ·
-              {{ item.party_name }}</strong
-            >
-            <p class="muted">
-              {{ localTime(item.created_at) }} ·
-              {{ item.kind === 'receivable' ? '销售订单' : '采购订单' }} #{{
-                item.order_id
-              }}
-              · ¥{{ item.amount }} · 参考号 {{ item.reference }} · 操作人
-              {{ item.created_by_name }}
-              <span v-if="item.reverses_id"
-                >· 冲销记录 #{{ item.reverses_id }}</span
-              >
-              <span v-if="item.note">· {{ item.note }}</span>
-            </p>
-          </div>
-        </div>
+      </template>
+      <template #cell-actions="{ row: item }">
         <form
           v-if="
             item.action !== 'reversal' &&
@@ -197,35 +254,42 @@ async function submitCreate(): Promise<void> {
           class="inline-form"
           @submit.prevent="reversePaymentRecord(item.id)"
         >
-          <label
-            >冲销原因<input
-              v-model.trim="reversalReasons[item.id]"
-              required
-              maxlength="200" /></label
-          ><button class="secondary small" type="submit" :disabled="busy">
-            冲销此记录
-          </button>
+          <label>
+            冲销原因
+            <input v-model.trim="reversalReasons[item.id]" required maxlength="200" />
+          </label>
+          <button class="secondary small" type="submit" :disabled="busy">冲销此记录</button>
         </form>
-      </article>
-    </div>
-    <WorkspaceTable title="应收应付来源" :columns="sourceColumns" :data="receivablesPayables.entries" :min-table-width="980">
-      <template #heading><p class="eyebrow">DOCUMENT RECONCILIATION</p><h2>应收应付来源</h2></template>
-      <template #beforeTable><p class="muted">
-        金额按已确认的出库、入库与退货明细计算，单位为人民币；无采购单价的历史入库显示“待核价”。
-      </p></template>
+      </template>
+      <template #empty>{{ paymentQuery ? '没有匹配的记录。' : '暂无收付款记录。' }}</template>
+    </WorkspaceTable>
+    <WorkspaceTable
+      title="应收应付来源"
+      :columns="sourceColumns"
+      :data="receivablesPayables.entries"
+      :min-table-width="980"
+    >
+      <template #beforeTable>
+        <p class="muted">
+          金额按已确认的出库、入库与退货明细计算，单位为人民币；无采购单价的历史入库显示“待核价”。
+        </p>
+      </template>
       <template #cell-time="{ row: item }">{{ localTime(item.posted_at) }}</template>
-      <template #cell-kind="{ row: item }">{{ item.kind === 'receivable' ? '应收' : '应付' }}</template>
+      <template #cell-kind="{ row: item }">
+        {{ item.kind === 'receivable' ? '应收' : '应付' }}
+      </template>
       <template #cell-party="{ row: item }">{{ item.party_name }}</template>
-      <template #cell-source="{ row: item }">{{ financialSource(item)
-                }}<small v-if="item.order_id">
-                  · 订单 #{{ item.order_id }}</small
-                ></template>
+      <template #cell-source="{ row: item }">
+        {{ financialSource(item) }}
+        <small v-if="item.order_id">· 订单 #{{ item.order_id }}</small>
+      </template>
       <template #cell-material="{ row: item }">{{ item.sku }} × {{ item.quantity }}</template>
-      <template #cell-amount="{ row: item }">{{ item.amount === null ? '待核价' : `¥${item.amount}` }}</template>
-      <template #cell-actor="{ row: item }">{{
-                  item.posted_by_name ??
-                  (item.posted_by === null ? '未知' : `#${item.posted_by}`)
-                }}</template>
+      <template #cell-amount="{ row: item }">
+        {{ item.amount === null ? '待核价' : `¥${item.amount}` }}
+      </template>
+      <template #cell-actor="{ row: item }">
+        {{ item.posted_by_name ?? (item.posted_by === null ? '未知' : `#${item.posted_by}`) }}
+      </template>
       <template #empty>暂无已确认的金额来源单据。</template>
     </WorkspaceTable>
   </section>

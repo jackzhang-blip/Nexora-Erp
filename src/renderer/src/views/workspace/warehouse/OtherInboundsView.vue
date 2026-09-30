@@ -29,7 +29,7 @@ async function submitCreate(): Promise<void> {
 
 <template>
   <section class="stack">
-    <WorkspaceTable :show-title="false" :data="filtered" title="其他入库" description="登记期初、赠品等非采购来源入库，确认后增加库存。" :columns="columns" :min-table-width="900">
+    <WorkspaceTable :show-title="false" :data="filtered" title="其他入库" :columns="columns" :min-table-width="900">
       <template #actions>
         <button v-if="can('other_inbound.create')" class="primary" :disabled="busy || connectionLost" @click="showForm = true">新建其他入库</button>
       </template>

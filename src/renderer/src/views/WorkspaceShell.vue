@@ -9,6 +9,7 @@ import AppStatusFooter from '../components/app/AppStatusFooter.vue'
 import AuthView from './AuthView.vue'
 import { nexoraLogo } from '../assets/brand'
 import { accountRoleText } from '../utils/account-role'
+import { workspacePageDescriptions } from '../utils/workspace-page-copy'
 
 const {
   screen,
@@ -62,6 +63,8 @@ const accountRole = computed(() => accountRoleText(user.value?.roles ?? [], role
                   : '开始使用联光 ERP'
               }}
             </h1>
+            <!-- 页面说明放在主标题下方，与卡片中的操作和筛选分层。 -->
+            <p v-if="screen === 'app' && activeRouteAllowed && workspacePageDescriptions[activeTab]" class="muted workspace-page-description">{{ workspacePageDescriptions[activeTab] }}</p>
           </div>
           <div v-if="user" class="account">
             <!-- 侧栏在窄窗口收起时，顶部保留账号和退出操作。 -->
@@ -84,3 +87,7 @@ const accountRole = computed(() => accountRoleText(user.value?.roles ?? [], role
     </main>
   </div>
 </template>
+
+<style scoped>
+.workspace-page-description { max-width: 960px; margin: 12px 0 0; line-height: 1.7; font-size: 13px; }
+</style>

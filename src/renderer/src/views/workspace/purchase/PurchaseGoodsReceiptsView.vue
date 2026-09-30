@@ -28,7 +28,8 @@ async function submitCreate(): Promise<void> {
 
 <template>
   <section class="stack">
-    <WorkspaceTable :data="filtered" title="采购收货" :columns="columns" :min-table-width="940">
+    <!-- 列表保留操作与筛选，页面标题在卡片外统一显示。 -->
+    <WorkspaceTable :show-title="false" :data="filtered" title="采购收货" :columns="columns" :min-table-width="940">
       <template #actions>
         <button v-if="can('purchase_receiving.create')" class="primary" :disabled="busy || connectionLost" @click="showForm = true">新建收货单</button>
       </template>

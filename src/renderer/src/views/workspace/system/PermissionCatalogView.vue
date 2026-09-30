@@ -31,13 +31,7 @@ onMounted(() => {
 <template>
   <section class="stack">
     <div class="card">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">权限目录</p>
-          <h2>权限中文名称</h2>
-          <p class="muted">名称用于页面展示；内部代码用于服务端授权，不能修改。</p>
-        </div>
-      </div>
+      <!-- 页面说明已移到外部标题区，保留权限树与名称编辑。 -->
       <div class="permission-catalog">
         <p v-if="loading" class="muted">正在加载权限目录...</p>
         <div v-else-if="loadError && permissionModules.length === 0" role="alert">

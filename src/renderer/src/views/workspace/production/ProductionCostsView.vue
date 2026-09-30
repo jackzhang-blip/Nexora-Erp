@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { recordColumns, matchesRecordQuery } from '../../../utils/workspace-records'
+import { computed, ref } from 'vue'
+import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
 import { useAppStore } from '../../../store/app-store'
 
 // 页面直接使用共享状态与操作，切换标签时不会丢失正在填写的草稿。
@@ -14,54 +17,70 @@ const {
   recordProductionCharge,
   reverseProductionCost
 } = useAppStore()
+// 分别搜索工单与成本记录，不改变待核价及冲销金额的展示。
+const costQuery = ref('')
+const entryQuery = ref('')
+const costColumns = recordColumns.filter((column) => column.key !== 'actions')
+const filteredOrders = computed(() =>
+  (productionCostReport.value?.orders ?? []).filter((item) =>
+    matchesRecordQuery(costQuery.value, [item.work_order_id, item.product_name])
+  )
+)
+const filteredEntries = computed(() =>
+  (productionCostReport.value?.entries ?? []).filter((item) =>
+    matchesRecordQuery(entryQuery.value, [
+      item.id,
+      item.work_order_id,
+      item.material_name,
+      item.reference,
+      item.created_by_name
+    ])
+  )
+)
 </script>
 
 <template>
   <section class="stack">
-    <div class="card">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">PRODUCTION COST</p>
-          <h2>工单成本归集</h2>
-        </div>
-      </div>
-      <p class="muted">
-        材料单价由财务按凭据人工核定，金额按已领减已退数量计算。存在待核价领料时，总成本显示待核价；这不是库存计价或总账凭证。
-      </p>
-      <div v-if="!productionCostReport?.orders.length" class="muted">
-        暂无生产工单。
-      </div>
-      <article
-        v-for="item in productionCostReport?.orders ?? []"
-        :key="item.work_order_id"
-        class="receipt"
-      >
-        <div class="receipt-head">
-          <strong
-            >工单 #{{ item.work_order_id }} · {{ item.product_name }}</strong
-          ><span class="pill">{{
+    <!-- 成本金额与冲销记录复用共享表格，核价规则保持原样。 -->
+    <WorkspaceTable
+      :show-title="false"
+      title="生产成本"
+      :columns="costColumns"
+      :data="filteredOrders"
+      :min-table-width="800"
+    >
+      <template #filters>
+        <label>
+          搜索生产工单
+          <input v-model="costQuery" placeholder="输入编号或名称" />
+        </label>
+      </template>
+      <template #cell-document="{ row: item }">
+        <strong>工单 #{{ item.work_order_id }} · {{ item.product_name }}</strong>
+      </template>
+      <template #cell-status="{ row: item }">
+        <span class="pill">
+          {{
             item.work_order_status === 'draft'
               ? '未下达'
               : item.total_amount === null
                 ? '待核价'
                 : '当前已知'
-          }}</span>
+          }}
+        </span>
+      </template>
+      <template #cell-details="{ row: item }">
+        <div class="workspace-record-lines">
+          <span>材料已知金额 ¥{{ item.known_material_amount }}</span>
+          <span>人工 ¥{{ item.labor_amount }}</span>
+          <span>制造费用 ¥{{ item.overhead_amount }}</span>
+          <span>总成本 {{ item.total_amount === null ? '待核价' : `¥${item.total_amount}` }}</span>
+          <span v-if="item.unpriced_issue_count">待核价领料 {{ item.unpriced_issue_count }} 条</span>
         </div>
-        <div class="receipt-lines">
-          <span>材料已知金额 ¥{{ item.known_material_amount }}</span
-          ><span>人工 ¥{{ item.labor_amount }}</span
-          ><span>制造费用 ¥{{ item.overhead_amount }}</span
-          ><span
-            >总成本
-            {{
-              item.total_amount === null ? '待核价' : `¥${item.total_amount}`
-            }}</span
-          ><span v-if="item.unpriced_issue_count"
-            >待核价领料 {{ item.unpriced_issue_count }} 条</span
-          >
-        </div>
-      </article>
-    </div>
+      </template>
+
+      <template #empty>{{ costQuery ? '没有匹配的记录。' : '暂无生产工单。' }}</template>
+    </WorkspaceTable>
     <div v-if="can('production_cost.record')" class="two-columns">
       <div class="card">
         <div class="section-heading"><h2>核定领料单价</h2></div>
@@ -170,68 +189,63 @@ const {
         </form>
       </div>
     </div>
-    <div class="card">
-      <div class="section-heading"><h2>成本记录与冲销</h2></div>
-      <div v-if="!productionCostReport?.entries.length" class="muted">
-        暂无成本记录。
-      </div>
-      <article
-        v-for="item in productionCostReport?.entries ?? []"
-        :key="item.id"
-        class="receipt"
-      >
-        <div class="receipt-head">
-          <div>
-            <strong
-              >#{{ item.id }} · 工单 #{{ item.work_order_id }} ·
-              {{
-                { material: '材料核价', labor: '人工', overhead: '制造费用' }[
-                  item.kind
-                ]
-              }}</strong
-            >
-            <p class="muted">
-              {{ localTime(item.created_at) }} · {{ item.created_by_name }} ·
-              依据 {{ item.reference }}
-            </p>
-          </div>
-          <span class="pill">{{
-            item.status === 'active' ? '有效' : '已冲销'
-          }}</span>
+    <!-- 成本金额与冲销记录复用共享表格，核价规则保持原样。 -->
+    <WorkspaceTable
+      title="成本记录与冲销"
+      :columns="recordColumns"
+      :data="filteredEntries"
+      :min-table-width="1100"
+    >
+      <template #filters>
+        <label>
+          搜索成本记录
+          <input v-model="entryQuery" placeholder="输入编号或名称" />
+        </label>
+      </template>
+      <template #cell-document="{ row: item }">
+        <div>
+          <strong>
+            #{{ item.id }} · 工单 #{{ item.work_order_id }} ·
+            {{ { material: '材料核价', labor: '人工', overhead: '制造费用' }[item.kind] }}
+          </strong>
+          <p class="muted">
+            {{ localTime(item.created_at) }} · {{ item.created_by_name }} · 依据 {{ item.reference }}
+          </p>
         </div>
-        <div class="receipt-lines">
-          <span v-if="item.kind === 'material'"
-            >{{ item.material_name }}（{{ item.material_sku }}）· 净领
-            {{ item.net_quantity }} · 单价 ¥{{ item.unit_cost }}</span
-          ><span
-            >当前计入
-            {{
-              item.current_amount === null
-                ? '已冲销'
-                : `¥${item.current_amount}`
-            }}</span
-          ><span v-if="item.note">{{ item.note }}</span
-          ><span v-if="item.reversal_id"
-            >冲销原因：{{ item.reversal_reason }} ·
-            {{ item.reversed_by_name }} ·
-            {{ localTime(item.reversed_at!) }}</span
-          >
+      </template>
+      <template #cell-status="{ row: item }">
+        <span class="pill">{{ item.status === 'active' ? '有效' : '已冲销' }}</span>
+      </template>
+      <template #cell-details="{ row: item }">
+        <div class="workspace-record-lines">
+          <span v-if="item.kind === 'material'">
+            {{ item.material_name }}（{{ item.material_sku }}）· 净领 {{ item.net_quantity }} · 单价
+            ¥{{ item.unit_cost }}
+          </span>
+          <span>
+            当前计入 {{ item.current_amount === null ? '已冲销' : `¥${item.current_amount}` }}
+          </span>
+          <span v-if="item.note">{{ item.note }}</span>
+          <span v-if="item.reversal_id">
+            冲销原因：{{ item.reversal_reason }} · {{ item.reversed_by_name }} ·
+            {{ localTime(item.reversed_at!) }}
+          </span>
         </div>
+      </template>
+      <template #cell-actions="{ row: item }">
         <form
           v-if="item.status === 'active' && can('production_cost.reverse')"
           class="inline-form"
           @submit.prevent="reverseProductionCost(item.id)"
         >
-          <label
-            >冲销原因<input
-              v-model.trim="costReversalReasons[item.id]"
-              required
-              maxlength="200" /></label
-          ><button class="secondary small" type="submit" :disabled="busy">
-            冲销记录
-          </button>
+          <label>
+            冲销原因
+            <input v-model.trim="costReversalReasons[item.id]" required maxlength="200" />
+          </label>
+          <button class="secondary small" type="submit" :disabled="busy">冲销记录</button>
         </form>
-      </article>
-    </div>
+      </template>
+      <template #empty>{{ entryQuery ? '没有匹配的记录。' : '暂无成本记录。' }}</template>
+    </WorkspaceTable>
   </section>
 </template>

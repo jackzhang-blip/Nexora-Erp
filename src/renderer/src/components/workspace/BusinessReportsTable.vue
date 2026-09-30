@@ -31,7 +31,7 @@ onMounted(() => { void run() })
 </script>
 
 <template>
-  <WorkspaceTable :show-title="domain !== 'inventory'" :title="title" description="表格与 CSV 使用同一份服务端筛选结果；单号可追溯到原始业务单据。"
+  <WorkspaceTable :show-title="false" :title="title"
     :columns="result?.columns ?? []" :data="result?.rows ?? []" :loading="busy" :min-table-width="1050">
     <template #actions>
       <button class="secondary" :disabled="busy || connectionLost || !result" @click="exportCsv">导出 CSV</button>

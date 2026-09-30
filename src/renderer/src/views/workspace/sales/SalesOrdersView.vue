@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
+import { recordColumns, matchesRecordQuery } from '../../../utils/workspace-records'
+import { computed, ref } from 'vue'
 import { NModal } from 'naive-ui'
 import { useAppStore } from '../../../store/app-store'
 import { submitCreateDialog } from '../../../utils/create-dialog'
@@ -31,36 +33,32 @@ async function submitCreate(): Promise<void> {
 async function submitCustomer(): Promise<void> {
   await submitCreateDialog(createCustomer, { busy, error, notice }, customerOpen)
 }
+// 只筛选当前列表快照，原有单据状态与跨页面草稿保持不变。
+const recordQuery = ref('')
+const filteredRecords = computed(() =>
+  salesOrders.value.filter((item) =>
+    matchesRecordQuery(recordQuery.value, [
+      item.id,
+      item.customer_name,
+      item.created_by_name,
+      item.reference,
+      ...item.lines.map((line) => line.material_name)
+    ])
+  )
+)
+// 客户查询与销售订单查询互不影响。
+const customerQuery = ref('')
+const customerColumns = [
+  { key: 'id', title: '编号', width: '120' },
+  { key: 'name', title: '客户名称' }
+]
+const filteredCustomers = computed(() =>
+  customers.value.filter((item) => matchesRecordQuery(customerQuery.value, [item.id, item.name]))
+)
 </script>
 
 <template>
   <section class="stack">
-    <div v-if="can('customer.manage')" class="card">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">CUSTOMERS</p>
-          <h2>客户资料</h2>
-        </div>
-        <button class="primary" type="button" :disabled="busy" @click="customerOpen = true">新增客户</button>
-      </div>
-      <NModal v-model:show="customerOpen" preset="card" title="新增客户" :mask-closable="!busy" :style="{ width: 'min(560px, calc(100vw - 32px))' }">
-      <form class="inline-form" @submit.prevent="submitCustomer">
-        <label
-          >客户名称<input
-            v-model.trim="customerForm.name"
-            required
-            maxlength="120"
-            placeholder="输入客户名称" /></label
-        ><button class="primary" type="submit" :disabled="busy">
-          添加客户
-        </button>
-      </form>
-      </NModal>
-      <div class="receipt-lines">
-        <span v-for="item in customers" :key="item.id">{{ item.name }}</span>
-      </div>
-    </div>
-    <div class="form-actions"><button v-if="can('sales_order.create')" class="primary" type="button" :disabled="busy" @click="createOpen = true">新建销售订单</button></div>
     <NModal v-if="can('sales_order.create')" v-model:show="createOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
       <div class="section-heading">
         <div>
@@ -145,69 +143,140 @@ async function submitCustomer(): Promise<void> {
         </div>
       </form>
     </NModal>
-    <div class="card">
-      <div class="section-heading">
+    <!-- 主标题由工作台提供，列表复用仓库管理的筛选区、状态和单元格布局。 -->
+    <WorkspaceTable
+      :show-title="false"
+      title="销售订单"
+      :data="filteredRecords"
+      :columns="recordColumns"
+      :min-table-width="1100"
+    >
+      <template #actions>
+        <button
+          v-if="can('sales_order.create')"
+          class="primary"
+          type="button"
+          :disabled="busy"
+          @click="createOpen = true"
+        >
+          新建销售订单
+        </button>
+      </template>
+      <template #filters>
+        <label>
+          搜索销售订单
+          <input v-model="recordQuery" placeholder="单号、名称或物料" />
+        </label>
+      </template>
+
+      <template #cell-document="{ row: item }">
         <div>
-          <p class="eyebrow">SALES LOG</p>
-          <h2>销售订单</h2>
+          <strong>#{{ item.id }} · {{ item.customer_name }}</strong>
+          <p class="muted">
+            {{ localTime(item.created_at) }} · 创建人
+            {{ item.created_by_name }}
+            <span v-if="item.reference">· {{ item.reference }}</span>
+            · 总额 ¥{{ item.total_amount }}
+          </p>
         </div>
-      </div>
-      <div v-if="!salesOrders.length" class="muted">暂无销售订单。</div>
-      <article v-for="item in salesOrders" :key="item.id" class="receipt">
-        <div class="receipt-head">
-          <div>
-            <strong>#{{ item.id }} · {{ item.customer_name }}</strong>
-            <p class="muted">
-              {{ localTime(item.created_at) }} · 创建人
-              {{ item.created_by_name }}
-              <span v-if="item.reference">· {{ item.reference }}</span> · 总额
-              ¥{{ item.total_amount }}
-            </p>
-          </div>
-          <div class="receipt-actions">
-            <span class="pill" :class="item.status">{{
-              {
-                draft: '草稿',
-                confirmed: '待出库',
-                partially_shipped: '部分出库',
-                shipped: '全部出库',
-                cancelled: '已取消'
-              }[item.status]
-            }}</span
-            ><button
-              v-if="item.status === 'draft' && can('sales_order.confirm')"
-              class="primary small"
-              type="button"
-              :disabled="busy"
-              @click="confirmSalesOrder(item.id)"
-            >
-              确认订单</button
-            ><button
-              v-if="
-                ['draft', 'confirmed'].includes(item.status) &&
-                can('sales_order.cancel')
-              "
-              class="secondary small"
-              type="button"
-              :disabled="busy"
-              @click="cancelSalesOrder(item.id)"
-            >
-              取消订单
-            </button>
-          </div>
+      </template>
+      <template #cell-status="{ row: item }">
+        <span class="pill" :class="item.status">
+          {{
+            {
+              draft: '草稿',
+              confirmed: '待出库',
+              partially_shipped: '部分出库',
+              shipped: '全部出库',
+              cancelled: '已取消'
+            }[item.status]
+          }}
+        </span>
+      </template>
+      <template #cell-details="{ row: item }">
+        <div class="workspace-record-lines">
+          <span v-for="line in item.lines" :key="line.id">
+            {{ line.material_name }} · 已出库 {{ line.shipped_quantity }}/{{ line.quantity }} · 已退
+            {{ line.returned_quantity }} · 净交付 {{ line.net_delivered_quantity }} {{ line.unit }} ·
+            ¥{{ line.unit_price }}/{{ line.unit }}
+          </span>
         </div>
-        <div class="receipt-lines">
-          <span v-for="line in item.lines" :key="line.id"
-            >{{ line.material_name }} · 已出库 {{ line.shipped_quantity }}/{{
-              line.quantity
-            }}
-            · 已退 {{ line.returned_quantity }} · 净交付
-            {{ line.net_delivered_quantity }} {{ line.unit }} · ¥{{
-              line.unit_price
-            }}/{{ line.unit }}</span
+      </template>
+      <template #cell-actions="{ row: item }">
+        <div class="form-actions">
+          <button
+            v-if="item.status === 'draft' && can('sales_order.confirm')"
+            class="primary small"
+            type="button"
+            :disabled="busy"
+            @click="confirmSalesOrder(item.id)"
           >
+            确认订单
+          </button>
+          <button
+            v-if="['draft', 'confirmed'].includes(item.status) && can('sales_order.cancel')"
+            class="secondary small"
+            type="button"
+            :disabled="busy"
+            @click="cancelSalesOrder(item.id)"
+          >
+            取消订单
+          </button>
         </div>
-      </article>
-    </div>
+      </template>
+      <template #empty>
+        <strong>{{ recordQuery ? '没有匹配的记录' : '暂无销售订单记录' }}</strong>
+        <span>
+          {{
+            recordQuery
+              ? '可调整单号、名称或物料关键词后重新搜索。'
+              : '业务记录生成后，可在这里查看明细与处理状态。'
+          }}
+        </span>
+      </template>
+    </WorkspaceTable>
+<!-- 客户资料作为订单的辅助信息，沿用统一表格和权限边界。 -->
+    <WorkspaceTable
+      v-if="can('customer.manage')"
+      title="客户资料"
+      :columns="customerColumns"
+      :data="filteredCustomers"
+      :min-table-width="480"
+    >
+      <template #actions>
+        <button class="primary" type="button" :disabled="busy" @click="customerOpen = true">
+          新增客户
+        </button>
+      </template>
+      <template #filters>
+        <label>
+          搜索客户
+          <input v-model="customerQuery" placeholder="输入编号或名称" />
+        </label>
+      </template>
+      <template #beforeTable>
+        <NModal
+          v-model:show="customerOpen"
+          preset="card"
+          title="新增客户"
+          :mask-closable="!busy"
+          :style="{ width: 'min(560px, calc(100vw - 32px))' }"
+        >
+          <form class="inline-form" @submit.prevent="submitCustomer">
+            <label>
+              客户名称
+              <input
+                v-model.trim="customerForm.name"
+                required
+                maxlength="120"
+                placeholder="输入客户名称"
+              />
+            </label>
+            <button class="primary" type="submit" :disabled="busy">添加客户</button>
+          </form>
+        </NModal>
+      </template>
+      <template #empty>{{ customerQuery ? '没有匹配的客户。' : '暂无客户，请先新增。' }}</template>
+    </WorkspaceTable>
   </section>
 </template>
