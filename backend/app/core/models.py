@@ -110,6 +110,14 @@ class SupplierMaterial(Base):
     material_id: Mapped[int] = mapped_column(Integer, ForeignKey('materials.id', ondelete='CASCADE'), primary_key=True)
 
 
+class Warehouse(Base):
+    __tablename__ = 'warehouses'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(Text(collation='NOCASE'), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+
+
 class ServerIdentity(Base):
     __tablename__ = 'server_identity'
     id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -319,7 +327,7 @@ class ProductionSettlementCharge(Base):
 class StockMovement(Base):
     __tablename__ = 'stock_movements'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    warehouse_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey('warehouses.id'), nullable=False)
     material_id: Mapped[int] = mapped_column(Integer, ForeignKey('materials.id'), nullable=False)
     quantity: Mapped[str] = mapped_column(Text, nullable=False)
     source_type: Mapped[str] = mapped_column(Text, nullable=False)
