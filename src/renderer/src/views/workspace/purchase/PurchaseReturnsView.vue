@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { NModal } from 'naive-ui'
 import { useAppStore } from '../../../store/app-store'
+import { submitCreateDialog } from '../../../utils/create-dialog'
 
 // 页面直接使用共享状态与操作，切换标签时不会丢失正在填写的草稿。
 const {
+  error,
+  notice,
   busy,
   receipts,
   purchaseReturns,
@@ -17,11 +22,18 @@ const {
   cancelPurchaseReturn,
   reversePurchaseReturn
 } = useAppStore()
+
+// 保存失败时保留弹窗和草稿，方便直接修正后重试。
+const createOpen = ref(false)
+async function submitCreate(): Promise<void> {
+  await submitCreateDialog(createPurchaseReturn, { busy, error, notice }, createOpen)
+}
 </script>
 
 <template>
   <section class="stack">
-    <div v-if="can('purchase_return.create')" class="card">
+    <div class="form-actions"><button v-if="can('purchase_return.create')" class="primary" type="button" :disabled="busy" @click="createOpen = true">新建采购退货</button></div>
+    <NModal v-if="can('purchase_return.create')" v-model:show="createOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
       <div class="section-heading">
         <div>
           <p class="eyebrow">PURCHASE RETURN</p>
@@ -32,7 +44,7 @@ const {
       <p class="muted">
         退货从原入库仓库扣减。若货物已调走，请先调回；未关联采购订单的历史入库单不显示退货金额。
       </p>
-      <form @submit.prevent="createPurchaseReturn">
+      <form @submit.prevent="submitCreate">
         <div class="form-grid">
           <label
             >原入库单<select
@@ -112,7 +124,7 @@ const {
           </button>
         </div>
       </form>
-    </div>
+    </NModal>
     <div class="card">
       <div class="section-heading">
         <div>

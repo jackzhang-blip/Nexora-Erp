@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { NModal } from 'naive-ui'
 import { useAppStore } from '../../../store/app-store'
+import { submitCreateDialog } from '../../../utils/create-dialog'
 
 // 页面直接使用共享状态与操作，切换标签时不会丢失正在填写的草稿。
 const {
+  error,
+  notice,
   busy,
   workOrders,
   materialIssues,
@@ -16,11 +21,18 @@ const {
   postMaterialReturn,
   cancelMaterialReturn
 } = useAppStore()
+
+// 保存失败时保留弹窗和草稿，方便直接修正后重试。
+const createOpen = ref(false)
+async function submitCreate(): Promise<void> {
+  await submitCreateDialog(createMaterialReturn, { busy, error, notice }, createOpen)
+}
 </script>
 
 <template>
   <section class="stack">
-    <div v-if="can('material_return.create')" class="card">
+    <div class="form-actions"><button v-if="can('material_return.create')" class="primary" type="button" :disabled="busy" @click="createOpen = true">新建生产退料单</button></div>
+    <NModal v-if="can('material_return.create')" v-model:show="createOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
       <div class="section-heading">
         <div>
           <p class="eyebrow">MATERIAL RETURN</p>
@@ -31,7 +43,7 @@ const {
       <p class="muted">
         只退回已确认领料的组件，确认后入原领料仓库，并恢复工单可领数量。请按实际退回数量填写。
       </p>
-      <form @submit.prevent="createMaterialReturn">
+      <form @submit.prevent="submitCreate">
         <div class="form-grid">
           <label
             >原领料单<select
@@ -117,7 +129,7 @@ const {
           保存退料草稿
         </button>
       </form>
-    </div>
+    </NModal>
     <div class="card">
       <div class="section-heading">
         <div>

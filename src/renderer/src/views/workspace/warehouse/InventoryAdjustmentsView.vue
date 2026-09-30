@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import { NModal } from 'naive-ui'
 import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
 import { usePiniaAppStore } from '../../../store/app-store'
+import { submitCreateDialog } from '../../../utils/create-dialog'
 
 const store = usePiniaAppStore()
-const { user, busy, connectionLost, warehouses, materials, stockAdjustments,
+const { error, notice, user, busy, connectionLost, warehouses, materials, stockAdjustments,
   adjustmentForm, adjustmentDecisionReasons, adjustmentReversalReasons } = storeToRefs(store)
 const { can, localTime, createStockAdjustment, submitStockAdjustment,
   approveStockAdjustment, rejectStockAdjustment, cancelStockAdjustment,
@@ -21,18 +23,23 @@ const columns = [
   { key: 'document', title: '单据' }, { key: 'source', title: '仓库与原因' },
   { key: 'lines', title: '调整明细' }, { key: 'actions', title: '操作' }
 ]
+// 写入失败时保留表单，成功后才关闭弹窗。
+async function submitCreate(): Promise<void> {
+  await submitCreateDialog(createStockAdjustment, { busy, error, notice }, showForm)
+}
 </script>
 
 <template>
   <section class="stack">
-    <WorkspaceTable title="库存调整" description="调整量可正可负；建单人不能审批自己的单据。审批通过后由仓库确认才记库存流水。"
-      :columns="columns" :row-count="filtered.length" :min-table-width="1050">
+    <WorkspaceTable :data="filtered" title="库存调整" description="调整量可正可负；建单人不能审批自己的单据。审批通过后由仓库确认才记库存流水。"
+      :columns="columns" :min-table-width="1050">
       <template #actions>
         <button v-if="can('adjustment.create')" class="primary" :disabled="busy || connectionLost" @click="showForm = true">新建调整</button>
       </template>
       <template #filters><label>搜索调整单<input v-model="query" placeholder="单号、仓库或物料" /></label></template>
       <template #beforeTable>
-        <form v-if="showForm && can('adjustment.create')" class="stack" @submit.prevent="createStockAdjustment">
+        <NModal v-model:show="showForm" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
+        <form v-if="showForm && can('adjustment.create')" class="stack" @submit.prevent="submitCreate">
           <div class="form-grid">
             <label>仓库<select v-model.number="adjustmentForm.warehouse_id" required><option v-for="item in warehouses" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
             <label>调整原因<input v-model.trim="adjustmentForm.reason" required maxlength="200" /></label>
@@ -50,14 +57,12 @@ const columns = [
           </div>
           <p class="muted">正数为增加，负数为减少；零调整量不会保存。</p>
         </form>
+        </NModal>
       </template>
-      <template #rows>
-        <tr v-for="item in filtered" :key="item.id">
-          <td><strong>#{{ item.id }}</strong><small>{{ statusLabel[item.status] }}{{ item.reversal_id ? ' · 已冲销' : '' }}</small><small>{{ localTime(item.created_at) }} · {{ item.created_by_name }}</small><small v-if="item.reviewed_by_name">审批：{{ item.reviewed_by_name }}</small></td>
-          <td>{{ item.warehouse_name }}<small>{{ item.reason }}</small><small v-if="item.reference">{{ item.reference }}</small><small v-if="item.review_reason">驳回：{{ item.review_reason }}</small></td>
-          <td><div v-for="line in item.lines" :key="line.id">{{ line.material_name }} {{ line.quantity.startsWith('-') ? '' : '+' }}{{ line.quantity }} {{ line.unit }}</div></td>
-          <td>
-            <div class="form-actions">
+      <template #cell-document="{ row: item }"><strong>#{{ item.id }}</strong><small>{{ statusLabel[item.status] }}{{ item.reversal_id ? ' · 已冲销' : '' }}</small><small>{{ localTime(item.created_at) }} · {{ item.created_by_name }}</small><small v-if="item.reviewed_by_name">审批：{{ item.reviewed_by_name }}</small></template>
+      <template #cell-source="{ row: item }">{{ item.warehouse_name }}<small>{{ item.reason }}</small><small v-if="item.reference">{{ item.reference }}</small><small v-if="item.review_reason">驳回：{{ item.review_reason }}</small></template>
+      <template #cell-lines="{ row: item }"><div v-for="line in item.lines" :key="line.id">{{ line.material_name }} {{ line.quantity.startsWith('-') ? '' : '+' }}{{ line.quantity }} {{ line.unit }}</div></template>
+      <template #cell-actions="{ row: item }"><div class="form-actions">
               <button v-if="item.status === 'draft' && can('adjustment.submit')" class="primary small" :disabled="busy || connectionLost" @click="submitStockAdjustment(item.id)">提交</button>
               <button v-if="item.status === 'submitted' && can('adjustment.review') && user?.id !== item.created_by" class="primary small" :disabled="busy || connectionLost" @click="approveStockAdjustment(item.id)">批准</button>
               <button v-if="item.status === 'approved' && can('adjustment.post')" class="primary small" :disabled="busy || connectionLost" @click="postStockAdjustment(item.id)">仓库确认</button>
@@ -68,10 +73,7 @@ const columns = [
             </form>
             <form v-if="item.status === 'posted' && !item.reversal_id && can('adjustment.reverse')" class="inline-form" @submit.prevent="reverseStockAdjustment(item.id)">
               <label>冲销原因<input v-model.trim="adjustmentReversalReasons[item.id]" required maxlength="200" /></label><button class="secondary small" :disabled="busy || connectionLost">冲销</button>
-            </form><small v-if="item.reversal_reason">冲销：{{ item.reversal_reason }}</small>
-          </td>
-        </tr>
-      </template>
+            </form><small v-if="item.reversal_reason">冲销：{{ item.reversal_reason }}</small></template>
       <template #empty>{{ query ? '没有匹配的库存调整单。' : '暂无库存调整单。' }}</template>
     </WorkspaceTable>
   </section>

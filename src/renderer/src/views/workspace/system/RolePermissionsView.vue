@@ -56,11 +56,10 @@ async function submitRole(): Promise<void> {
 
 <template>
   <section class="stack">
-    <WorkspaceTable
+    <WorkspaceTable :data="visibleRoles"
       title="职务与权限"
       description="新增职务后可按模块、单据和操作分别授权；内置职务仅供查看。"
       :columns="roleColumns"
-      :row-count="visibleRoles.length"
       empty-text="没有符合条件的职务"
     >
       <template #actions>
@@ -79,18 +78,12 @@ async function submitRole(): Promise<void> {
         </label>
         <span class="muted role-table-count">共 {{ visibleRoles.length }} 项</span>
       </template>
-      <template #rows>
-        <tr v-for="role in visibleRoles" :key="role.code">
-          <td><strong>{{ role.label }}</strong></td>
-          <td>{{ role.is_builtin ? '内置 · 只读' : '自定义' }}</td>
-          <td>{{ role.permissions.length }} 项操作</td>
-          <td>
-            <button class="secondary small" type="button" @click="openRole(role.code)">
+      <template #cell-label="{ row: role }"><strong>{{ role.label }}</strong></template>
+      <template #cell-kind="{ row: role }">{{ role.is_builtin ? '内置 · 只读' : '自定义' }}</template>
+      <template #cell-permissions="{ row: role }">{{ role.permissions.length }} 项操作</template>
+      <template #cell-actions="{ row: role }"><button class="secondary small" type="button" @click="openRole(role.code)">
               {{ role.is_builtin ? '查看权限' : '配置权限' }}
-            </button>
-          </td>
-        </tr>
-      </template>
+            </button></template>
     </WorkspaceTable>
 
     <NModal v-model:show="createOpen" preset="card" title="新增职务" :mask-closable="!busy" :style="{ width: 'min(760px, calc(100vw - 32px))' }">

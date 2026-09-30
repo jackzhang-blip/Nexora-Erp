@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { NPopconfirm } from 'naive-ui'
+import { NModal, NPopconfirm } from 'naive-ui'
 import type { Warehouse } from '../../../../../shared/erp-api'
 import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
 import { usePiniaAppStore } from '../../../store/app-store'
@@ -33,7 +33,7 @@ async function save(): Promise<void> {
 
 <template>
   <section class="stack catalog-page">
-    <WorkspaceTable title="仓库列表" :columns="columns" :row-count="filtered.length" :min-table-width="440">
+    <WorkspaceTable :data="filtered" title="仓库列表" :columns="columns" :min-table-width="440">
       <template #heading>
         <p class="eyebrow">WAREHOUSES</p><h2>仓库列表 <span class="pill">{{ warehouses.length }}</span></h2>
       </template>
@@ -44,6 +44,7 @@ async function save(): Promise<void> {
         <label class="catalog-search">搜索仓库<input v-model="query" placeholder="输入名称或编码搜索" /></label>
       </template>
       <template #beforeTable>
+        <NModal v-model:show="showForm" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
         <form v-if="showForm && can('warehouse.manage')" class="catalog-editor" @submit.prevent="save">
           <h3>{{ editingId ? '编辑仓库' : '新增仓库' }}</h3>
           <div class="form-grid">
@@ -52,12 +53,12 @@ async function save(): Promise<void> {
           </div>
           <div class="form-actions"><button class="primary" :disabled="busy || connectionLost">保存</button><button class="secondary" type="button" :disabled="busy" @click="showForm = false">取消</button></div>
         </form>
+        </NModal>
         <p class="muted">默认主仓库以及已被业务单据引用的仓库不能删除。</p>
       </template>
-      <template #rows>
-        <tr v-for="item in filtered" :key="item.id">
-          <td>{{ item.code }}</td><td>{{ item.name }}</td>
-          <td><div class="catalog-actions">
+      <template #cell-code="{ row: item }">{{ item.code }}</template>
+      <template #cell-name="{ row: item }">{{ item.name }}</template>
+      <template #cell-actions="{ row: item }"><div class="catalog-actions">
             <template v-if="can('warehouse.manage')">
               <button class="text-button" :disabled="busy || connectionLost" @click="edit(item)">编辑</button>
               <NPopconfirm positive-text="确认" negative-text="取消" @positive-click="deleteWarehouse(item.id)">
@@ -65,9 +66,7 @@ async function save(): Promise<void> {
                 确认删除“{{ item.name }}”？已被业务记录引用的资料不能删除。
               </NPopconfirm>
             </template>
-          </div></td>
-        </tr>
-      </template>
+          </div></template>
       <template #empty>{{ query ? '没有匹配的仓库。' : '暂无仓库，请先新增。' }}</template>
     </WorkspaceTable>
   </section>

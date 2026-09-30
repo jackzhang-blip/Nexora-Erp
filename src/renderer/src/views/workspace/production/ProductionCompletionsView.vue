@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { NModal } from 'naive-ui'
 import { useAppStore } from '../../../store/app-store'
+import { submitCreateDialog } from '../../../utils/create-dialog'
 
 // 页面直接使用共享状态与操作，切换标签时不会丢失正在填写的草稿。
 const {
+  error,
+  notice,
   busy,
   workOrders,
   productionCompletions,
@@ -19,11 +24,18 @@ const {
   cancelProductionCompletion,
   reverseProductionCompletion
 } = useAppStore()
+
+// 保存失败时保留弹窗和草稿，方便直接修正后重试。
+const createOpen = ref(false)
+async function submitCreate(): Promise<void> {
+  await submitCreateDialog(createProductionCompletion, { busy, error, notice }, createOpen)
+}
 </script>
 
 <template>
   <section class="stack">
-    <div v-if="can('production_completion.create')" class="card">
+    <div class="form-actions"><button v-if="can('production_completion.create')" class="primary" type="button" :disabled="busy" @click="createOpen = true">新建完工报工单</button></div>
+    <NModal v-if="can('production_completion.create')" v-model:show="createOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
       <div class="section-heading">
         <div>
           <p class="eyebrow">PRODUCTION COMPLETION</p>
@@ -34,7 +46,7 @@ const {
       <p class="muted">
         按工单目标产量分批报工。报工数包含待质检的合格与不合格产品；质检并确认后，只有合格数进入工单目标仓库。
       </p>
-      <form @submit.prevent="createProductionCompletion">
+      <form @submit.prevent="submitCreate">
         <div class="form-grid">
           <label
             >生产工单<select
@@ -78,7 +90,7 @@ const {
           保存报工草稿
         </button>
       </form>
-    </div>
+    </NModal>
     <div class="card">
       <div class="section-heading">
         <div>

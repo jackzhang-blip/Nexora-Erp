@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { NPopconfirm } from 'naive-ui'
+import { NModal, NPopconfirm } from 'naive-ui'
 import type { Supplier } from '../../../../../shared/erp-api'
 import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
 import { usePiniaAppStore } from '../../../store/app-store'
+import { submitCreateDialog } from '../../../utils/create-dialog'
 import './catalog.css'
 
 const store = usePiniaAppStore()
-const { busy, connectionLost, suppliers, materials, supplierMaterials } = storeToRefs(store)
+const { busy, error, notice, connectionLost, suppliers, materials, supplierMaterials } = storeToRefs(store)
 const { can, saveSupplier, deleteSupplier } = store
 const query = ref('')
 const editingId = ref<number | undefined>()
@@ -35,6 +36,7 @@ async function save(): Promise<void> {
   if (await saveSupplier({ ...form }, editingId.value)) showForm.value = false
 }
 const selectedId = ref(0)
+const bindOpen = ref(false)
 const materialQuery = ref('')
 const boundQuery = ref('')
 const materialId = ref(0)
@@ -42,17 +44,20 @@ const selectedSupplier = computed(() => suppliers.value.find(item => item.id ===
 const boundIds = computed(() => new Set(supplierMaterials.value.filter(link => link.supplier_id === selectedId.value).map(link => link.material_id)))
 const boundMaterials = computed(() => materials.value.filter(item => boundIds.value.has(item.id) && `${item.sku} ${item.name}`.toLowerCase().includes(boundQuery.value.trim().toLowerCase())))
 const availableMaterials = computed(() => materials.value.filter(item => !boundIds.value.has(item.id) && `${item.sku} ${item.name}`.toLowerCase().includes(materialQuery.value.trim().toLowerCase())))
-watch(selectedId, () => { materialId.value = 0; materialQuery.value = ''; boundQuery.value = '' })
+watch(selectedId, () => { bindOpen.value = false; materialId.value = 0; materialQuery.value = ''; boundQuery.value = '' })
 async function bindMaterial(): Promise<void> {
   if (!materialId.value || !selectedSupplier.value) return
   await store.setSupplierMaterial(selectedId.value, materialId.value, true)
   if (boundIds.value.has(materialId.value)) materialId.value = 0
 }
+async function submitBinding(): Promise<void> {
+  await submitCreateDialog(bindMaterial, { busy, error, notice }, bindOpen)
+}
 </script>
 
 <template>
   <section class="stack catalog-page">
-    <WorkspaceTable title="供应商列表" :columns="supplierColumns" :row-count="filtered.length" :min-table-width="360">
+    <WorkspaceTable :data="filtered" title="供应商列表" :columns="supplierColumns" :min-table-width="360">
       <template #heading>
         <p class="eyebrow">SUPPLIERS</p><h2>供应商列表 <span class="pill">{{ suppliers.length }}</span></h2>
       </template>
@@ -63,6 +68,7 @@ async function bindMaterial(): Promise<void> {
         <label class="catalog-search">搜索供应商<input v-model="query" placeholder="输入名称搜索" /></label>
       </template>
       <template #beforeTable>
+        <NModal v-model:show="showForm" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
         <form v-if="showForm && can('catalog.manage')" class="catalog-editor" @submit.prevent="save">
           <h3>{{ editingId ? '编辑供应商' : '新增供应商' }}</h3>
           <div class="form-grid">
@@ -70,12 +76,11 @@ async function bindMaterial(): Promise<void> {
           </div>
           <div class="form-actions"><button class="primary" :disabled="busy || connectionLost">保存</button><button class="secondary" type="button" :disabled="busy" @click="showForm = false">取消</button></div>
         </form>
+        </NModal>
         <p class="muted">选择“供货物料”管理供应商与现有物料的绑定。</p>
       </template>
-      <template #rows>
-        <tr v-for="item in filtered" :key="item.id">
-          <td>{{ item.name }}</td>
-          <td><div class="catalog-actions"><button class="text-button" type="button" @click="selectedId = item.id">供货物料</button>
+      <template #cell-name="{ row: item }">{{ item.name }}</template>
+      <template #cell-actions="{ row: item }"><div class="catalog-actions"><button class="text-button" type="button" @click="selectedId = item.id">供货物料</button>
             <template v-if="can('catalog.manage')">
               <button class="text-button" :disabled="busy || connectionLost" @click="edit(item)">编辑</button>
               <NPopconfirm positive-text="确认" negative-text="取消" @positive-click="deleteSupplier(item.id)">
@@ -83,17 +88,19 @@ async function bindMaterial(): Promise<void> {
                 确认删除“{{ item.name }}”？关联的供货关系将一并移除。已被业务记录引用的资料不能删除。
               </NPopconfirm>
             </template>
-          </div></td>
-        </tr>
-      </template>
+          </div></template>
       <template #empty>{{ query ? '没有匹配的供应商。' : '暂无供应商，请先新增。' }}</template>
     </WorkspaceTable>
-    <WorkspaceTable v-if="selectedSupplier" :title="`${selectedSupplier.name} · 供货物料`" :columns="materialColumns" :row-count="boundMaterials.length" :min-table-width="580">
-      <template #actions><button class="text-button" @click="selectedId = 0">关闭</button></template>
+    <WorkspaceTable :data="boundMaterials" v-if="selectedSupplier" :title="`${selectedSupplier.name} · 供货物料`" :columns="materialColumns" :min-table-width="580">
+      <template #actions>
+        <button v-if="can('catalog.manage')" class="primary" type="button" :disabled="busy || connectionLost" @click="bindOpen = true">绑定物料</button>
+        <button class="text-button" type="button" @click="selectedId = 0">关闭</button>
+      </template>
       <template #filters>
         <div class="catalog-filter-content">
           <p class="muted">绑定现有物料；同一物料可以同时绑定多家供应商。解绑只移除供货关系。</p>
-          <form v-if="can('catalog.manage')" class="inline-form" @submit.prevent="bindMaterial">
+          <NModal v-model:show="bindOpen" preset="card" title="绑定物料" :mask-closable="!busy" :style="{ width: 'min(760px, calc(100vw - 32px))' }">
+          <form v-if="can('catalog.manage')" class="inline-form" @submit.prevent="submitBinding">
             <label>搜索可绑定物料<input v-model="materialQuery" placeholder="物料编码、名称或规格" /></label>
             <label>选择物料<select v-model.number="materialId" required>
               <option :value="0" disabled>请选择物料</option>
@@ -102,16 +109,16 @@ async function bindMaterial(): Promise<void> {
             <button class="primary" :disabled="busy || connectionLost || !materialId">绑定物料</button>
             <span v-if="!availableMaterials.length" class="muted">没有匹配的未绑定物料，可先到物料管理添加。</span>
           </form>
+          </NModal>
           <label class="catalog-search">搜索已绑定物料<input v-model="boundQuery" placeholder="物料编码、名称或规格" /></label>
         </div>
       </template>
-      <template #rows>
-        <tr v-for="item in boundMaterials" :key="item.id"><td>{{ item.sku }}</td><td>{{ item.name }}</td><td>{{ item.unit }}</td><td>
-          <NPopconfirm v-if="can('catalog.manage')" positive-text="确认" negative-text="取消" @positive-click="store.setSupplierMaterial(selectedId, item.id, false)">
+      <template #cell-sku="{ row: item }">{{ item.sku }}</template>
+      <template #cell-name="{ row: item }">{{ item.name }}</template>
+      <template #cell-unit="{ row: item }">{{ item.unit }}</template>
+      <template #cell-actions="{ row: item }"><NPopconfirm v-if="can('catalog.manage')" positive-text="确认" negative-text="取消" @positive-click="store.setSupplierMaterial(selectedId, item.id, false)">
             <template #trigger><button class="text-button" :disabled="busy || connectionLost">解绑</button></template>解除此物料与供应商的供货关系？
-          </NPopconfirm>
-        </td></tr>
-      </template>
+          </NPopconfirm></template>
       <template #empty>{{ boundQuery ? '没有匹配的已绑定物料。' : '尚未绑定物料。' }}</template>
     </WorkspaceTable>
   </section>

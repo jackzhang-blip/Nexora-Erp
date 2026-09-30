@@ -32,7 +32,7 @@ onMounted(() => { void run() })
 
 <template>
   <WorkspaceTable :title="title" description="表格与 CSV 使用同一份服务端筛选结果；单号可追溯到原始业务单据。"
-    :columns="result?.columns ?? []" :row-count="result?.rows.length ?? 0" :loading="busy" :min-table-width="1050">
+    :columns="result?.columns ?? []" :data="result?.rows ?? []" :loading="busy" :min-table-width="1050">
     <template #actions>
       <button class="secondary" :disabled="busy || connectionLost || !result" @click="exportCsv">导出 CSV</button>
     </template>
@@ -44,11 +44,6 @@ onMounted(() => { void run() })
       <label v-if="query.kind !== 'inventory_balance'">开始日期<input v-model="query.from_date" type="date" /></label>
       <label>{{ query.kind === 'inventory_balance' ? '截至日期' : '结束日期' }}<input v-model="query.to_date" type="date" /></label>
       <button class="primary" :disabled="busy || connectionLost" @click="run">查询</button>
-    </template>
-    <template #rows>
-      <tr v-for="(row, index) in result?.rows ?? []" :key="index">
-        <td v-for="column in result?.columns ?? []" :key="column.key">{{ row[column.key] }}</td>
-      </tr>
     </template>
     <template #empty>筛选范围内暂无记录。</template>
   </WorkspaceTable>

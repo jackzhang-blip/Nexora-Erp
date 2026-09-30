@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { NModal } from 'naive-ui'
 import { useAppStore } from '../../../store/app-store'
+import { submitCreateDialog } from '../../../utils/create-dialog'
 
 // 页面直接使用共享状态与操作，切换标签时不会丢失正在填写的草稿。
 const {
+  error,
+  notice,
   busy,
   user,
   username,
@@ -17,18 +22,25 @@ const {
   setUserStatus,
   resetUserPassword
 } = useAppStore()
+
+// 保存失败时保留弹窗和草稿，方便直接修正后重试。
+const createOpen = ref(false)
+async function submitCreate(): Promise<void> {
+  await submitCreateDialog(createUser, { busy, error, notice }, createOpen)
+}
 </script>
 
 <template>
   <section class="stack">
-    <div class="card">
+    <div class="form-actions"><button class="primary" type="button" :disabled="busy" @click="createOpen = true">创建用户</button></div>
+    <NModal v-model:show="createOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
       <div class="section-heading">
         <div>
           <p class="eyebrow">用户管理</p>
           <h2>创建用户</h2>
         </div>
       </div>
-      <form class="inline-form" @submit.prevent="createUser">
+      <form class="inline-form" @submit.prevent="submitCreate">
         <label
           >用户名<input
             v-model.trim="newUser.username"
@@ -64,7 +76,7 @@ const {
           创建用户
         </button>
       </form>
-    </div>
+    </NModal>
     <div class="card">
       <div class="section-heading">
         <div>

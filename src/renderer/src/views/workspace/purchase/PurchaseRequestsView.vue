@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { NPopconfirm } from 'naive-ui'
+import { NModal, NPopconfirm } from 'naive-ui'
 import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
 import { usePiniaAppStore } from '../../../store/app-store'
+import { submitCreateDialog } from '../../../utils/create-dialog'
 
 const store = usePiniaAppStore()
-const { busy, connectionLost, materials, suppliers, purchaseRequests, purchaseRequestForm,
+const { busy, error, notice, connectionLost, materials, suppliers, purchaseRequests, purchaseRequestForm,
   requestConversionForm, requestRejectReasons } = storeToRefs(store)
 const { can, localTime, editPurchaseRequest, savePurchaseRequest, submitPurchaseRequest,
   approvePurchaseRequest, rejectPurchaseRequest, cancelPurchaseRequest,
   selectRequestConversion, convertPurchaseRequest } = store
 const query = ref('')
 const showForm = ref(false)
+const conversionOpen = ref(false)
 const filtered = computed(() => purchaseRequests.value.filter((item) =>
   [item.id, item.reference, item.note, item.status, ...item.lines.map((line) => line.material_name)]
     .join(' ').toLowerCase().includes(query.value.trim().toLowerCase())))
@@ -28,6 +30,15 @@ function openEditor(requestId?: number): void {
   showForm.value = true
 }
 
+function openConversion(requestId: number): void {
+  selectRequestConversion(requestId)
+  conversionOpen.value = true
+}
+
+async function submitConversion(): Promise<void> {
+  await submitCreateDialog(convertPurchaseRequest, { busy, error, notice }, conversionOpen)
+}
+
 async function save(): Promise<void> {
   await savePurchaseRequest()
   // 写入失败时保留输入；只有服务端刷新后的申请已存在才关闭表单。
@@ -37,7 +48,7 @@ async function save(): Promise<void> {
 
 <template>
   <section class="stack">
-    <WorkspaceTable title="采购申请" :columns="columns" :row-count="filtered.length" :min-table-width="940">
+    <WorkspaceTable :data="filtered" title="采购申请" :columns="columns" :min-table-width="940">
       <template #actions>
         <button v-if="can('purchase_request.create')" class="primary" :disabled="busy || connectionLost || !materials.length" @click="openEditor()">新建采购申请</button>
       </template>
@@ -45,6 +56,7 @@ async function save(): Promise<void> {
         <label>搜索申请<input v-model="query" placeholder="单号、物料或状态" /></label>
       </template>
       <template #beforeTable>
+        <NModal v-model:show="showForm" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
         <form v-if="showForm && can('purchase_request.create')" class="stack" @submit.prevent="save">
           <h3>{{ purchaseRequestForm.requestId ? '修改采购申请' : '新建采购申请' }}</h3>
           <div class="form-grid">
@@ -64,7 +76,9 @@ async function save(): Promise<void> {
             <button class="secondary" type="button" @click="showForm = false">收起</button>
           </div>
         </form>
-        <form v-if="selectedRequest && can('purchase_order.create')" class="stack" @submit.prevent="convertPurchaseRequest">
+        </NModal>
+        <NModal v-model:show="conversionOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
+        <form v-if="selectedRequest && can('purchase_order.create')" class="stack" @submit.prevent="submitConversion">
           <h3>申请 #{{ selectedRequest.id }} 转采购订单</h3>
           <div class="form-grid">
             <label>供应商<select v-model.number="requestConversionForm.supplier_id" required><option :value="0" disabled>选择供应商</option>
@@ -80,20 +94,19 @@ async function save(): Promise<void> {
           </div>
           <div class="form-actions">
             <button class="primary" :disabled="busy || connectionLost || !requestConversionForm.lines.some((line) => Number(line.quantity) > 0)">生成订单草稿</button>
-            <button class="secondary" type="button" @click="selectRequestConversion(0)">收起</button>
+            <button class="secondary" type="button" @click="conversionOpen = false; selectRequestConversion(0)">取消</button>
           </div>
         </form>
+        </NModal>
       </template>
-      <template #rows>
-        <tr v-for="item in filtered" :key="item.id">
-          <td><strong>#{{ item.id }}</strong><small v-if="item.reference">{{ item.reference }}</small><small>{{ localTime(item.created_at) }} · {{ item.created_by_name }}</small></td>
-          <td><span class="pill" :class="item.status">{{ statusName[item.status] }}</span><small v-if="item.review_reason">{{ item.review_reason }}</small></td>
-          <td><div v-for="line in item.lines" :key="line.id">{{ line.material_name }}：申请 {{ line.quantity }} {{ line.unit }}，待转 {{ line.remaining_quantity }}</div></td>
-          <td><div class="form-actions">
+      <template #cell-id="{ row: item }"><strong>#{{ item.id }}</strong><small v-if="item.reference">{{ item.reference }}</small><small>{{ localTime(item.created_at) }} · {{ item.created_by_name }}</small></template>
+      <template #cell-status="{ row: item }"><span class="pill" :class="item.status">{{ statusName[item.status] }}</span><small v-if="item.review_reason">{{ item.review_reason }}</small></template>
+      <template #cell-lines="{ row: item }"><div v-for="line in item.lines" :key="line.id">{{ line.material_name }}：申请 {{ line.quantity }} {{ line.unit }}，待转 {{ line.remaining_quantity }}</div></template>
+      <template #cell-actions="{ row: item }"><div class="form-actions">
             <button v-if="['draft', 'rejected'].includes(item.status) && can('purchase_request.create')" class="text-button" :disabled="busy || connectionLost" @click="openEditor(item.id)">修改</button>
             <button v-if="item.status === 'draft' && can('purchase_request.submit')" class="text-button" :disabled="busy || connectionLost" @click="submitPurchaseRequest(item.id)">提交审批</button>
             <button v-if="item.status === 'submitted' && can('purchase_request.review')" class="text-button" :disabled="busy || connectionLost" @click="approvePurchaseRequest(item.id)">批准</button>
-            <button v-if="item.status === 'approved' && can('purchase_order.create') && item.lines.some((line) => Number(line.remaining_quantity) > 0)" class="text-button" :disabled="busy || connectionLost" @click="selectRequestConversion(item.id)">转订单</button>
+            <button v-if="item.status === 'approved' && can('purchase_order.create') && item.lines.some((line) => Number(line.remaining_quantity) > 0)" class="text-button" :disabled="busy || connectionLost" @click="openConversion(item.id)">转订单</button>
             <NPopconfirm v-if="item.status !== 'cancelled' && can('purchase_request.cancel')" positive-text="确认" negative-text="返回" @positive-click="cancelPurchaseRequest(item.id)">
               <template #trigger><button class="text-button" :disabled="busy || connectionLost">取消申请</button></template>
               已关联有效订单的申请无法取消。确认取消这张申请？
@@ -102,9 +115,7 @@ async function save(): Promise<void> {
           <form v-if="item.status === 'submitted' && can('purchase_request.review')" class="inline-form" @submit.prevent="rejectPurchaseRequest(item.id)">
             <label>驳回原因<input v-model.trim="requestRejectReasons[item.id]" required maxlength="200" /></label>
             <button class="secondary small" :disabled="busy || connectionLost">驳回</button>
-          </form></td>
-        </tr>
-      </template>
+          </form></template>
       <template #empty>{{ query ? '没有匹配的采购申请。' : '暂无采购申请。' }}</template>
     </WorkspaceTable>
   </section>

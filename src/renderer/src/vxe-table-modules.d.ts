@@ -6,3 +6,8 @@ declare module 'vxe-table/es/table' {
 declare module 'vxe-table/es/column' {
   export { VxeColumn as default } from 'vxe-table'
 }
+
+declare module 'vxe-table/es/locale/lang/zh-CN' {
+  const locale: Record<string, unknown>
+  export default locale
+}
