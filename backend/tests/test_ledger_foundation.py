@@ -295,8 +295,9 @@ def test_concurrent_writes_cannot_overlap_or_overwrite(ledger, kind):
         assert len(ledger.get(f"{BASE}/accounting-periods").json()) == 1
 
 
-def test_v39_upgrade_preserves_data_and_is_repeatable(ledger):
+def test_v39_upgrade_preserves_data_and_is_repeatable(ledger, remove_journal_schema):
     with connection() as db:
+        remove_journal_schema(db)
         db.execute("INSERT INTO suppliers(name) VALUES ('升级前供应商')")
         for table in (
             "ledger_account_changes",
@@ -320,7 +321,7 @@ def test_v39_upgrade_preserves_data_and_is_repeatable(ledger):
     migrate()
     migrate()
     with connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 40
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 41
         assert db.execute("SELECT name FROM suppliers").fetchone()[0] == "升级前供应商"
         assert (
             db.execute(

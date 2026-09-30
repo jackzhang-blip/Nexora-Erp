@@ -40,6 +40,23 @@ export interface FinanceMetadataChange<T> {
 export interface LedgerAccountInput {
   code: string; name: string; category: LedgerCategory; normal_balance: 'debit' | 'credit'; reason: string
 }
+export type JournalStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'posted' | 'cancelled'
+export type JournalAction = 'submit' | 'approve' | 'reject' | 'post' | 'cancel'
+export interface JournalLineInput { account_id: number; summary: string; debit: string; credit: string }
+export interface JournalInput { reference: string; journal_date: string; note: string; reason: string; lines: JournalLineInput[] }
+export interface JournalLine extends JournalLineInput {
+  id: number; journal_id: number; position: number; account_code: string; account_name: string
+  category: LedgerCategory; normal_balance: 'debit' | 'credit'
+}
+export interface Journal {
+  id: number; reference: string; journal_date: string; period_id: number; period_code: string; note: string
+  currency: 'CNY'; status: JournalStatus; version: number; reversal_of_id: number | null; reversal_journal_id: number | null
+  created_by: number; created_by_name: string; created_at: string; author_ids: number[]
+  submitted_by: number | null; reviewed_by: number | null; posted_by: number | null; cancelled_by: number | null
+  submitted_at: string | null; reviewed_at: string | null; posted_at: string | null; cancelled_at: string | null
+  lines: JournalLine[]; total_debit: string; total_credit: string
+}
+export interface JournalChange extends FinanceMetadataChange<Omit<Journal, 'period_code' | 'created_by_name' | 'reversal_journal_id' | 'author_ids'>> { action: JournalAction | 'create' | 'update' }
 export interface AccountingPeriodInput {
   code: string; name: string; start_date: string; end_date: string; reason: string
 }
@@ -889,6 +906,13 @@ export interface ErpOperations {
   financeOverview: { input: undefined; output: FinanceOverview }
   financeAccounts: { input: undefined; output: FinanceAccount[] }
   ledgerAccounts: { input: undefined; output: LedgerAccount[] }
+  journals: { input: undefined; output: Journal[] }
+  journalOptions: { input: undefined; output: { accounts: LedgerAccount[]; periods: AccountingPeriod[] } }
+  createJournal: { input: JournalInput; output: Journal }
+  updateJournal: { input: JournalInput & { id: number; version: number }; output: Journal }
+  changeJournalStatus: { input: { id: number; action: JournalAction; version: number; reason: string }; output: Journal }
+  reverseJournal: { input: { id: number; version: number; reference: string; journal_date: string; reason: string }; output: Journal }
+  journalChanges: { input: { id: number }; output: JournalChange[] }
   createLedgerAccount: { input: LedgerAccountInput; output: LedgerAccount }
   updateLedgerAccount: { input: { id: number; version: number; name: string; is_active: boolean; reason: string }; output: LedgerAccount }
   ledgerAccountChanges: { input: { id: number }; output: FinanceMetadataChange<LedgerAccount>[] }

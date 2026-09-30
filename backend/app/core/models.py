@@ -56,6 +56,56 @@ class AccountingPeriodChange(Base):
     created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
 
 
+class Journal(Base):
+    __tablename__ = 'journals'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reference: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    journal_date: Mapped[str] = mapped_column(Text, nullable=False)
+    period_id: Mapped[int] = mapped_column(ForeignKey('accounting_periods.id'), nullable=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    currency: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'CNY'"))
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    reversal_of_id: Mapped[int | None] = mapped_column(ForeignKey('journals.id'))
+    created_by: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
+    submitted_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    posted_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    cancelled_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+    submitted_at: Mapped[str | None] = mapped_column(Text)
+    reviewed_at: Mapped[str | None] = mapped_column(Text)
+    posted_at: Mapped[str | None] = mapped_column(Text)
+    cancelled_at: Mapped[str | None] = mapped_column(Text)
+
+
+class JournalLine(Base):
+    __tablename__ = 'journal_lines'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    journal_id: Mapped[int] = mapped_column(ForeignKey('journals.id'), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    account_id: Mapped[int] = mapped_column(ForeignKey('ledger_accounts.id'), nullable=False)
+    account_code: Mapped[str] = mapped_column(Text, nullable=False)
+    account_name: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(Text, nullable=False)
+    normal_balance: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    debit: Mapped[str] = mapped_column(Text, nullable=False)
+    credit: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class JournalChange(Base):
+    __tablename__ = 'journal_changes'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    journal_id: Mapped[int] = mapped_column(ForeignKey('journals.id'), nullable=False)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    before_json: Mapped[str | None] = mapped_column(Text)
+    after_json: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    changed_by: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+
+
 class User(Base):
     __tablename__ = 'users'
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

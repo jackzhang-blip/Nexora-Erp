@@ -236,6 +236,26 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
       return { method: 'PUT', path: `/api/v1/finance/accounting-periods/${id}`,
         body: { name: fields.name, version: fields.version, reason: fields.reason } }
     }
+    case 'journals': return { method: 'GET', path: '/api/v1/finance/journals' }
+    case 'journalOptions': return { method: 'GET', path: '/api/v1/finance/journals/options' }
+    case 'journalChanges': return { method: 'GET', path: `/api/v1/finance/journals/${positiveId(payload, 'id')}/changes` }
+    case 'createJournal': return { method: 'POST', path: '/api/v1/finance/journals', body: payload }
+    case 'updateJournal': {
+      const id = positiveId(payload, 'id')
+      const { version, reference, journal_date, note, reason, lines } = payload as ErpOperations['updateJournal']['input']
+      return { method: 'PUT', path: `/api/v1/finance/journals/${id}`, body: { version, reference, journal_date, note, reason, lines } }
+    }
+    case 'changeJournalStatus': {
+      const id = positiveId(payload, 'id')
+      const { action, version, reason } = payload as ErpOperations['changeJournalStatus']['input']
+      if (!['submit', 'approve', 'reject', 'post', 'cancel'].includes(action)) throw new Error('不允许的凭证状态操作')
+      return { method: 'POST', path: `/api/v1/finance/journals/${id}/${action}`, body: { version, reason } }
+    }
+    case 'reverseJournal': {
+      const id = positiveId(payload, 'id')
+      const { version, reference, journal_date, reason } = payload as ErpOperations['reverseJournal']['input']
+      return { method: 'POST', path: `/api/v1/finance/journals/${id}/reverse`, body: { version, reference, journal_date, reason } }
+    }
     case 'paymentRecords': return { method: 'GET', path: '/api/v1/finance/payment-records' }
     case 'createPaymentRecord': return { method: 'POST', path: '/api/v1/finance/payment-records', body: payload }
     case 'reversePaymentRecord': return {
