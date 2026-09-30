@@ -28,6 +28,7 @@ const workspaceRouteComponents = {
   shipments: () => import('../views/workspace/sales/SalesShipmentsView.vue'),
   salesReturns: () => import('../views/workspace/sales/SalesReturnsView.vue'),
   finance: () => import('../views/workspace/finance/ReceivablesPayablesView.vue'),
+  inventoryValuation: () => import('../views/workspace/finance/InventoryValuationView.vue'),
   boms: () => import('../views/workspace/production/ProductionBomsView.vue'),
   workOrders: () => import('../views/workspace/production/ProductionWorkOrdersView.vue'),
   materialIssues: () => import('../views/workspace/production/MaterialIssuesView.vue'),

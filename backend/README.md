@@ -66,6 +66,8 @@ python3 -m app.server --data-dir /tmp/nexora-dev-data --name '开发服务端' -
 
 ## 应收应付来源
 
+库存金额基础接口为 `GET /api/v1/inventory/valuation`，按同一公司全部仓库的物料流水顺序重放移动加权平均。关联采购订单的入库沿用订单单价；出库按发生时平均成本，销售退货、生产退料和调拨入库沿用原出库成本。没有价格依据的正向流水会显示“待核价”，现存数量含未知成本时该物料及总库存金额均为 `null`，不会把未知金额当作零。`GET /api/v1/inventory/valuation/inputs` 可查全部人工核价修订；`POST /api/v1/inventory/valuation/inputs` 对允许人工核价的正向流水登记单价、依据编号和原因，后续修订追加记录并重算金额。查看和登记分别需要 `inventory_valuation.view`、`inventory_valuation.record`，默认授予管理员和财务员。历史期间尚未锁定，修订可能改变已展示的历史成本；自动完工成本、库存价差、正式销售成本和总账凭证仍待实现。
+
 `GET /api/v1/finance/receivables-payables` 逐行列出已确认销售出库形成的应收、采购入库形成的应付及销售、采购退货形成的负向调整。每笔记录包含往来单位、订单、来源单据与明细、物料、数量、原单价、确认人和确认时间。金额按每行数量乘原单价四舍五入到分，币种暂固定为人民币。草稿与取消单不产生金额；升级前的已确认单据同样从原记录推导，无需改写历史。没有采购订单单价的入库及其退货标记为待核价，不计入已知应付总额。此接口需要 `finance.view`，仅内置管理员和财务员默认拥有；其他角色需管理员显式授权。当前合计是业务净额；订单级收付款和未结金额由下述独立记录计算，税费和总账尚未实现。
 
 `GET /api/v1/finance/overview` 在同一读取事务中返回金额来源、订单余额和收付款记录，供桌面工作台显示。`GET /api/v1/finance/accounts` 也可单独按已发生业务的订单查询业务净额、收付款净额、未结金额和来源行编号；负未结额表示需退款的贷方余额。`GET /api/v1/finance/payment-records` 返回全部手工收付款与冲销记录。`POST /api/v1/finance/payment-records` 以 `kind`（`receivable` 或 `payable`）、`order_id`、`action`（`settlement` 收款/付款或 `refund` 退款）、正金额、外部 `reference` 和可选 `note` 登记。金额最多两位小数，不得超过当前订单未结金额或贷方余额；写事务同时核对余额，防止并行超额。同一订单、类别和动作的参考号不得重复。`POST /api/v1/finance/payment-records/{id}/reverse` 以原因新增等额反向记录；原记录保留，且只能冲销一次。查看需要 `finance.view`，登记和冲销分别需要 `finance.record`、`finance.reverse`；管理员和财务员默认拥有。系统仅记录人工录入的资金事实，不连接银行，也不自动证明资金已到账；无采购订单单价的旧入库目前无法在系统内登记对应付款，需后续补价流程。

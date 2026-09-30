@@ -207,6 +207,9 @@ function operation(action: keyof ErpOperations, payload: unknown): { method: str
     case 'purchaseReturns': return { method: 'GET', path: '/api/v1/purchase-returns' }
     case 'receivablesPayables': return { method: 'GET', path: '/api/v1/finance/receivables-payables' }
     case 'financeOverview': return { method: 'GET', path: '/api/v1/finance/overview' }
+    case 'inventoryValuation': return { method: 'GET', path: '/api/v1/inventory/valuation' }
+    case 'inventoryCostInputs': return { method: 'GET', path: '/api/v1/inventory/valuation/inputs' }
+    case 'recordInventoryCost': return { method: 'POST', path: '/api/v1/inventory/valuation/inputs', body: payload }
     case 'financeAccounts': return { method: 'GET', path: '/api/v1/finance/accounts' }
     case 'paymentRecords': return { method: 'GET', path: '/api/v1/finance/payment-records' }
     case 'createPaymentRecord': return { method: 'POST', path: '/api/v1/finance/payment-records', body: payload }

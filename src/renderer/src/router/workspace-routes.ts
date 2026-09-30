@@ -198,6 +198,13 @@ export const workspaceRouteGroups = [
     label: '财务管理',
     routes: [
       {
+        key: 'inventoryValuation',
+        path: '/workspace/inventory-valuation',
+        label: '库存计价',
+        permission: 'inventory_valuation.view',
+        icon: 'file'
+      },
+      {
         key: 'finance',
         path: '/workspace/finance',
         label: '应收应付',
