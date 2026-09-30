@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import WorkspaceTable from '../../../components/workspace/WorkspaceTable.vue'
 import { NModal } from 'naive-ui'
 import { useAppStore } from '../../../store/app-store'
 import { submitCreateDialog } from '../../../utils/create-dialog'
@@ -9,6 +10,7 @@ const {
   error,
   notice,
   busy,
+  connectionLost,
   materials,
   warehouses,
   stocktakes,
@@ -22,6 +24,16 @@ const {
   reverseStocktake
 } = useAppStore()
 
+// 搜索只过滤当前单据快照，不改动草稿、确认及冲销状态。
+const query = ref('')
+const filtered = computed(() => stocktakes.value.filter((item) =>
+  [item.id, item.reference, item.warehouse_name, ...item.lines.map((line) => line.material_name)]
+    .join(' ').toLowerCase().includes(query.value.trim().toLowerCase())))
+const columns = [
+  { key: 'document', title: '单据' }, { key: 'warehouse', title: '盘点仓库' },
+  { key: 'lines', title: '盘点明细' }, { key: 'actions', title: '操作' }
+]
+
 // 保存失败时保留弹窗和草稿，方便直接修正后重试。
 const createOpen = ref(false)
 async function submitCreate(): Promise<void> {
@@ -31,7 +43,6 @@ async function submitCreate(): Promise<void> {
 
 <template>
   <section class="stack">
-    <div class="form-actions"><button v-if="can('stocktake.create')" class="primary" type="button" :disabled="busy" @click="createOpen = true">新建盘点单</button></div>
     <NModal v-if="can('stocktake.create')" v-model:show="createOpen" preset="card" :mask-closable="!busy" :style="{ width: 'min(900px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }">
       <div class="section-heading">
         <div>
@@ -108,46 +119,37 @@ async function submitCreate(): Promise<void> {
           ><button
             class="primary"
             type="submit"
-            :disabled="busy || !materials.length"
+            :disabled="busy || connectionLost || !materials.length"
           >
             保存草稿
           </button>
         </div>
       </form>
     </NModal>
-    <div class="card">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">COUNT RECORDS</p>
-          <h2>盘点记录</h2>
-        </div>
-      </div>
-      <div v-if="!stocktakes.length" class="muted">暂无盘点单。</div>
-      <article v-for="item in stocktakes" :key="item.id" class="receipt">
-        <div class="receipt-head">
-          <div>
-            <strong>#{{ item.id }} · {{ item.warehouse_name }}</strong>
-            <p class="muted">
-              {{ localTime(item.created_at) }} · 创建人
-              {{ item.created_by_name }}
-              <span v-if="item.reference">· {{ item.reference }}</span>
-            </p>
-          </div>
-          <div class="receipt-actions">
-            <span class="pill" :class="item.status">{{
-              item.reversal_id
-                ? '已冲销'
-                : item.status === 'posted'
-                  ? '已确认'
-                  : item.status === 'cancelled'
-                    ? '已取消'
-                    : '待确认'
-            }}</span
-            ><button
+    <!-- 单据列表与台账共用表格，原有权限检查和冲销明细完整保留。 -->
+    <WorkspaceTable :show-title="false" title="库存盘点" description="核对账面与实盘数量，确认差异后更新库存；库存变化时需重新盘点。"
+      :columns="columns" :data="filtered" :min-table-width="1050">
+      <template #actions>
+        <button v-if="can('stocktake.create')" class="primary" type="button" :disabled="busy || connectionLost" @click="createOpen = true">新建盘点单</button>
+      </template>
+      <template #filters><label>搜索盘点单<input v-model="query" placeholder="单号、仓库或物料" /></label></template>
+      <template #cell-document="{ row: item }">
+        <strong>#{{ item.id }}</strong>
+        <small>{{ item.reversal_id ? '已冲销' : item.status === 'posted' ? '已确认' : item.status === 'cancelled' ? '已取消' : '待确认' }}</small>
+        <small>{{ localTime(item.created_at) }} · {{ item.created_by_name }}</small>
+        <small v-if="item.reference">{{ item.reference }}</small>
+      </template>
+      <template #cell-warehouse="{ row: item }">{{ item.warehouse_name }}</template>
+      <template #cell-lines="{ row: item }">
+        <div v-for="line in item.lines" :key="line.id">{{ line.material_name }} · 账面 {{ line.book_quantity }} → 实盘 {{ line.counted_quantity }} {{ line.unit }} · 差异 {{ line.difference }}</div>
+        <small v-if="item.reversal_id">冲销 #{{ item.reversal_id }} · {{ item.reversal_reason }} · {{ item.reversed_by_name }} · {{ localTime(item.reversed_at!) }}</small>
+      </template>
+      <template #cell-actions="{ row: item }">
+        <div class="form-actions"><button
               v-if="item.status === 'draft' && can('stocktake.post')"
               class="primary small"
               type="button"
-              :disabled="busy"
+              :disabled="busy || connectionLost"
               @click="postStocktake(item.id)"
             >
               确认差异</button
@@ -155,23 +157,11 @@ async function submitCreate(): Promise<void> {
               v-if="item.status === 'draft' && can('stocktake.cancel')"
               class="secondary small"
               type="button"
-              :disabled="busy"
+              :disabled="busy || connectionLost"
               @click="cancelStocktake(item.id)"
             >
               取消
             </button>
-          </div>
-        </div>
-        <div class="receipt-lines">
-          <span v-for="line in item.lines" :key="line.id"
-            >{{ line.material_name }} · 账面 {{ line.book_quantity }} → 实盘
-            {{ line.counted_quantity }} {{ line.unit }} · 差异
-            {{ line.difference }}</span
-          ><span v-if="item.reversal_id"
-            >冲销 #{{ item.reversal_id }} · {{ item.reversal_reason }} ·
-            {{ item.reversed_by_name }} ·
-            {{ localTime(item.reversed_at!) }}</span
-          >
         </div>
         <form
           v-if="
@@ -188,11 +178,15 @@ async function submitCreate(): Promise<void> {
               required
               maxlength="200"
               placeholder="说明原盘点差异为何需要冲销" /></label
-          ><button class="secondary small" type="submit" :disabled="busy">
+          ><button class="secondary small" type="submit" :disabled="busy || connectionLost">
             冲销已确认盘点
           </button>
         </form>
-      </article>
-    </div>
+      </template>
+      <template #empty>
+        <strong>{{ query ? '没有匹配的单据' : '暂无盘点单' }}</strong>
+        <span>{{ query ? '可调整单号、仓库或物料关键词后重新搜索。' : '保存新建单据后，可在这里查看明细与处理状态。' }}</span>
+      </template>
+    </WorkspaceTable>
   </section>
 </template>

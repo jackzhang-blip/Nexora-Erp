@@ -46,6 +46,15 @@ test('公共表格加载真实 vxe 组件并渲染功能区、加载和空状态
   assert.match(populated, /workspace-vxe-table/)
   assert.ok(populated.indexOf('新增') < populated.indexOf('搜索'))
 
+  // 页面已有主标题时，仅隐藏卡片标题；操作、说明与表格读屏名称不能丢失。
+  const mergedHeading = await render({ showTitle: false, description: '库存查询说明' })
+  assert.doesNotMatch(mergedHeading, /<h2/)
+  assert.match(mergedHeading, /库存查询说明/)
+  assert.match(mergedHeading, /新增/)
+  assert.match(mergedHeading, /aria-label="资料列表"/)
+  const noHeading = await render({ showTitle: false }, {})
+  assert.doesNotMatch(noHeading, /workspace-table-heading/)
+
   const empty = await render({ data: [] })
   assert.match(empty, /没有匹配的资料/)
   assert.match(empty, /workspace-table-empty-icon/)
@@ -98,5 +107,7 @@ test('公共 vxe 表格匹配工作台明暗主题与单元格高度', () => {
   assert.match(source, /\.workspace-vxe-table :is\(th, td\) \{[^}]*vertical-align: middle;/)
   // 首列标题和数据使用同一规则，防止只有表头向内缩而内容仍贴边。
   assert.match(source, /:is\(\.vxe-header--column, \.vxe-body--column\):first-child > \.vxe-cell \{ padding-left: 18px; \}/)
+  // 边框渐变必须只有一像素高，不能作为整行底色覆盖数据区。
+  assert.match(source, /--vxe-ui-table-border-width: 1px;/)
   assert.match(source, /:root\[data-theme='dark'\] \.workspace-vxe-table/)
 })

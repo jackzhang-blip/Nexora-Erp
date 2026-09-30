@@ -21,6 +21,8 @@ interface WorkspaceTableColumn {
 
 const props = withDefaults(defineProps<{
   title: string
+  // 主列表可隐藏重复标题，保留页面顶部品牌标题及表格无障碍名称。
+  showTitle?: boolean
   description?: string
   columns?: readonly WorkspaceTableColumn[]
   data?: TRow[]
@@ -29,6 +31,7 @@ const props = withDefaults(defineProps<{
   loading?: boolean
   minTableWidth?: number
 }>(), {
+  showTitle: true,
   description: '',
   columns: () => [],
   data: () => [],
@@ -95,10 +98,10 @@ defineSlots<{
 
 <template>
   <section class="card workspace-table">
-    <header class="workspace-table-heading">
-      <div>
+    <header v-if="showTitle || description || $slots.heading || $slots.actions" class="workspace-table-heading">
+      <div v-if="showTitle || description || $slots.heading">
         <slot name="heading">
-          <h2>{{ title }}</h2>
+          <h2 v-if="showTitle">{{ title }}</h2>
           <p v-if="description" class="muted">{{ description }}</p>
         </slot>
       </div>
@@ -150,14 +153,19 @@ defineSlots<{
 </template>
 
 <style scoped>
-.workspace-table-heading { display: flex; justify-content: space-between; align-items: start; gap: 18px; }
+.workspace-table-heading { display: flex; justify-content: space-between; align-items: start; gap: 18px; margin-bottom: 20px; }
 .workspace-table-heading h2 { margin: 0; }
-.workspace-table-heading .muted { margin: 8px 0 0; }
-.workspace-table-actions, .workspace-table-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.workspace-table-filters { margin: 21px 0 16px; }
+.workspace-table-heading .muted { margin: 0; line-height: 1.6; }
+.workspace-table-heading h2 + .muted { margin-top: 8px; }
+.workspace-table-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+/* 所有业务表格复用台账的浅色筛选面板；按可用宽度换行，按钮与输入框底边对齐。 */
+.workspace-table-filters { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; padding: 16px; border: 1px solid #e4ebee; border-radius: 11px; background: #f8fafb; }
+.workspace-table-filters :deep(label) { flex: 1 1 170px; min-width: 0; max-width: 320px; }
+.workspace-table-filters :deep(button) { white-space: nowrap; }
+.workspace-table-filters :deep(input), .workspace-table-filters :deep(select) { min-width: 0; width: 100%; }
+:root[data-theme='dark'] .workspace-table-filters { border-color: #30445b; background: #192a40; }
 .workspace-table-before { margin-bottom: 20px; }
 .workspace-table-before:empty { display: none; }
-.workspace-table-heading + .table-wrap { margin-top: 20px; }
 .workspace-table-footer { margin-top: 16px; }
 .workspace-table-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .workspace-table-loading { padding: 20px; color: var(--vxe-ui-font-color); text-align: center; }
@@ -179,12 +187,16 @@ defineSlots<{
 .workspace-table-scrollbar:focus-visible { outline: 2px solid #278b87; outline-offset: 3px; }
 @media (max-width: 650px) {
   .workspace-table-heading { align-items: stretch; flex-direction: column; }
+  .workspace-table-filters :deep(label) { max-width: none; }
+  .workspace-table-actions { margin-left: 0; }
 }
 </style>
 
 <style>
 /* 公共表格统一匹配工作台明暗主题，并撤销原生表格规则对 vxe 行高的影响。 */
 .workspace-vxe-table {
+  /* 按需加载未提供边框宽度默认值，缺失时分隔线渐变会铺满整个单元格。 */
+  --vxe-ui-table-border-width: 1px;
   --vxe-ui-font-color: #263950;
   --vxe-ui-font-primary-color: #197d79;
   --vxe-ui-layout-background-color: #fff;
@@ -200,6 +212,8 @@ defineSlots<{
 /* 表头与内容共用列内边距，首列再多留一点空间，避免标题贴住表格边框。 */
 .workspace-vxe-table :is(.vxe-header--column, .vxe-body--column) > .vxe-cell { padding-inline: 14px; }
 .workspace-vxe-table :is(.vxe-header--column, .vxe-body--column):first-child > .vxe-cell { padding-left: 18px; }
+/* 单号下的状态、创建人与备注各占一行，避免明细挤成难以扫描的一段文字。 */
+.workspace-vxe-table .vxe-body--column .vxe-cell small { display: block; margin: 4px 0 0; line-height: 1.5; }
 /* 数据表的列标题承担定位作用，提高字号与字重，避免浅色背景上难以辨认。 */
 .workspace-vxe-table .vxe-header--column > .vxe-cell { color: #38516a; font-size: 13px; font-weight: 700; }
 /* 空状态占据完整表格宽度，避免窄小的默认占位字落在第一行下面。 */
